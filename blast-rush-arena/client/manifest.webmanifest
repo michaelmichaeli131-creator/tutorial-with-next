@@ -1,0 +1,24 @@
+{
+  "name": "Blast Rush Arena",
+  "short_name": "Blast Rush",
+  "description": "A cinematic competitive arcade arena with live duels and friend challenges.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#02040c",
+  "theme_color": "#09132b",
+  "orientation": "landscape",
+  "icons": [
+    {
+      "src": "/icons/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
