@@ -1,12 +1,12 @@
 {
-  "name": "Blast Rush Arena — Titan Volley",
+  "name": "Blast Rush Arena — Character Uprising",
   "short_name": "Blast Rush",
-  "description": "Cinematic boss ascension, public tables, live 1v1 core volleys and viral friend challenges.",
+  "description": "Animated mech enemies, cinematic titans, adaptive original music, live 1v1 matchmaking and friend arenas.",
   "start_url": "/",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#02040c",
-  "theme_color": "#071027",
+  "background_color": "#010207",
+  "theme_color": "#050816",
   "categories": ["games", "entertainment"],
   "icons": [
     {"src":"/icons/icon-192.svg","sizes":"192x192","type":"image/svg+xml","purpose":"any maskable"},
