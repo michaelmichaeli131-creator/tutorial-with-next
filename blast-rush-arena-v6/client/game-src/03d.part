@@ -67,7 +67,7 @@ drawBoss=function(b,w){
  ctx.lineWidth=3;
  for(let i=0;i<3;i++){
   ctx.save();
-  ctx.rotate(b.t*(i%2===0?.18:-.14)+i);
+  ctx.rotate(b.t*(i%2===0 ? .18 : -.14)+i);
   ctx.setLineDash([18+i*5,10]);
   ctx.beginPath();
   ctx.arc(0,0,b.r*(1.12+i*.16),0,Math.PI*2);
