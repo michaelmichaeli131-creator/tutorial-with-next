@@ -1,5 +1,23 @@
 # Blast Rush Arena V6 — Vision (V15)
 
+## V15.1 fixes
+
+- **Panels scroll again.** `premium-v13.css` set `.panel{overflow:hidden}`, which overrode the
+  `overflow:auto` from `styles.css` and left every screen unscrollable. Once the menu grew past the
+  viewport its lower half was unreachable on desktop and on phones alike.
+- **Desktop menu layout.** The V13 mode grid hand-placed exactly four buttons; adding CAMPAIGN as a
+  fifth shifted every placement and collapsed the layout into overlapping cards. It is now a
+  flow-based grid that works for any button count.
+- **Hero legibility.** Five generations had each stacked a decorative overlay onto the same hero
+  pseudo-elements. Together they washed the title into a muddy rainbow haze; one deliberate
+  treatment replaces them.
+- **Pilot rendering.** Characters now go through an offscreen buffer that adds a rim light, a
+  volumetric top-down light pass and a contact shadow, so they read as solid objects instead of flat
+  cutouts.
+- **Per-species behaviour.** Every creature used to fall in the same straight line. Sentinels now
+  brace, Raiders commit to an accelerating dive, Wraiths blink sideways, Twin Beasts zigzag, Scouts
+  weave, and rival cores hunt the reactor.
+
 ## What V15 changed
 
 - **Weapons are visible.** Buying a weapon used to change hidden numbers only. Every weapon now fires

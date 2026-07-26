@@ -3,6 +3,37 @@
    hidden. The combat bar below owns that information now, so the old duplicates are retired. */
 :root{--v15-line:rgba(126,220,255,.26);--v15-glass:rgba(4,10,26,.76);--v15-danger:#ff3f61}
 
+/* ---------- Panel scrolling ---------- */
+/* premium-v13.css set `.panel{overflow:hidden}` to clip its decorative pseudo-element, which
+   overrode the `overflow:auto` from styles.css and left every panel unscrollable. Once the menu
+   grew past the viewport its lower half became unreachable on both desktop and phones. Restore
+   vertical scrolling and clip the decoration by its own bounds instead. */
+.panel{overflow-x:hidden!important;overflow-y:auto!important;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+/* Five generations each added a decorative overlay to the same hero pseudo-elements (v7 gloss,
+   v9 scan sweep, v10 conic, v13 conic, v11 frame). Stacked, they washed the title into a muddy
+   rainbow haze and hurt legibility badly on desktop. One deliberate treatment replaces them.
+   Negative insets also added phantom scrollable area once the panel could scroll again. */
+.hero.panel:before,.hero:after{display:none!important}
+.hero.panel{background:linear-gradient(168deg,rgba(16,34,72,.96),rgba(4,10,26,.97) 62%),radial-gradient(ellipse 70% 44% at 72% 16%,rgba(64,150,255,.16),transparent 70%)!important}
+.panel::-webkit-scrollbar{width:8px}
+.panel::-webkit-scrollbar-thumb{border-radius:99px;background:rgba(120,200,255,.28)}
+.panel::-webkit-scrollbar-track{background:transparent}
+
+/* The live arena renders behind the translucent menus; on desktop it washed out the text. */
+.screen{background:radial-gradient(circle at 50% 12%,rgba(32,74,136,.32),rgba(1,3,10,.93) 52%,#01030a 100%)!important}
+.screen.overlay{background:rgba(1,3,10,.86)!important}
+
+/* ---------- Mode grid ---------- */
+/* The V13 grid hand-placed exactly four buttons (quick-mode spanned two rows, social-mode spanned
+   columns 2-4). Adding CAMPAIGN as a fifth shifted every placement and the layout collapsed into
+   overlapping cards on desktop. This is a flow-based layout that works for any count. */
+.mode-command{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px}
+.mode-command .huge{grid-row:auto!important;grid-column:auto!important;min-height:80px!important;display:flex!important;flex-direction:column;justify-content:center}
+.mode-command .campaign-mode{grid-column:1/-1!important;min-height:98px!important}
+.mode-command .quick-mode{grid-column:1/-1!important;min-height:96px!important}
+.mode-command .social-mode{grid-column:1/-1!important}
+.mode-command .quick-mode:after{top:12px;right:12px}
+
 /* The old score card and chips are retired: everything lives in one compact bar so creatures
    entering from the top edge are not hidden behind two rows of chrome. */
 .hud-cluster.left .chip,
