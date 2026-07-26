@@ -22,8 +22,9 @@ const referencedIds = new Set([...game.matchAll(/\$\(["']([^"']+)["']\)/g)].map(
 const missing = [...referencedIds].filter((id) => !htmlIds.has(id)).sort();
 if (missing.length) throw new Error(`Missing HTML IDs referenced by game.js: ${missing.join(", ")}`);
 
-for (const asset of ["client/styles.css", "client/v7-overrides.css", "client/mobile-v8.css", "client/cinematic-v9.css"]) {
-  await Deno.stat(new URL(asset, root));
-}
+const linkedStyles = [...html.matchAll(/<link[^>]+rel=["']stylesheet["'][^>]+href=["']([^"']+)["']/g)]
+  .map((match) => match[1])
+  .filter((href) => href.startsWith("/"));
+for (const href of linkedStyles) await Deno.stat(new URL(`client${href}`, root));
 
-console.log(`[validate] client syntax OK • ${htmlIds.size} HTML IDs • ${referencedIds.size} referenced IDs • cinematic assets present`);
+console.log(`[validate] client syntax OK • ${htmlIds.size} HTML IDs • ${referencedIds.size} referenced IDs • ${linkedStyles.length} stylesheets present`);
