@@ -9,11 +9,15 @@
       this.playerName = localStorage.getItem('blastRushPlayerName') || `Pilot-${Math.floor(100 + Math.random() * 900)}`;
       this.skin = localStorage.getItem('blastRushSkin') || 'nova';
       this.connected = false;
+      this.ready = false;
       this.connecting = null;
+      this.readyPromise = null;
+      this.readyResolve = null;
       this.seq = 0;
       this.latency = 0;
       this.reconnectTimer = null;
       this.intentionalClose = false;
+      this.pendingAction = null;
     }
 
     setName(name) {
@@ -33,31 +37,35 @@
     }
 
     updateProfile() {
-      if (this.connected) this.send({ type: 'hello', playerId: this.playerId, name: this.playerName, skin: this.skin });
+      if (this.ready) this.send({ type: 'hello', playerId: this.playerId, name: this.playerName, skin: this.skin });
+    }
+
+    resetReadyPromise() {
+      this.readyPromise = new Promise((resolve) => { this.readyResolve = resolve; });
     }
 
     async connect() {
-      if (this.connected && this.socket?.readyState === WebSocket.OPEN) return true;
+      if (this.ready && this.socket?.readyState === WebSocket.OPEN) return true;
       if (this.connecting) return this.connecting;
       this.intentionalClose = false;
+      this.ready = false;
+      this.resetReadyPromise();
       this.connecting = new Promise((resolve) => {
         const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
         const socket = new WebSocket(`${scheme}//${location.host}/ws`);
         this.socket = socket;
         const timeout = setTimeout(() => {
-          if (!this.connected) {
+          if (!this.ready) {
             socket.close();
             resolve(false);
           }
-        }, 5000);
+        }, 8000);
 
         socket.addEventListener('open', () => {
           this.connected = true;
-          clearTimeout(timeout);
           this.send({ type: 'hello', playerId: this.playerId || undefined, name: this.playerName, skin: this.skin });
-          this.emit('connection', { connected: true });
+          this.emit('connection', { connected: true, ready: false });
           this.startPing();
-          resolve(true);
         });
 
         socket.addEventListener('message', (event) => {
@@ -67,9 +75,15 @@
               this.playerId = message.playerId;
               this.playerName = message.name || this.playerName;
               this.skin = message.skin || this.skin;
+              this.ready = true;
               localStorage.setItem('blastRushPlayerId', this.playerId);
               localStorage.setItem('blastRushPlayerName', this.playerName);
               localStorage.setItem('blastRushSkin', this.skin);
+              clearTimeout(timeout);
+              this.readyResolve?.(true);
+              this.readyResolve = null;
+              this.emit('connection', { connected: true, ready: true });
+              resolve(true);
             }
             if (message.type === 'pong') this.latency = Math.max(0, Date.now() - message.at);
             this.emit(message.type, message);
@@ -82,13 +96,17 @@
         const close = () => {
           clearTimeout(timeout);
           this.connected = false;
+          this.ready = false;
           this.connecting = null;
+          this.readyResolve?.(false);
+          this.readyResolve = null;
           this.stopPing();
-          this.emit('connection', { connected: false });
+          this.emit('connection', { connected: false, ready: false });
           if (!this.intentionalClose) {
             clearTimeout(this.reconnectTimer);
-            this.reconnectTimer = setTimeout(() => this.connect(), 1500);
+            this.reconnectTimer = setTimeout(() => this.connect(), 1200);
           }
+          resolve(false);
         };
         socket.addEventListener('close', close, { once: true });
         socket.addEventListener('error', () => socket.close(), { once: true });
@@ -102,30 +120,37 @@
       this.socket?.close();
     }
 
-    quickMatch() { return this.command({ type: 'quick_match' }); }
-    createRoom(options = {}) { return this.command({ type: 'create_room', visibility: options.visibility || 'private', tableName: options.tableName || '' }); }
-    joinRoom(code) { return this.command({ type: 'join_room', code: String(code || '').toUpperCase() }); }
-    rematch() { return this.command({ type: 'rematch' }); }
-    leave() { return this.command({ type: 'leave' }); }
+    quickMatch() { return this.command({ type: 'quick_match' }, 'quick_match'); }
+    createRoom(options = {}) { return this.command({ type: 'create_room', visibility: options.visibility || 'private', tableName: options.tableName || '' }, 'create_room'); }
+    joinRoom(code) { return this.command({ type: 'join_room', code: String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8) }, 'join_room'); }
+    rematch() { return this.command({ type: 'rematch' }, 'rematch'); }
+    leave() { this.pendingAction = null; return this.command({ type: 'leave' }); }
 
     score(delta, event, combo, wave) {
-      if (!this.connected) return false;
+      if (!this.ready) return false;
       return this.send({ type: 'score', seq: ++this.seq, delta: Math.floor(delta), event, combo, wave });
     }
 
     pressure() {
-      if (!this.connected) return false;
+      if (!this.ready) return false;
       return this.send({ type: 'pressure', seq: ++this.seq });
     }
 
     launchCore() {
-      if (!this.connected) return false;
+      if (!this.ready) return false;
       return this.send({ type: 'launch_core', seq: ++this.seq });
     }
 
-    async command(payload) {
-      if (!(await this.connect())) return false;
-      return this.send(payload);
+    async command(payload, action = null) {
+      if (action && this.pendingAction === action) return false;
+      if (action) this.pendingAction = action;
+      try {
+        if (!(await this.connect())) return false;
+        if (!this.ready && !(await this.readyPromise)) return false;
+        return this.send(payload);
+      } finally {
+        if (action) setTimeout(() => { if (this.pendingAction === action) this.pendingAction = null; }, 700);
+      }
     }
 
     send(payload) {
@@ -141,15 +166,7 @@
     }
 
     async createChallenge(result) {
-      return this.post('/api/challenges', {
-        creatorName: this.playerName,
-        score: result.score,
-        wave: result.wave,
-        perfects: result.perfects,
-        maxCombo: result.maxCombo,
-        stage: result.stage,
-        seed: result.seed,
-      });
+      return this.post('/api/challenges', { creatorName: this.playerName, score: result.score, wave: result.wave, perfects: result.perfects, maxCombo: result.maxCombo, stage: result.stage, seed: result.seed });
     }
 
     async getChallenge(code) {
@@ -159,13 +176,7 @@
     }
 
     async submitChallenge(code, result) {
-      return this.post(`/api/challenges/${encodeURIComponent(code)}/attempt`, {
-        name: this.playerName,
-        score: result.score,
-        wave: result.wave,
-        perfects: result.perfects,
-        maxCombo: result.maxCombo,
-      });
+      return this.post(`/api/challenges/${encodeURIComponent(code)}/attempt`, { name: this.playerName, score: result.score, wave: result.wave, perfects: result.perfects, maxCombo: result.maxCombo });
     }
 
     async leaderboard() {
@@ -175,25 +186,14 @@
     }
 
     async post(path, body) {
-      const response = await fetch(path, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-      });
+      const response = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || 'Request failed');
       return payload;
     }
 
-    emit(type, detail) {
-      this.dispatchEvent(new CustomEvent(type, { detail }));
-    }
-
-    startPing() {
-      this.stopPing();
-      this.pingTimer = setInterval(() => this.send({ type: 'ping', at: Date.now() }), 5000);
-    }
-
+    emit(type, detail) { this.dispatchEvent(new CustomEvent(type, { detail })); }
+    startPing() { this.stopPing(); this.pingTimer = setInterval(() => this.send({ type: 'ping', at: Date.now() }), 5000); }
     stopPing() { clearInterval(this.pingTimer); }
   }
 
