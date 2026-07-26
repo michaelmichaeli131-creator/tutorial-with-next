@@ -1,0 +1,279 @@
+/* V15 WEAPONS ON SCREEN — until now buying a weapon only changed hidden numbers. Every weapon now
+   fires visibly from the pilot, has its own projectile, impact and colour, and reports its level and
+   cooldown in the HUD, so the thing you paid credits for is the thing you can see. */
+const v15WeaponVfx={
+ pulse:{color:'#7ee8ff',spark:'#e6fbff',kind:'bolt',label:'PULSE'},
+ scatter:{color:'#ffd166',spark:'#fff2c8',kind:'spread',label:'SCATTER'},
+ lance:{color:'#c07bff',spark:'#f0dcff',kind:'lance',label:'LANCE'},
+ arc:{color:'#8ef0ff',spark:'#dffaff',kind:'arc',label:'ARC'},
+ siphon:{color:'#69ffb5',spark:'#d6ffee',kind:'tether',label:'SIPHON'},
+ nova:{color:'#ff9f4a',spark:'#ffe0b8',kind:'mortar',label:'NOVA'}
+};
+
+const v15Shots=[];
+
+function v15Muzzle(){
+ return{x:W/2,y:H-(isMobile?104:70)-16};
+}
+
+function v15Jagged(x1,y1,x2,y2,segments,spread){
+ const points=[[x1,y1]];
+ for(let i=1;i<segments;i++){
+  const k=i/segments;
+  const nx=x1+(x2-x1)*k,ny=y1+(y2-y1)*k;
+  const angle=Math.atan2(y2-y1,x2-x1)+Math.PI/2;
+  const offset=(Math.random()-.5)*spread;
+  points.push([nx+Math.cos(angle)*offset,ny+Math.sin(angle)*offset]);
+ }
+ points.push([x2,y2]);
+ return points;
+}
+
+function v15Fire(x,y){
+ const def=v14WeaponDef();
+ const vfx=v15WeaponVfx[def.id]||v15WeaponVfx.pulse;
+ const combat=game.v14Combat||{};
+ const muzzle=v15Muzzle();
+ game.v15Aim=Math.atan2(y-muzzle.y,x-muzzle.x);
+ game.v15Recoil=1;
+ game.v15MuzzleColor=vfx.spark;
+
+ const ready=!(combat.cooldown>0)||performance.now()>=(game.v14CooldownUntil||0);
+ const base={x0:muzzle.x,y0:muzzle.y,tx:x,ty:y,t:0,color:vfx.color,spark:vfx.spark,kind:vfx.kind,ready};
+
+ if(vfx.kind==='spread'){
+  const shots=ready?Math.max(2,(combat.splashHits||1)+1):1;
+  for(let i=0;i<shots;i++){
+   const drift=(i-(shots-1)/2)*(combat.splash?combat.splash*.42:26);
+   v15Shots.push(Object.assign({},base,{
+    speed:1900,tx:x+drift,ty:y+(Math.random()-.5)*18,size:4.5
+   }));
+  }
+ }else if(vfx.kind==='arc'){
+  const targets=[[x,y]];
+  if(ready){
+   let ox=x,oy=y;
+   for(const orb of game.orbs.slice().sort((a,b)=>Math.hypot(a.x-x,a.y-y)-Math.hypot(b.x-x,b.y-y)).slice(0,combat.chain||0)){
+    targets.push([orb.x,orb.y]);
+    ox=orb.x;oy=orb.y;
+   }
+  }
+  v15Shots.push(Object.assign({},base,{
+   life:.26,max:.26,
+   bolts:targets.map((point,index)=>{
+    const from=index===0?[muzzle.x,muzzle.y]:targets[index-1];
+    return v15Jagged(from[0],from[1],point[0],point[1],7,20);
+   })
+  }));
+ }else if(vfx.kind==='lance'){
+  v15Shots.push(Object.assign({},base,{speed:2600,size:7,pierce:true}));
+ }else if(vfx.kind==='tether'){
+  v15Shots.push(Object.assign({},base,{
+   life:.3,max:.3,
+   motes:Array.from({length:5},(_,i)=>({k:-i*.16}))
+  }));
+ }else if(vfx.kind==='mortar'){
+  v15Shots.push(Object.assign({},base,{speed:1150,size:9,arc:ready?1:.35,aoe:ready?(combat.aoe||0):0}));
+ }else{
+  v15Shots.push(Object.assign({},base,{speed:2100,size:5}));
+ }
+}
+
+/* Shots land on every tap, so the landing itself stays cheap: a few sparks only. It deliberately
+   avoids explode(), which also drives screen shake and the white flash — firing those per tap
+   buried the creatures under rings and shook the camera continuously. Kills and AoE procs still
+   get the heavy effects, so weight stays attached to things that actually mattered. */
+function v15Impact(shot){
+ const count=shot.kind==='mortar'?9:shot.kind==='lance'?6:4;
+ for(let i=0;i<count;i++){
+  const a=Math.random()*Math.PI*2,speed=50+Math.random()*170;
+  game.particles.push({
+   x:shot.tx,y:shot.ty,
+   vx:Math.cos(a)*speed,vy:Math.sin(a)*speed,
+   life:.15+Math.random()*.2,max:1,
+   r:1+Math.random()*2.2,color:shot.spark,drag:.92,gravity:60
+  });
+ }
+}
+
+const v15UpdateBase=update;
+update=function(dt){
+ v15UpdateBase(dt);
+ if(!game.running){v15Shots.length=0;return;}
+ if(game.paused)return;
+ game.v15Recoil=Math.max(0,(game.v15Recoil||0)-dt*5.5);
+ for(let i=v15Shots.length-1;i>=0;i--){
+  const shot=v15Shots[i];
+  if(shot.speed){
+   const distance=Math.hypot(shot.tx-shot.x0,shot.ty-shot.y0)||1;
+   shot.t+=dt*shot.speed/distance;
+   if(shot.t>=1){v15Impact(shot);v15Shots.splice(i,1);}
+  }else{
+   shot.life-=dt;
+   if(shot.life<=0)v15Shots.splice(i,1);
+  }
+ }
+};
+
+const v15DrawBase=draw;
+draw=function(){
+ v15DrawBase();
+ if(!v15Shots.length)return;
+ ctx.save();
+ ctx.globalCompositeOperation='lighter';
+ for(const shot of v15Shots){
+  if(shot.kind==='arc'){
+   const alpha=Math.max(0,shot.life/shot.max);
+   ctx.globalAlpha=alpha;
+   ctx.shadowBlur=22;ctx.shadowColor=shot.color;
+   for(const bolt of shot.bolts){
+    ctx.strokeStyle=shot.color;
+    ctx.lineWidth=3.2;
+    ctx.beginPath();
+    ctx.moveTo(bolt[0][0],bolt[0][1]);
+    for(let i=1;i<bolt.length;i++)ctx.lineTo(bolt[i][0],bolt[i][1]);
+    ctx.stroke();
+    ctx.strokeStyle=shot.spark;
+    ctx.lineWidth=1.3;
+    ctx.stroke();
+   }
+   continue;
+  }
+  if(shot.kind==='tether'){
+   const alpha=Math.max(0,shot.life/shot.max);
+   ctx.globalAlpha=alpha*.9;
+   ctx.shadowBlur=18;ctx.shadowColor=shot.color;
+   ctx.strokeStyle=shot.color;
+   ctx.lineWidth=3+Math.sin(performance.now()/40)*1.2;
+   ctx.beginPath();
+   ctx.moveTo(shot.x0,shot.y0);
+   ctx.quadraticCurveTo((shot.x0+shot.tx)/2+18,(shot.y0+shot.ty)/2,shot.tx,shot.ty);
+   ctx.stroke();
+   /* Motes travel target -> pilot: the credit steal is the point of this weapon. */
+   for(const mote of shot.motes){
+    const k=Math.max(0,Math.min(1,(1-alpha)+mote.k));
+    if(k<=0)continue;
+    const mx=shot.tx+(shot.x0-shot.tx)*k;
+    const my=shot.ty+(shot.y0-shot.ty)*k;
+    ctx.fillStyle=shot.spark;
+    ctx.beginPath();ctx.arc(mx,my,3.4,0,Math.PI*2);ctx.fill();
+   }
+   continue;
+  }
+  const k=Math.min(1,shot.t);
+  let px=shot.x0+(shot.tx-shot.x0)*k;
+  let py=shot.y0+(shot.ty-shot.y0)*k;
+  if(shot.kind==='mortar')py-=Math.sin(k*Math.PI)*140*(shot.arc||1);
+  const angle=Math.atan2(shot.ty-shot.y0,shot.tx-shot.x0);
+  ctx.save();
+  ctx.translate(px,py);
+  ctx.rotate(angle+Math.PI/2);
+  ctx.shadowBlur=24;ctx.shadowColor=shot.color;
+  const length=shot.kind==='lance'?58:shot.kind==='mortar'?16:26;
+  const trail=ctx.createLinearGradient(0,-length,0,shot.size);
+  trail.addColorStop(0,'transparent');
+  trail.addColorStop(.55,shot.color);
+  trail.addColorStop(1,shot.spark);
+  ctx.fillStyle=trail;
+  v14Art.poly(ctx,[[0,-length],[-shot.size,shot.size*.6],[0,shot.size*1.5],[shot.size,shot.size*.6]]);
+  ctx.fill();
+  ctx.fillStyle=shot.spark;
+  ctx.beginPath();ctx.arc(0,0,shot.size*.62,0,Math.PI*2);ctx.fill();
+  ctx.restore();
+ }
+ ctx.restore();
+ ctx.globalAlpha=1;
+ ctx.shadowBlur=0;
+};
+
+/* The pilot now aims at what you tapped, kicks back when it fires and shows a muzzle flash. */
+drawReactor=function(){
+ const y=H-(isMobile?104:70);
+ const recoil=game.v15Recoil||0;
+ const aim=Number.isFinite(game.v15Aim)?game.v15Aim:-Math.PI/2;
+ const lean=Math.max(-.42,Math.min(.42,(aim+Math.PI/2)*.5));
+ const scale=isMobile?.78:.92;
+ ctx.save();
+ ctx.translate(W/2-Math.cos(aim)*recoil*7,y-Math.sin(aim)*recoil*7);
+ ctx.rotate(lean*(1-recoil*.25));
+ v14DrawCharacter(ctx,v14Save.character,game.elapsed,{
+  x:0,y:0,scale,auraRadius:isMobile?74:88,glow:quality.glow
+ });
+ ctx.restore();
+ if(recoil>.05){
+  const muzzle=v15Muzzle();
+  ctx.save();
+  ctx.translate(muzzle.x,muzzle.y);
+  ctx.rotate(aim);
+  ctx.globalCompositeOperation='lighter';
+  ctx.globalAlpha=recoil;
+  ctx.shadowBlur=26;
+  ctx.shadowColor=game.v15MuzzleColor||'#ffffff';
+  const flash=ctx.createRadialGradient(0,0,1,0,0,34*recoil);
+  flash.addColorStop(0,'#ffffff');
+  flash.addColorStop(.35,game.v15MuzzleColor||'#ffffff');
+  flash.addColorStop(1,'transparent');
+  ctx.fillStyle=flash;
+  v14Art.poly(ctx,[[0,-9*recoil],[42*recoil,0],[0,9*recoil],[-8*recoil,0]]);
+  ctx.fill();
+  ctx.restore();
+ }
+};
+
+const v15TapBase=v12HandleTap;
+v12HandleTap=function(clientX,clientY,event){
+ if(game.running&&!game.paused){
+  const rect=canvas.getBoundingClientRect();
+  v15Fire((clientX-rect.left)/rect.width*W,(clientY-rect.top)/rect.height*H);
+ }
+ v15TapBase(clientX,clientY,event);
+};
+
+/* Weapon chip: name, level pips and a cooldown bar that visibly refills after a special. */
+const v15WeaponChip=$('weaponChip');
+const v15WeaponName=$('weaponName');
+const v15WeaponPips=$('weaponPips');
+const v15WeaponCooldown=$('weaponCooldown');
+let v15ChipWeapon='';
+
+function v15RefreshWeaponChip(){
+ const def=v14WeaponDef();
+ const level=v14WeaponLevel(def.id);
+ const key=def.id+':'+level;
+ if(key===v15ChipWeapon)return;
+ v15ChipWeapon=key;
+ v15WeaponName.textContent=(v15WeaponVfx[def.id]||v15WeaponVfx.pulse).label;
+ v15WeaponPips.innerHTML='';
+ for(let i=0;i<def.max;i++){
+  const pip=document.createElement('i');
+  if(i<level)pip.className='on';
+  v15WeaponPips.append(pip);
+ }
+ v15WeaponChip.style.setProperty('--weapon-color',(v15WeaponVfx[def.id]||v15WeaponVfx.pulse).color);
+}
+
+const v15UpdateHudBase=updateHud;
+updateHud=function(){
+ v15UpdateHudBase();
+ v15RefreshWeaponChip();
+ const combat=game.v14Combat;
+ if(!combat||!combat.cooldown){
+  v15WeaponCooldown.style.width='100%';
+  v15WeaponChip.classList.remove('charging');
+  return;
+ }
+ const remaining=(game.v14CooldownUntil||0)-performance.now();
+ const ratio=remaining<=0?1:Math.max(0,1-remaining/(combat.cooldown*1000));
+ v15WeaponCooldown.style.width=(ratio*100).toFixed(1)+'%';
+ v15WeaponChip.classList.toggle('charging',ratio<1);
+};
+
+const v15BeginBase=begin;
+begin=function(mode='solo',seed){
+ v15Shots.length=0;
+ game.v15Recoil=0;
+ game.v15Aim=-Math.PI/2;
+ v15ChipWeapon='';
+ v15BeginBase(mode,seed);
+ v15RefreshWeaponChip();
+};

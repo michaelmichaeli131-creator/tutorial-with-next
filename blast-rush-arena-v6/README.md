@@ -1,4 +1,22 @@
-# Blast Rush Arena V6 — Reckoning (V14)
+# Blast Rush Arena V6 — Vision (V15)
+
+## What V15 changed
+
+- **Weapons are visible.** Buying a weapon used to change hidden numbers only. Every weapon now fires
+  from the pilot with its own projectile, colour and impact — a pulse bolt, a scatter fan, a piercing
+  lance, forked lightning, a credit-draining tether, a mortar shell with a blast ring — plus muzzle
+  flash, recoil and a HUD chip showing its name, level and cooldown.
+- **All-original creatures.** The six enemy archetypes and the titans are drawn from scratch in the
+  same art language as the pilots, replacing the flat shapes and the external sprite sheets. The game
+  now fetches no third-party images at all.
+- **A readable combat HUD.** V12 had trimmed the mobile HUD so far that lives, wave and objective
+  progress were not on screen at all. One compact bar now carries stage, score, reactor pips and an
+  objective meter, in half the vertical space the old two-row layout used.
+- **Depth in the arena.** Parallax nebula banks, three star layers, a rim-lit planet, a ground plane
+  with a lit ridge, a vignette and a per-world colour grade — plus a stage intro card, a damage edge
+  flash and a low-health pulse.
+
+
 
 A cinematic competitive browser arcade game with a Deno backend, a fifteen-stage campaign with saved
 progression, unlockable pilots and weapons bought with earned credits, six-world endless progression,

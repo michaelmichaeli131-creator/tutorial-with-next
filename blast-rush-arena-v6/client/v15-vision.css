@@ -1,0 +1,78 @@
+/* V15 — combat HUD rebuild and presentation polish.
+   V12 shrank the mobile HUD so aggressively that lives, wave and objective progress all ended up
+   hidden. The combat bar below owns that information now, so the old duplicates are retired. */
+:root{--v15-line:rgba(126,220,255,.26);--v15-glass:rgba(4,10,26,.76);--v15-danger:#ff3f61}
+
+/* The old score card and chips are retired: everything lives in one compact bar so creatures
+   entering from the top edge are not hidden behind two rows of chrome. */
+.hud-cluster.left .chip,
+.hud-cluster.right .chip.lives,
+.score-card,
+.score-card span{display:none!important}
+
+/* ---------- Combat bar ---------- */
+.v15-combat-bar{position:fixed;z-index:9;left:0;right:0;top:max(4px,env(safe-area-inset-top));display:flex;flex-direction:column;gap:4px;padding:0 max(10px,env(safe-area-inset-right)) 0 calc(52px + max(8px,env(safe-area-inset-left)));pointer-events:none}
+.v15-combat-bar.hidden{display:none!important}
+.v15-cb-top{display:flex;align-items:center;gap:8px}
+.v15-stage-chip{display:flex;flex-direction:column;gap:1px;padding:5px 10px;border:1px solid var(--v15-line);border-radius:11px;background:var(--v15-glass);backdrop-filter:blur(10px);min-width:0}
+.v15-stage-chip small{color:#7fb6d8;font:900 8px/1 system-ui;letter-spacing:.16em}
+.v15-stage-chip b{max-width:32vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:900 10px/1.15 system-ui;letter-spacing:.05em;color:#eaf6ff}
+.v15-cb-score{flex:1;text-align:center;font:900 20px/1 system-ui;letter-spacing:.02em;color:#fff;text-shadow:0 2px 10px rgba(0,0,0,.9),0 0 18px rgba(90,200,255,.35)}
+.v15-lives{display:flex;gap:4px;padding:7px 9px;border:1px solid var(--v15-line);border-radius:11px;background:var(--v15-glass);backdrop-filter:blur(10px)}
+.v15-lives i{width:12px;height:12px;border-radius:3px;transform:rotate(45deg);background:rgba(140,180,220,.2);box-shadow:inset 0 0 0 1px rgba(160,200,235,.28)}
+.v15-lives i.on{background:linear-gradient(140deg,#8ef4ff,#3f7dff);box-shadow:0 0 12px rgba(96,214,255,.75)}
+.v15-lives.critical i.on{background:linear-gradient(140deg,#ffb0be,var(--v15-danger));box-shadow:0 0 14px rgba(255,63,97,.8);animation:v15Danger 1s ease-in-out infinite}
+@keyframes v15Danger{0%,100%{opacity:1}50%{opacity:.4}}
+
+.v15-objective{position:relative;height:14px;border:1px solid var(--v15-line);border-radius:99px;background:var(--v15-glass);backdrop-filter:blur(10px);overflow:hidden}
+.v15-objective i{position:absolute;inset:0 auto 0 0;width:0;border-radius:99px;background:linear-gradient(90deg,#3fd0ff,#7c6bff 60%,#ff62d0);box-shadow:0 0 18px rgba(80,190,255,.55);transition:width .25s cubic-bezier(.2,.8,.2,1)}
+.v15-objective span{position:absolute;inset:0;display:grid;place-items:center;font:900 9px/1 system-ui;letter-spacing:.16em;color:#eaf6ff;text-shadow:0 1px 3px rgba(0,0,0,.85)}
+.v15-combat-bar:before{content:attr(data-objective);position:absolute;top:-1px;left:50%;transform:translateX(-50%);color:#88b9dc;font:900 8px/1 system-ui;letter-spacing:.2em;opacity:0}
+
+/* ---------- Weapon chip ---------- */
+.v15-weapon-chip{position:fixed;z-index:9;left:max(8px,env(safe-area-inset-left));bottom:calc(84px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:5px;width:104px;padding:8px 10px;border:1px solid var(--v15-line);border-left:3px solid var(--weapon-color,#7ee8ff);border-radius:12px;background:var(--v15-glass);backdrop-filter:blur(10px);pointer-events:none}
+.v15-weapon-chip.hidden{display:none!important}
+.v15-weapon-chip>span:first-child{font:900 11px/1 system-ui;letter-spacing:.14em;color:var(--weapon-color,#7ee8ff)}
+.v15-wpips{display:flex;gap:3px}
+.v15-wpips i{flex:1;height:3px;border-radius:99px;background:rgba(150,190,225,.22)}
+.v15-wpips i.on{background:var(--weapon-color,#7ee8ff);box-shadow:0 0 8px var(--weapon-color,#7ee8ff)}
+.v15-wcool{display:block;height:4px;border-radius:99px;background:rgba(150,190,225,.18);overflow:hidden}
+.v15-wcool b{display:block;width:100%;height:100%;border-radius:99px;background:var(--weapon-color,#7ee8ff)}
+.v15-weapon-chip.charging .v15-wcool b{background:rgba(255,255,255,.55)}
+
+/* ---------- Powers row ---------- */
+/* Four grid columns left two visible buttons squeezed into the left half; flex centres any count. */
+.powers-hud{display:flex!important;gap:8px;justify-content:center;align-items:stretch;grid-template-columns:none!important}
+.powers-hud .power-button{flex:1 1 0;min-width:0;max-width:190px;pointer-events:auto;opacity:.92}
+.powers-hud .power-button.ready{opacity:1}
+.powers-hud .power-button.duel-only.hidden{display:none!important}
+
+/* ---------- Boss bar clears the combat bar ---------- */
+.boss-hud{top:calc(max(4px,env(safe-area-inset-top)) + 62px)!important}
+
+/* ---------- Combo moves right so it never collides with the weapon chip ---------- */
+.combo-hud{left:auto!important;right:max(8px,env(safe-area-inset-right))!important;bottom:calc(84px + env(safe-area-inset-bottom))!important}
+
+/* ---------- Stage intro ---------- */
+.v15-stage-intro{position:fixed;z-index:12;left:50%;top:38%;transform:translate(-50%,-50%) scale(.94);display:flex;flex-direction:column;align-items:center;gap:7px;width:min(340px,86vw);padding:20px 22px;border:1px solid var(--v15-line);border-radius:20px;background:linear-gradient(160deg,rgba(10,24,54,.94),rgba(3,7,18,.96));box-shadow:0 30px 80px rgba(0,0,0,.7),0 0 50px rgba(64,180,255,.16);text-align:center;opacity:0;pointer-events:none;transition:opacity .4s ease,transform .5s cubic-bezier(.2,.8,.2,1)}
+.v15-stage-intro.on{opacity:1;transform:translate(-50%,-50%) scale(1)}
+.v15-stage-intro small{color:#6fe3ff;font:900 9px/1 system-ui;letter-spacing:.24em}
+.v15-stage-intro b{font:1000 clamp(20px,6vw,28px)/1.05 system-ui;letter-spacing:-.01em;background:linear-gradient(96deg,#8ff2ff,#a99bff 55%,#ff7ad6);-webkit-background-clip:text;background-clip:text;color:transparent}
+.v15-stage-intro span{color:#a9c2dc;font:600 12px/1.5 system-ui}
+.v15-stage-intro em{padding:4px 10px;border-radius:999px;background:rgba(255,110,80,.16);color:#ffb193;font:800 9px/1.3 system-ui;letter-spacing:.12em;font-style:normal}
+.v15-stage-intro em.hidden{display:none}
+
+/* ---------- Damage feedback ---------- */
+body.v15-hurt:after{content:"";position:fixed;inset:0;z-index:11;pointer-events:none;box-shadow:inset 0 0 90px 18px rgba(255,45,85,.55);animation:v15Hurt .26s ease-out}
+@keyframes v15Hurt{from{opacity:1}to{opacity:0}}
+
+@media (min-width:760px){
+ .v15-combat-bar{left:50%;right:auto;transform:translateX(-50%);width:min(620px,78vw);padding:0;top:calc(max(4px,env(safe-area-inset-top)) + 4px)}
+ .v15-stage-chip b{max-width:220px}
+ .v15-cb-score{font-size:24px}
+ .v15-weapon-chip{width:126px;bottom:calc(96px + env(safe-area-inset-bottom))}
+}
+@media (prefers-reduced-motion:reduce){
+ .v15-lives.critical i.on{animation:none}
+ .v15-stage-intro{transition:opacity .2s linear}
+}

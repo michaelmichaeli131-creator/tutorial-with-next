@@ -1,5 +1,33 @@
 # Blast Rush Arena V6 — Game and Social Design
 
+## V15 — making the purchase visible
+
+V14 built the economy but left a hole in it: a player could spend 2,900 credits on the Nova Cannon and
+see nothing change on screen. The damage was different, the feel was not. V15 closes that loop.
+
+Every weapon now has a visible identity in combat — its own projectile shape, colour, travel speed,
+impact and HUD chip. The chip carries the weapon's name, its level as pips, and a cooldown bar that
+visibly drains and refills, so the thing the player bought and the thing they upgraded are both
+legible mid-fight without reading a menu.
+
+Two supporting decisions matter for feel:
+
+- **Base damage always lands, specials are gated.** Firing is instant and responsive on every tap;
+  only the special effect waits on the cooldown. Rate of fire is never something you can buy.
+- **Impact weight is attached to outcomes, not inputs.** A shot landing spawns a handful of sparks.
+  Kills and area procs keep the heavy explosions, screen shake and flash. An early build fired a full
+  explosion on every tap, which shook the camera continuously and buried the creatures under rings —
+  effects have to stay proportional to what actually happened.
+
+Creature art was rebuilt for the same reason. The external sprite sheets were pixel-art monsters
+sitting inside a neon vector interface, and the mismatch was most of what read as "generic". Six
+original archetypes now share the pilots' art language, and the game fetches no third-party images.
+
+The mobile HUD was also failing the player outright: V12's trimming had removed lives, wave and
+objective progress from the screen entirely. A single compact bar restores all three in half the
+vertical space, which matters because creatures enter from the top edge — every extra row of chrome
+is a row the player cannot see threats in.
+
 ## V14 campaign foundation
 
 V14 adds the long-form spine the game was missing: a stage ladder, a save that remembers where you

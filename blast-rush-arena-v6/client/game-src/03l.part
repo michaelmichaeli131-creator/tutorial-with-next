@@ -1,0 +1,292 @@
+/* V15 PRESENTATION — depth in the arena, readable state on the HUD.
+   The mobile HUD had been trimmed so far back that lives and objective progress were not on screen
+   at all; this rebuilds them into a single bar the player can actually read mid-fight. */
+const v15Clouds=Array.from({length:5},(_,i)=>({
+ seed:i,
+ x:.14+i*.19,
+ y:.16+((i*37)%5)*.11,
+ r:.34+((i*53)%4)*.12,
+ speed:.014+i*.006
+}));
+
+const v15Ridge=(()=>{
+ const points=[];
+ for(let i=0;i<=26;i++)points.push({k:i/26,h:.3+((i*79)%11)/11*.7});
+ return points;
+})();
+
+drawBackground=function(w){
+ const t=game.elapsed;
+
+ const sky=ctx.createLinearGradient(0,0,0,H);
+ sky.addColorStop(0,'#02030b');
+ sky.addColorStop(.34,w.bg[0]);
+ sky.addColorStop(.72,w.bg[1]);
+ sky.addColorStop(1,'#010208');
+ ctx.fillStyle=sky;
+ ctx.fillRect(0,0,W,H);
+
+ /* Far nebula banks give the empty middle of the screen something to read as distance. */
+ ctx.save();
+ ctx.globalCompositeOperation='lighter';
+ for(const cloud of v15Clouds){
+  const cx=((cloud.x+t*cloud.speed)%1.3-.15)*W;
+  const cy=cloud.y*H+Math.sin(t*.18+cloud.seed)*14;
+  const radius=cloud.r*Math.max(W,H)*.52;
+  const g=ctx.createRadialGradient(cx,cy,0,cx,cy,radius);
+  g.addColorStop(0,(cloud.seed%2?w.accent:w.enemy)+'22');
+  g.addColorStop(.55,(cloud.seed%2?w.enemy:w.accent)+'0e');
+  g.addColorStop(1,'transparent');
+  ctx.fillStyle=g;
+  ctx.beginPath();ctx.arc(cx,cy,radius,0,Math.PI*2);ctx.fill();
+ }
+ ctx.restore();
+
+ /* Three parallax star layers instead of one flat field. */
+ ctx.save();
+ ctx.globalCompositeOperation='lighter';
+ const layers=quality.mobile?3:3;
+ for(let layer=0;layer<layers;layer++){
+  const count=quality.mobile?[26,20,12][layer]:[46,32,20][layer];
+  const speed=(3+layer*9)*(game.overdriveTime>0?4:1);
+  const size=.6+layer*.7;
+  for(let i=0;i<count;i++){
+   const seed=i*131+layer*617;
+   const x=((seed*37)%1000)/1000*W;
+   const y=((((seed*53)%1000)/1000*H)+t*speed)%H;
+   ctx.globalAlpha=(.18+layer*.14)*(.55+.45*Math.sin(t*(.7+layer*.4)+i));
+   ctx.fillStyle=i%13===0?w.accent:'#ffffff';
+   ctx.fillRect(x,y,size*(game.overdriveTime>0?3.4:1),size);
+  }
+ }
+ ctx.restore();
+
+ /* A rim-lit planet anchors the horizon and gives the world a light source. */
+ const planetX=W*.8,planetY=H*.2,planetR=isMobile?76:118;
+ ctx.save();
+ const planet=ctx.createRadialGradient(planetX-planetR*.34,planetY-planetR*.4,planetR*.06,planetX,planetY,planetR);
+ planet.addColorStop(0,'#ffffffdd');
+ planet.addColorStop(.14,w.accent+'cc');
+ planet.addColorStop(.5,w.enemy+'55');
+ planet.addColorStop(1,'#04060f00');
+ ctx.fillStyle=planet;
+ ctx.beginPath();ctx.arc(planetX,planetY,planetR,0,Math.PI*2);ctx.fill();
+ ctx.globalCompositeOperation='lighter';
+ ctx.strokeStyle=w.accent+'66';
+ ctx.lineWidth=2;
+ ctx.beginPath();ctx.arc(planetX,planetY,planetR*1.28,Math.PI*.1,Math.PI*.92);ctx.stroke();
+ ctx.restore();
+
+ /* Ground plane: the arena finally has a floor for creatures to descend toward. */
+ const horizon=H*(isMobile?.82:.84);
+ ctx.save();
+ ctx.globalCompositeOperation='lighter';
+ const band=ctx.createLinearGradient(0,horizon-90,0,horizon+30);
+ band.addColorStop(0,'transparent');
+ band.addColorStop(1,w.accent+'2a');
+ ctx.fillStyle=band;
+ ctx.fillRect(0,horizon-90,W,120);
+ ctx.restore();
+
+ ctx.save();
+ ctx.fillStyle='#03060f';
+ ctx.beginPath();
+ ctx.moveTo(0,H);
+ for(const point of v15Ridge){
+  const x=point.k*W;
+  const y=horizon-point.h*(isMobile?52:74)-Math.sin(point.k*9+t*.2)*4;
+  ctx.lineTo(x,y);
+ }
+ ctx.lineTo(W,H);
+ ctx.closePath();
+ ctx.fill();
+ ctx.strokeStyle=w.accent+'55';
+ ctx.lineWidth=1.6;
+ ctx.beginPath();
+ for(let i=0;i<v15Ridge.length;i++){
+  const point=v15Ridge[i];
+  const x=point.k*W;
+  const y=horizon-point.h*(isMobile?52:74)-Math.sin(point.k*9+t*.2)*4;
+  if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+ }
+ ctx.stroke();
+ ctx.restore();
+
+ /* Foreground motes drifting upward sell parallax against the descending creatures. */
+ if(!quality.mobile||!save.comfort){
+  ctx.save();
+  ctx.globalCompositeOperation='lighter';
+  const motes=quality.mobile?12:22;
+  for(let i=0;i<motes;i++){
+   const seed=i*211;
+   const x=((seed*29)%1000)/1000*W+Math.sin(t*.5+i)*18;
+   const y=H-((t*26+seed)%(H*1.05));
+   ctx.globalAlpha=.05+.12*Math.abs(Math.sin(t*.8+i));
+   ctx.fillStyle=w.accent;
+   ctx.fillRect(x,y,2,6);
+  }
+  ctx.restore();
+ }
+ ctx.globalAlpha=1;
+};
+
+/* Post pass: vignette, world colour grade and a health-driven danger edge. */
+const v15PostDrawBase=draw;
+draw=function(){
+ v15PostDrawBase();
+ const w=worlds[game.world%worlds.length];
+ ctx.save();
+ const vignette=ctx.createRadialGradient(W*.5,H*.48,Math.min(W,H)*.32,W*.5,H*.52,Math.max(W,H)*.78);
+ vignette.addColorStop(0,'transparent');
+ vignette.addColorStop(.62,'rgba(2,4,12,.22)');
+ vignette.addColorStop(1,'rgba(1,2,8,.78)');
+ ctx.fillStyle=vignette;
+ ctx.fillRect(0,0,W,H);
+ ctx.globalCompositeOperation='overlay';
+ ctx.globalAlpha=.09;
+ ctx.fillStyle=w.accent;
+ ctx.fillRect(0,0,W,H);
+ ctx.restore();
+
+ if(game.running&&game.lives<=1){
+  const pulse=.16+.12*Math.sin(game.elapsed*6);
+  ctx.save();
+  const danger=ctx.createRadialGradient(W*.5,H*.5,Math.min(W,H)*.3,W*.5,H*.5,Math.max(W,H)*.7);
+  danger.addColorStop(0,'transparent');
+  danger.addColorStop(1,`rgba(255,42,80,${pulse})`);
+  ctx.fillStyle=danger;
+  ctx.fillRect(0,0,W,H);
+  ctx.restore();
+ }
+ ctx.globalAlpha=1;
+};
+
+/* Taking a hit now reads instantly instead of only shaking the camera. */
+const v15DamageBase=damage;
+damage=function(){
+ const before=game.lives;
+ v15DamageBase();
+ if(game.lives<before){
+  game.flash=Math.max(game.flash,.3);
+  document.body.classList.add('v15-hurt');
+  setTimeout(()=>document.body.classList.remove('v15-hurt'),260);
+ }
+};
+
+/* Titans should read as titans. V12 clamped them small enough on phones that the silhouette was
+   lost; this reframes them larger with room underneath to fight in. */
+const v15SpawnBossBase=spawnBoss;
+spawnBoss=function(omega=false){
+ v15SpawnBossBase(omega);
+ const boss=game.boss;
+ if(!boss)return;
+ if(isMobile){
+  boss.r=Math.max(88,Math.min(W*.27,112));
+  boss.y=Math.max(215,Math.min(H*.31,H-330));
+ }else{
+  boss.r=Math.max(100,Math.min(W*.17,158));
+ }
+};
+
+/* Rapid hits in one spot used to stack score popups into an unreadable pile. */
+const v15ScoreBase=score;
+score=function(delta,event='hit'){
+ v15ScoreBase(delta,event);
+ const text=game.texts[game.texts.length-1];
+ if(text){
+  text.x+=(Math.random()-.5)*46;
+  text.y+=(Math.random()-.5)*26;
+ }
+};
+
+/* ---------- Combat bar ---------- */
+const v15CombatBar=$('combatBar');
+const v15Lives=$('cbLives');
+const v15ObjectiveFill=$('cbObjectiveFill');
+const v15ObjectiveText=$('cbObjectiveText');
+const v15StageKind=$('cbStageKind');
+const v15StageName=$('cbStageName');
+let v15LivesShown=-1;
+
+function v15RefreshCombatBar(){
+ if(game.lives!==v15LivesShown){
+  v15LivesShown=game.lives;
+  v15Lives.innerHTML='';
+  for(let i=0;i<3;i++){
+   const pip=document.createElement('i');
+   if(i<game.lives)pip.className='on';
+   v15Lives.append(pip);
+  }
+  v15Lives.classList.toggle('critical',game.lives<=1);
+ }
+ const campaign=game.mode==='campaign'?game.v14:null;
+ let label,current,target;
+ if(campaign){
+  label=v14ObjectiveLabels[campaign.kind]||'PURGE';
+  if(campaign.kind==='survive'){
+   current=campaign.target-Math.ceil(campaign.timeLeft);
+   target=campaign.target;
+   v15ObjectiveText.textContent=`${Math.ceil(campaign.timeLeft)}s LEFT`;
+  }else{
+   current=Math.min(campaign.progress,campaign.target);
+   target=campaign.target;
+   v15ObjectiveText.textContent=`${current} / ${target}`;
+  }
+  v15StageName.textContent=campaign.stage.name;
+  v15StageKind.textContent=`STAGE ${campaign.stage.index}`;
+ }else{
+  label=game.objective;
+  current=Math.min(game.waveKills,game.waveTarget);
+  target=game.waveTarget;
+  v15ObjectiveText.textContent=`${current} / ${target}`;
+  v15StageName.textContent=worlds[game.world%worlds.length].name;
+  v15StageKind.textContent=`WAVE ${game.wave}`;
+ }
+ v15ObjectiveFill.style.width=Math.max(0,Math.min(100,target?current/target*100:0)).toFixed(1)+'%';
+ v15CombatBar.dataset.objective=label;
+ $('cbScore').textContent=format(game.score);
+}
+
+const v15BarHudBase=updateHud;
+updateHud=function(){
+ v15BarHudBase();
+ v15RefreshCombatBar();
+};
+
+const v15ShowGameBase=showGame;
+showGame=function(){
+ v15ShowGameBase();
+ v15CombatBar.classList.remove('hidden');
+ $('weaponChip').classList.remove('hidden');
+ v15LivesShown=-1;
+};
+const v15HideGameBase=hideGame;
+hideGame=function(){
+ v15HideGameBase();
+ v15CombatBar.classList.add('hidden');
+ $('weaponChip').classList.add('hidden');
+ $('stageIntro').classList.remove('on');
+};
+
+/* ---------- Stage intro card ---------- */
+const v15StageIntro=$('stageIntro');
+function v15ShowStageIntro(stage){
+ $('stageIntroKind').textContent=`STAGE ${String(stage.index).padStart(2,'0')} • ${v14StageKindLabels[stage.kind]||''}`;
+ $('stageIntroName').textContent=stage.name;
+ $('stageIntroBrief').textContent=stage.brief;
+ const hazards=(stage.hazards||[]).map((key)=>v14HazardTypes[key].name).join(' • ');
+ $('stageIntroHazard').textContent=hazards;
+ $('stageIntroHazard').classList.toggle('hidden',!hazards);
+ v15StageIntro.classList.add('on');
+ clearTimeout(v15StageIntro._timer);
+ v15StageIntro._timer=setTimeout(()=>v15StageIntro.classList.remove('on'),2600);
+}
+
+const v15IntroBeginBase=begin;
+begin=function(mode='solo',seed){
+ v15IntroBeginBase(mode,seed);
+ v15LivesShown=-1;
+ if(mode==='campaign'&&game.v14)v15ShowStageIntro(game.v14.stage);
+ else v15StageIntro.classList.remove('on');
+ updateHud();
+};

@@ -8,8 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="format-detection" content="telephone=no">
-  <title>Blast Rush Arena V14</title>
-  <link rel="preconnect" href="https://img.itch.zone" crossorigin>
+  <title>Blast Rush Arena V15</title>
   <link rel="preconnect" href="https://opengameart.org" crossorigin>
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="stylesheet" href="/styles.css">
@@ -21,6 +20,7 @@
   <link rel="stylesheet" href="/mobile-pro-v12.css">
   <link rel="stylesheet" href="/premium-v13.css">
   <link rel="stylesheet" href="/v14-campaign.css">
+  <link rel="stylesheet" href="/v15-vision.css">
 </head>
 <body class="launch-active">
 <section id="launchScreen" class="v14-launch" aria-label="Blast Rush launch screen">
@@ -39,7 +39,7 @@
         <div><small>CREDITS</small><b id="launchCredits">0</b></div>
       </div>
       <div class="v14-boot">
-        <div class="v14-boot-head"><span id="bootStatus" aria-live="polite">LOADING COMBAT ASSETS • 8%</span><span>V14</span></div>
+        <div class="v14-boot-head"><span id="bootStatus" aria-live="polite">LOADING COMBAT ASSETS • 8%</span><span>V15</span></div>
         <div class="v14-boot-track"><i id="bootProgress"></i></div>
       </div>
       <button id="enterArenaBtn" class="v14-cta" disabled><b>ENTER THE ARENA</b><small>INITIALIZING COMBAT SYSTEMS</small></button>
@@ -63,14 +63,20 @@
 <canvas id="game"></canvas>
 <div id="fx"></div>
 <header id="hud" class="hud hidden"><div class="hud-cluster left"><button id="pauseBtn" class="icon-btn" aria-label="Pause">Ⅱ</button><div class="chip"><small>WORLD</small><b id="worldName">NEBULA FORGE</b></div><div class="chip"><small>WAVE</small><b id="waveLabel">1</b></div></div><div class="score-card"><small>SCORE</small><b id="scoreLabel">0</b><span id="directiveLabel">PURGE • 0/18</span></div><div class="hud-cluster right"><div class="chip rival hidden" id="rivalCard"><small id="rivalName">RIVAL</small><b id="rivalScore">0</b><span id="rivalState">CONNECTED</span></div><div class="chip lives"><small>REACTOR</small><b id="livesLabel">♥ ♥ ♥</b></div></div></header>
+<div id="combatBar" class="v15-combat-bar hidden">
+  <div class="v15-cb-top"><span class="v15-stage-chip"><small id="cbStageKind">PURGE</small><b id="cbStageName">NEBULA FORGE</b></span><b id="cbScore" class="v15-cb-score">0</b><span id="cbLives" class="v15-lives" aria-label="Reactor integrity"></span></div>
+  <div class="v15-objective"><i id="cbObjectiveFill"></i><span id="cbObjectiveText">0 / 12</span></div>
+</div>
+<div id="weaponChip" class="v15-weapon-chip hidden"><span id="weaponName">PULSE</span><span id="weaponPips" class="v15-wpips"></span><i class="v15-wcool"><b id="weaponCooldown"></b></i></div>
+<div id="stageIntro" class="v15-stage-intro"><small id="stageIntroKind">PURGE</small><b id="stageIntroName">FIRST CONTACT</b><span id="stageIntroBrief"></span><em id="stageIntroHazard"></em></div>
 <div id="bossHud" class="boss-hud hidden"><span id="bossTitle">SINGULARITY WARDEN</span><div class="boss-track"><i id="bossBar"></i></div><small id="bossPhase">PHASE I</small></div>
 <aside id="comboHud" class="combo-hud hidden"><small>COMBO</small><b>x<span id="comboLabel">0</span></b><em id="comboRank">READY</em><div class="combo-track"><i id="comboBar"></i></div></aside>
 <aside id="powersHud" class="powers-hud hidden"><button id="overdriveBtn" class="power-button orange"><span>OVERDRIVE</span><b id="overdriveText">0%</b><small>SPACE</small></button><button id="blastBtn" class="power-button cyan"><span>REACTOR BLAST</span><b id="blastText">0%</b><small>B</small></button><button id="pressureBtn" class="power-button violet duel-only hidden"><span>PRESSURE</span><b id="pressureText">0%</b><small>Q</small></button><button id="volleyBtn" class="power-button red duel-only hidden"><span>SEND CORE</span><b id="ammoText">0</b><small>S</small></button></aside>
 <div id="toast" class="toast"></div><div id="countdown" class="countdown hidden">3</div>
 <main id="menuScreen" class="screen active"><section class="hero panel">
-  <div class="menu-topbar"><div class="brand-mini"><i></i> BLAST RUSH // V14</div><div id="networkPill" class="network-pill"><i></i><span>LIVE NETWORK</span></div></div>
+  <div class="menu-topbar"><div class="brand-mini"><i></i> BLAST RUSH // V15</div><div id="networkPill" class="network-pill"><i></i><span>LIVE NETWORK</span></div></div>
   <div class="hero-layout">
-    <div class="hero-copy"><div class="eyebrow">CAMPAIGN COMBAT ARCADE</div><h1><span>BLAST</span><span>RUSH</span></h1><div class="edition">RECKONING • V14</div><p>Fight a fifteen-stage campaign, bank credits offline, then spend them on weapons, pilots and skins before you take a rival live.</p></div>
+    <div class="hero-copy"><div class="eyebrow">CAMPAIGN COMBAT ARCADE</div><h1><span>BLAST</span><span>RUSH</span></h1><div class="edition">VISION • V15</div><p>Fight a fifteen-stage campaign, bank credits offline, then spend them on weapons, pilots and skins before you take a rival live.</p></div>
     <div class="hero-visual" aria-hidden="true"><div class="hero-core"></div><canvas id="menuArt" class="v14-menu-art"></canvas></div>
   </div>
   <div class="mode-command">

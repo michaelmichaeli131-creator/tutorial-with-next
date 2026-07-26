@@ -2,13 +2,24 @@
 
 Blast Rush Arena uses a mix of original procedural rendering and third-party runtime assets with documented commercial-use permissions.
 
-## V14 original artwork
+## Original artwork (V14–V15)
 
-All V14 artwork is original and generated at runtime on a 2D canvas — no external files, no third-party art:
+**As of V15 the game fetches no third-party images at all.** Every visual is original and generated at
+runtime on a 2D canvas:
 
 - The six playable pilots (`client/game-src/03g.part`) are drawn from scratch as distinct silhouettes and are also used for the in-game player avatar and the armory previews.
+- The six enemy creatures and the titan bosses (`client/game-src/03j.part`) are original designs sharing the pilot art language.
+- Weapon projectiles, beams, muzzle flashes and impacts (`client/game-src/03k.part`) are procedural.
 - The launch screen scene (`client/game-src/03i.part`) — parallax starfield, rim-lit planet, spire skyline, approaching hostiles and the ground glow — is composed procedurally each frame.
+- The arena background, ground plane, vignette and colour grade (`client/game-src/03l.part`) are procedural.
 - Meteor hazards, ion fog and EMP overlays are procedural.
+
+## Retired third-party sprites
+
+The animated monster sprite sheets listed below were used in V12–V14 and are **no longer fetched or
+referenced**. V15 replaced every creature with original artwork, which removed the runtime CDN
+dependency, made the art direction consistent and let the game render fully offline. The attribution
+is kept here for the historical record of those releases.
 
 ## Animated monster sprites
 

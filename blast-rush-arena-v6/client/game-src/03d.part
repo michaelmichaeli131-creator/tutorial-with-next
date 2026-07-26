@@ -1,15 +1,8 @@
 const V12_MUSIC_URL='https://opengameart.org/sites/default/files/space_battle_bpm130.mp3';
-const v12SpriteDefinitions={
- normal:{src:'https://img.itch.zone/aW1hZ2UvMTAyNjc1NC81ODU2NDY5LmdpZg%3D%3D/original/MOcEfo.gif',scale:3.25,y:.08},
- armored:{src:'https://img.itch.zone/aW1hZ2UvMTAyNjc1NC81ODU2NDkxLmdpZg%3D%3D/original/1wBy6A.gif',scale:3.45,y:.03},
- shard:{src:'https://img.itch.zone/aW1hZ2UvMTAyNjc1NC81ODU2NDczLmdpZg%3D%3D/original/DmrMWp.gif',scale:3.25,y:.04},
- splitter:{src:'https://img.itch.zone/aW1hZ2UvMTAyNjc1NC81ODU2NDcyLmdpZg%3D%3D/original/k%2FAtLB.gif',scale:3.35,y:.03},
- bomb:{src:'https://img.itch.zone/aW1hZ2UvMTE1OTkwNS82NzQzODM5LmdpZg%3D%3D/347x500/puMUFx.gif',scale:3.15,y:.02},
- rival:{src:'https://img.itch.zone/aW1hZ2UvMTE1OTkwNS82NzQzODUwLmdpZg%3D%3D/347x500/nXYjHb.gif',scale:3.5,y:.02},
- boss0:{src:'https://img.itch.zone/aW1hZ2UvMTE1OTkwNS82NzQzODM3LmdpZg%3D%3D/347x500/RZ%2F5PT.gif',scale:3.35,y:.03},
- boss1:{src:'https://img.itch.zone/aW1hZ2UvMTE1OTkwNS82NzQzODM4LmdpZg%3D%3D/347x500/J9HM0f.gif',scale:3.4,y:.03},
- boss2:{src:'https://img.itch.zone/aW1hZ2UvMTE1OTkwNS82NzQzODQwLmdpZg%3D%3D/347x500/oTUwSb.gif',scale:3.45,y:.03}
-};
+/* V15 replaced every creature with original artwork (see 03j.part), so no sprite sheets are
+   fetched any more. The loader below is kept intact and simply runs over an empty set, which
+   keeps the boot-progress reporting in 03e working unchanged. */
+const v12SpriteDefinitions={};
 const v12Sprites={};
 for(const [key,definition] of Object.entries(v12SpriteDefinitions)){
  const image=new Image();

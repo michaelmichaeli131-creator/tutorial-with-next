@@ -144,8 +144,9 @@ hitOrb=function(o,x,y,chain=false){
   }
  }
  if(combat.aoe>0){
-  explode(x,y,'#7ef0ff',30,1.1);
-  ring(x,y,'#7ef0ff',combat.aoe*.5);
+  explode(x,y,'#7ef0ff',16,.7);
+  /* A short, fixed-radius ring reads the actual blast area; ring() grows too far to be useful here. */
+  game.rings.push({x,y,r:combat.aoe*.55,life:.26,max:.26,color:'#7ef0ff'});
   for(const target of v14SplashTargets(x,y,combat.aoe,12,o))hitOrb(target,target.x,target.y,true);
   usedSpecial=true;
  }

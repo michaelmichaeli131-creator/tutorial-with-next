@@ -1,0 +1,471 @@
+/* V15 CREATURES — original enemy and titan artwork, drawn in the same language as the V14 pilots.
+   Replaces both the flat V9 shapes and the external sprite sheets, so the whole game reads as one
+   art direction and nothing depends on a third-party CDN at runtime. */
+const v15Palette={
+ normal:{body:'#7b5cff',trim:'#c9b8ff',glow:'#a98bff',eye:'#8affe8'},
+ armored:{body:'#3f7fd8',trim:'#bfe2ff',glow:'#61a5ff',eye:'#ffd98a'},
+ bomb:{body:'#d8324f',trim:'#ffb2a0',glow:'#ff3f61',eye:'#ffe066'},
+ shard:{body:'#25c88a',trim:'#c6ffe6',glow:'#69ffb5',eye:'#eafff6'},
+ splitter:{body:'#d8a72c',trim:'#ffeaa8',glow:'#ffe05f',eye:'#fff3c4'},
+ rival:{body:'#8a5cff',trim:'#e9dcff',glow:'#b98bff',eye:'#fff'}
+};
+
+function v15Skin(o){
+ if(o.type==='rival'){
+  const skin=currentSkin(o.skin);
+  return{body:skin.c2,trim:'#ffffff',glow:skin.c1,eye:'#ffffff'};
+ }
+ return v15Palette[o.type]||v15Palette.normal;
+}
+
+/* Segmented carapace used by several creatures — one helper keeps the family resemblance. */
+function v15Carapace(c,pal,points,x0,y0,x1,y1){
+ const g=c.createLinearGradient(x0,y0,x1,y1);
+ g.addColorStop(0,pal.trim);
+ g.addColorStop(.18,pal.body);
+ g.addColorStop(.62,'#0a1024');
+ g.addColorStop(1,'#04060f');
+ c.fillStyle=g;
+ v14Art.poly(c,points);
+ c.fill();
+ c.strokeStyle=pal.glow+'88';
+ c.lineWidth=1.6;
+ c.stroke();
+}
+
+function v15Eye(c,x,y,r,pal,intensity=1){
+ c.save();
+ c.translate(x,y);
+ c.shadowBlur=18*intensity;
+ c.shadowColor=pal.eye;
+ c.fillStyle=pal.eye;
+ c.beginPath();c.ellipse(0,0,r,r*.78,0,0,Math.PI*2);c.fill();
+ c.fillStyle='#ffffff';
+ c.beginPath();c.ellipse(-r*.22,-r*.24,r*.34,r*.28,0,0,Math.PI*2);c.fill();
+ c.restore();
+}
+
+const v15Creatures={
+ /* VOID SCOUT — light insectile drone. Fast, fragile, reads instantly as "the basic one". */
+ normal(c,o,pal,t){
+  const flap=Math.sin(t*7+(o.anim||0))*.5;
+  for(const side of [-1,1]){
+   c.save();
+   c.translate(side*13,-6);
+   c.rotate(side*(.35+flap));
+   c.globalAlpha=.85;
+   const wing=c.createLinearGradient(0,0,side*32,-14);
+   wing.addColorStop(0,pal.glow+'cc');
+   wing.addColorStop(1,'transparent');
+   c.fillStyle=wing;
+   v14Art.poly(c,[[0,-4],[side*34,-20],[side*30,4],[side*6,8]]);
+   c.fill();
+   c.strokeStyle=pal.trim+'66';c.lineWidth=1.2;c.stroke();
+   c.restore();
+  }
+  v14Art.limb(c,-9,20,-14,33,4,pal.body);
+  v14Art.limb(c,9,20,14,33,4,pal.body);
+  v15Carapace(c,pal,[[0,-30],[15,-18],[17,8],[9,24],[-9,24],[-17,8],[-15,-18]],-16,-28,16,22);
+  c.fillStyle='#060a18';
+  v14Art.poly(c,[[0,-26],[11,-16],[9,-2],[-9,-2],[-11,-16]]);c.fill();
+  v15Eye(c,0,-14,7,pal);
+  c.fillStyle=pal.trim;
+  c.globalAlpha=.75;
+  v14Art.poly(c,[[-4,4],[4,4],[2,16],[-2,16]]);c.fill();
+  c.globalAlpha=1;
+  const jet=8+Math.sin(t*14)*3;
+  const flame=c.createLinearGradient(0,24,0,24+jet);
+  flame.addColorStop(0,'#ffffff');
+  flame.addColorStop(.4,pal.glow);
+  flame.addColorStop(1,'transparent');
+  c.fillStyle=flame;
+  v14Art.poly(c,[[-5,23],[5,23],[0,24+jet]]);c.fill();
+ },
+ /* IRON SENTINEL — heavy plated walker with shoulder pods. Wide, slow, obviously armoured. */
+ armored(c,o,pal,t){
+  const stomp=Math.sin(t*2.6+(o.anim||0))*2.5;
+  v14Art.limb(c,-13,22,-18,38+stomp,9,pal.body);
+  v14Art.limb(c,13,22,18,38-stomp,9,pal.body);
+  for(const side of [-1,1]){
+   c.save();
+   c.translate(side*24,-10);
+   c.fillStyle='#0d1730';
+   v14Art.round(c,-9,-11,18,22,6);c.fill();
+   c.strokeStyle=pal.glow;c.lineWidth=2;c.stroke();
+   c.fillStyle=pal.trim;
+   c.globalAlpha=.8;
+   v14Art.round(c,-4,-6,8,5,2);c.fill();
+   c.globalAlpha=1;
+   c.restore();
+  }
+  v15Carapace(c,pal,[[0,-26],[20,-16],[22,10],[13,26],[-13,26],[-22,10],[-20,-16]],-22,-26,22,26);
+  c.save();
+  c.globalAlpha=.55;
+  c.strokeStyle=pal.trim;
+  c.lineWidth=1.3;
+  for(let i=-1;i<=1;i++){
+   c.beginPath();c.moveTo(-16,i*8+4);c.lineTo(16,i*8+4);c.stroke();
+  }
+  c.restore();
+  c.fillStyle='#050b1a';
+  v14Art.poly(c,[[-15,-24],[15,-24],[12,-8],[-12,-8]]);c.fill();
+  c.save();
+  c.translate(0,-16);
+  c.shadowBlur=16;c.shadowColor=pal.eye;
+  c.fillStyle=pal.eye;
+  v14Art.round(c,-10,-2.5,20,5,2.5);c.fill();
+  c.restore();
+  c.fillStyle=pal.trim;
+  v14Art.poly(c,[[-22,-24],[0,-34],[22,-24],[0,-27]]);c.fill();
+ },
+ /* NOVA RAIDER — a walking detonation. Cracked shell, molten seams, live fuse. */
+ bomb(c,o,pal,t){
+  const beat=.5+.5*Math.sin(t*9+(o.anim||0));
+  c.save();
+  c.globalCompositeOperation='lighter';
+  c.globalAlpha=.35+beat*.35;
+  const core=c.createRadialGradient(0,2,2,0,2,26);
+  core.addColorStop(0,'#fff3b0');
+  core.addColorStop(.4,pal.glow);
+  core.addColorStop(1,'transparent');
+  c.fillStyle=core;
+  c.beginPath();c.arc(0,2,26,0,Math.PI*2);c.fill();
+  c.restore();
+  for(const side of [-1,1]){
+   c.fillStyle='#2a0713';
+   v14Art.poly(c,[[side*16,-6],[side*30,-18],[side*27,8],[side*14,14]]);c.fill();
+   c.strokeStyle=pal.glow+'99';c.lineWidth=1.4;c.stroke();
+  }
+  v15Carapace(c,pal,[[0,-28],[19,-14],[21,10],[11,26],[-11,26],[-21,10],[-19,-14]],-20,-26,20,24);
+  c.save();
+  c.globalCompositeOperation='lighter';
+  c.strokeStyle=`rgba(255,196,90,${.45+beat*.5})`;
+  c.lineWidth=2.4;
+  c.beginPath();c.moveTo(-13,-6);c.lineTo(-3,2);c.lineTo(-8,12);c.stroke();
+  c.beginPath();c.moveTo(13,-2);c.lineTo(5,7);c.lineTo(10,17);c.stroke();
+  c.restore();
+  c.fillStyle='#12020a';
+  v14Art.poly(c,[[-12,-22],[12,-22],[10,-8],[-10,-8]]);c.fill();
+  v15Eye(c,-5,-15,4.5,pal,1+beat);
+  v15Eye(c,5,-15,4.5,pal,1+beat);
+  c.strokeStyle=pal.trim;c.lineWidth=2.4;c.lineCap='round';
+  c.beginPath();c.moveTo(2,-28);c.quadraticCurveTo(11,-40,19,-35);c.stroke();
+  c.save();
+  c.globalCompositeOperation='lighter';
+  c.shadowBlur=20*beat+8;c.shadowColor='#ffd166';
+  c.fillStyle='#fff6c8';
+  c.beginPath();c.arc(19,-35,2.6+beat*2.4,0,Math.PI*2);c.fill();
+  c.restore();
+ },
+ /* CRYSTAL WRAITH — faceted spirit orbiting its own shards. */
+ shard(c,o,pal,t){
+  const spin=t*1.5+(o.anim||0);
+  c.save();
+  c.globalCompositeOperation='lighter';
+  for(let i=0;i<5;i++){
+   const a=spin+i*Math.PI*2/5;
+   const x=Math.cos(a)*26,y=Math.sin(a)*16-2;
+   c.save();
+   c.translate(x,y);
+   c.rotate(a*1.6);
+   c.globalAlpha=.5+.4*Math.sin(spin*2+i);
+   c.fillStyle=pal.glow;
+   v14Art.poly(c,[[0,-6],[3,0],[0,7],[-3,0]]);
+   c.fill();
+   c.restore();
+  }
+  c.restore();
+  v15Carapace(c,pal,[[0,-32],[14,-14],[18,6],[0,30],[-18,6],[-14,-14]],-16,-30,16,26);
+  c.save();
+  c.globalAlpha=.4;
+  c.strokeStyle=pal.trim;c.lineWidth=1.2;
+  c.beginPath();c.moveTo(0,-32);c.lineTo(0,30);c.stroke();
+  c.beginPath();c.moveTo(-18,6);c.lineTo(18,6);c.stroke();
+  c.beginPath();c.moveTo(-14,-14);c.lineTo(14,-14);c.stroke();
+  c.restore();
+  c.save();
+  c.globalCompositeOperation='lighter';
+  const heart=c.createRadialGradient(0,-4,1,0,-4,14);
+  heart.addColorStop(0,'#ffffff');
+  heart.addColorStop(.35,pal.glow);
+  heart.addColorStop(1,'transparent');
+  c.fillStyle=heart;
+  c.beginPath();c.arc(0,-4,14,0,Math.PI*2);c.fill();
+  c.restore();
+  v15Eye(c,0,-10,5,pal);
+ },
+ /* TWIN BEAST — one body, two heads, a visible seam where it will split. */
+ splitter(c,o,pal,t){
+  const sway=Math.sin(t*3+(o.anim||0))*3;
+  v14Art.limb(c,-16,16,-27,30+sway,5,pal.body);
+  v14Art.limb(c,16,16,27,30-sway,5,pal.body);
+  v14Art.limb(c,-10,24,-14,38,6,pal.body);
+  v14Art.limb(c,10,24,14,38,6,pal.body);
+  v15Carapace(c,pal,[[0,-8],[19,-2],[21,14],[11,28],[-11,28],[-21,14],[-19,-2]],-20,-10,20,26);
+  c.save();
+  c.globalAlpha=.6;
+  c.strokeStyle='#0a0d1c';c.lineWidth=2.4;
+  c.setLineDash([4,4]);
+  c.beginPath();c.moveTo(0,-8);c.lineTo(0,28);c.stroke();
+  c.restore();
+  for(const side of [-1,1]){
+   c.save();
+   c.translate(side*10,-20+sway*side*.2);
+   c.rotate(side*.14);
+   v15Carapace(c,pal,[[0,-14],[10,-6],[9,8],[-9,8],[-10,-6]],-10,-14,10,8);
+   c.fillStyle='#0a0710';
+   v14Art.poly(c,[[-7,-9],[7,-9],[6,1],[-6,1]]);c.fill();
+   v15Eye(c,0,-4,4,pal);
+   c.restore();
+  }
+ },
+ /* RIVAL WARLORD — a rival pilot's core, armoured and caped in their own colours. */
+ rival(c,o,pal,t){
+  const cape=Math.sin(t*2.2+(o.anim||0))*5;
+  c.save();
+  c.globalAlpha=.6;
+  c.fillStyle=pal.body;
+  v14Art.poly(c,[[-14,-10],[-34,-24-cape],[-28,18],[-12,30]]);c.fill();
+  v14Art.poly(c,[[14,-10],[34,-24+cape],[28,18],[12,30]]);c.fill();
+  c.restore();
+  v14Art.limb(c,-17,0,-28,18,7,pal.glow);
+  v14Art.limb(c,17,0,28,18,7,pal.glow);
+  v15Carapace(c,pal,[[0,-30],[21,-16],[19,16],[9,32],[-9,32],[-19,16],[-21,-16]],-21,-30,21,30);
+  c.fillStyle=pal.trim;
+  c.globalAlpha=.85;
+  v14Art.poly(c,[[0,-12],[7,0],[0,12],[-7,0]]);c.fill();
+  c.globalAlpha=1;
+  c.fillStyle='#04060f';
+  v14Art.round(c,-14,-27,28,16,6);c.fill();
+  c.save();
+  c.translate(0,-19);
+  c.shadowBlur=20;c.shadowColor=pal.glow;
+  c.fillStyle=pal.glow;
+  v14Art.round(c,-9,-2.5,18,5,2.5);c.fill();
+  c.restore();
+  c.fillStyle=pal.trim;
+  for(const side of [-1,1]){
+   v14Art.poly(c,[[side*12,-28],[side*20,-42],[side*15,-26]]);c.fill();
+  }
+ }
+};
+
+/* Titans get a bespoke pass: layered armour, a live core and phase-driven silhouette changes. */
+function v15DrawTitan(b,w){
+ const r=b.r,t=b.t,phase=b.phase||1;
+ const rage=phase===3;
+ const arm=Math.sin(t*1.6)*r*.08;
+ ctx.save();
+ ctx.translate(b.x,b.y);
+
+ ctx.save();
+ ctx.globalCompositeOperation='lighter';
+ for(let i=0;i<3;i++){
+  ctx.save();
+  ctx.rotate(t*(i%2?-.13:.1)+i*1.4);
+  ctx.strokeStyle=(i===1?w.enemy:w.accent)+(rage?'aa':'77');
+  ctx.lineWidth=4-i;
+  ctx.setLineDash([r*.22,r*.1]);
+  ctx.beginPath();ctx.arc(0,0,r*(1.22-i*.16),0,Math.PI*2);ctx.stroke();
+  ctx.restore();
+ }
+ ctx.restore();
+
+ for(const side of [-1,1]){
+  ctx.save();
+  ctx.translate(side*r*.72,-r*.1+arm*side);
+  ctx.rotate(side*.2);
+  const pod=ctx.createLinearGradient(0,-r*.3,0,r*.3);
+  pod.addColorStop(0,w.accent);
+  pod.addColorStop(.5,'#0d1330');
+  pod.addColorStop(1,'#04060f');
+  ctx.fillStyle=pod;
+  v14Art.poly(ctx,[[0,-r*.34],[r*.24,-r*.16],[r*.2,r*.24],[-r*.2,r*.24],[-r*.24,-r*.16]]);
+  ctx.fill();
+  ctx.strokeStyle=w.accent+'aa';ctx.lineWidth=2;ctx.stroke();
+  ctx.save();
+  ctx.globalCompositeOperation='lighter';
+  ctx.shadowBlur=20;ctx.shadowColor=rage?'#ff5470':w.accent;
+  ctx.fillStyle=rage?'#ff8098':w.accent;
+  ctx.beginPath();ctx.arc(0,r*.04,r*.07,0,Math.PI*2);ctx.fill();
+  ctx.restore();
+  ctx.restore();
+ }
+
+ v14Art.limb(ctx,-r*.3,r*.4,-r*.42,r*.86,r*.16,w.accent);
+ v14Art.limb(ctx,r*.3,r*.4,r*.42,r*.86,r*.16,w.accent);
+
+ const body=ctx.createLinearGradient(-r*.5,-r*.7,r*.5,r*.7);
+ body.addColorStop(0,'#ffffff');
+ body.addColorStop(.1,w.accent);
+ body.addColorStop(.46,'#0c1030');
+ body.addColorStop(.8,rage?'#5a0f24':w.enemy);
+ body.addColorStop(1,'#03040c');
+ ctx.fillStyle=body;
+ v14Art.poly(ctx,[[0,-r*.78],[r*.5,-r*.42],[r*.44,r*.4],[r*.2,r*.7],[-r*.2,r*.7],[-r*.44,r*.4],[-r*.5,-r*.42]]);
+ ctx.fill();
+ ctx.strokeStyle='#ffffff55';ctx.lineWidth=2;ctx.stroke();
+
+ ctx.save();
+ ctx.globalAlpha=.5;
+ ctx.strokeStyle=w.accent;
+ ctx.lineWidth=1.6;
+ for(let i=0;i<3;i++){
+  const y=-r*.24+i*r*.24;
+  ctx.beginPath();ctx.moveTo(-r*.36,y);ctx.lineTo(r*.36,y);ctx.stroke();
+ }
+ ctx.restore();
+
+ ctx.save();
+ ctx.globalCompositeOperation='lighter';
+ const coreGlow=ctx.createRadialGradient(0,r*.04,2,0,r*.04,r*.32);
+ coreGlow.addColorStop(0,'#ffffff');
+ coreGlow.addColorStop(.3,rage?'#ff5470':w.accent);
+ coreGlow.addColorStop(1,'transparent');
+ ctx.fillStyle=coreGlow;
+ ctx.beginPath();ctx.arc(0,r*.04,r*.32,0,Math.PI*2);ctx.fill();
+ ctx.restore();
+
+ ctx.fillStyle='#03050e';
+ v14Art.round(ctx,-r*.3,-r*.7,r*.6,r*.28,r*.09);ctx.fill();
+ ctx.save();
+ ctx.translate(0,-r*.56);
+ ctx.shadowBlur=26;ctx.shadowColor=rage?'#ff4d6d':w.accent;
+ ctx.fillStyle=rage?'#ff6b85':w.accent;
+ v14Art.round(ctx,-r*.22,-r*.045,r*.44,r*.09,r*.045);ctx.fill();
+ ctx.restore();
+
+ ctx.fillStyle=w.enemy;
+ for(const side of [-1,1]){
+  v14Art.poly(ctx,[[side*r*.24,-r*.74],[side*r*.4,-r*1.02-(rage?r*.12:0)],[side*r*.16,-r*.72]]);
+  ctx.fill();
+ }
+
+ if(rage){
+  ctx.save();
+  ctx.globalCompositeOperation='lighter';
+  ctx.strokeStyle='#ff5470aa';
+  ctx.lineWidth=3;
+  for(let i=0;i<8;i++){
+   const a=t*.9+i*Math.PI/4;
+   const rr=r*(1.28+.07*Math.sin(t*3+i));
+   ctx.beginPath();
+   ctx.moveTo(Math.cos(a)*rr,Math.sin(a)*rr);
+   ctx.lineTo(Math.cos(a)*rr*1.3,Math.sin(a)*rr*1.3);
+   ctx.stroke();
+  }
+  ctx.restore();
+ }
+ ctx.restore();
+
+ for(const weak of b.weak){
+  if(!weak.alive)continue;
+  const x=b.x+Math.cos(weak.a+t*.6)*(b.r+36);
+  const y=b.y+Math.sin(weak.a+t*.6)*(b.r*.65+28);
+  const pulse=.7+.3*Math.sin(t*5+weak.a);
+  ctx.save();
+  ctx.translate(x,y);
+  ctx.rotate(t*.9+weak.a);
+  ctx.save();
+  ctx.globalCompositeOperation='lighter';
+  ctx.shadowBlur=26;ctx.shadowColor='#ffd85c';
+  ctx.fillStyle=`rgba(255,226,120,${pulse})`;
+  v14Art.poly(ctx,[[0,-16],[13,-5],[9,13],[-9,13],[-13,-5]]);
+  ctx.fill();
+  ctx.restore();
+  ctx.strokeStyle='#ffe98a';
+  ctx.lineWidth=2.4;
+  v14Art.poly(ctx,[[0,-16],[13,-5],[9,13],[-9,13],[-13,-5]]);
+  ctx.stroke();
+  ctx.fillStyle='#3a2400';
+  ctx.beginPath();ctx.arc(0,0,3.4,0,Math.PI*2);ctx.fill();
+  ctx.restore();
+  ctx.save();
+  ctx.globalCompositeOperation='lighter';
+  ctx.strokeStyle=`rgba(255,216,92,${.35*pulse})`;
+  ctx.lineWidth=2;
+  ctx.beginPath();ctx.arc(x,y,isMobile?30:25,0,Math.PI*2);ctx.stroke();
+  ctx.restore();
+ }
+}
+
+drawOrb=function(o,w){
+ const pal=v15Skin(o);
+ const life=o.v11Age||0;
+ const attack=o.v11Attack||0;
+ /* Art runs slightly larger than the collision radius for presence; the tap ellipse in 03d is
+    already wider than r, so the generous silhouette still matches what the player can hit. */
+ const scale=o.r/30*1.15;
+ const bob=Math.sin(life*4.2+(o.anim||0))*3;
+ const lean=Math.sin(o.phase*.6+(o.variant||0))*.07+attack*.1;
+ const flash=Math.max(0,o.v11Hit||0);
+
+ ctx.save();
+ ctx.translate(o.x,o.y+bob);
+
+ /* Ground shadow keeps the creature anchored instead of floating on a flat field. */
+ ctx.save();
+ ctx.globalCompositeOperation='lighter';
+ const halo=ctx.createRadialGradient(0,6*scale,0,0,6*scale,46*scale);
+ halo.addColorStop(0,pal.glow+'2e');
+ halo.addColorStop(1,'transparent');
+ ctx.fillStyle=halo;
+ ctx.beginPath();ctx.ellipse(0,6*scale,44*scale,34*scale,0,0,Math.PI*2);ctx.fill();
+ ctx.restore();
+
+ /* As a creature closes on the reactor it leans in and grows a warning tether. */
+ if(attack>.06){
+  ctx.save();
+  ctx.globalCompositeOperation='lighter';
+  ctx.globalAlpha=attack*.7;
+  ctx.strokeStyle=pal.glow;
+  ctx.lineWidth=2;
+  ctx.setLineDash([5,6]);
+  ctx.beginPath();
+  ctx.moveTo(0,26*scale);
+  ctx.lineTo(0,26*scale+40*attack);
+  ctx.stroke();
+  ctx.restore();
+ }
+
+ ctx.rotate(lean);
+ ctx.scale(scale*(1-attack*.08),scale*(1+attack*.14));
+ ctx.shadowBlur=isMobile?12:18;
+ ctx.shadowColor=pal.glow;
+ (v15Creatures[o.type]||v15Creatures.normal)(ctx,o,pal,life);
+ ctx.shadowBlur=0;
+
+ if(flash>0){
+  ctx.save();
+  ctx.globalCompositeOperation='lighter';
+  ctx.globalAlpha=Math.min(.8,flash);
+  ctx.fillStyle='#ffffff';
+  ctx.beginPath();ctx.arc(0,0,30,0,Math.PI*2);ctx.fill();
+  ctx.restore();
+ }
+ ctx.restore();
+
+ if(o.maxHp>1){
+  const width=Math.max(34,o.r*1.6);
+  const y=o.y-o.r*1.72;
+  const ratio=Math.max(0,o.hp/o.maxHp);
+  ctx.save();
+  ctx.fillStyle='rgba(2,6,16,.82)';
+  v14Art.round(ctx,o.x-width/2,y,width,5,2.5);ctx.fill();
+  ctx.fillStyle=ratio>.5?pal.glow:'#ff6a7f';
+  v14Art.round(ctx,o.x-width/2,y,width*ratio,5,2.5);ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,.28)';
+  ctx.lineWidth=1;
+  v14Art.round(ctx,o.x-width/2,y,width,5,2.5);ctx.stroke();
+  ctx.restore();
+ }
+};
+
+drawBoss=function(b,w){v15DrawTitan(b,w);};
+
+/* Creatures now flash white on a non-lethal hit so armour reads as armour. */
+const v15HitOrbBase=hitOrb;
+hitOrb=function(o,x,y,chain=false){
+ o.v11Hit=1;
+ v15HitOrbBase(o,x,y,chain);
+};
