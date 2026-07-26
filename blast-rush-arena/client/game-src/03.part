@@ -1,0 +1,214 @@
+    const candidates = game.orbs.filter(o => !o.dead && !o.isBoss && distance(o.x, o.y, game.pointer.x, game.pointer.y) <= o.radius * 1.25)
+      .sort((a, b) => distance(a.x, a.y, game.pointer.x, game.pointer.y) - distance(b.x, b.y, game.pointer.x, game.pointer.y));
+    if (candidates.length) hitOrb(candidates[0], game.pointer.x, game.pointer.y);
+    else if (game.boss && distance(game.boss.x, game.boss.y, game.pointer.x, game.pointer.y) <= game.boss.radius * 1.1) hitBoss(game.pointer.x, game.pointer.y);
+    else {
+      resetCombo();
+      spark(game.pointer.x, game.pointer.y, '#4acfff', 5, .5);
+      sound('miss');
+    }
+  }
+
+  function loop(t) {
+    const raw = Math.min((t - (game.lastTime || t)) / 1000, .033);
+    game.lastTime = t;
+    game.time += raw;
+    game.dt = raw * (game.mode === 'playing' ? game.slowMo : 1);
+    if (game.mode === 'playing') update(game.dt);
+    else updateEffects(raw * .35);
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  function update(dt) {
+    updateHazard(dt);
+    updateSpawning(dt);
+    updateOrbs(dt);
+    updateBoss(dt);
+    updateEffects(dt);
+    updateCombo(dt);
+    updateOverdrive(dt);
+    game.flash = Math.max(0, game.flash - dt * 2.8);
+    game.shake = Math.max(0, game.shake - dt * 25);
+    updateMissionProgress();
+    updateObjective();
+    updateHud();
+  }
+
+  function updateSpawning(dt) {
+    if (game.waveTransition || game.boss) return;
+    game.spawnTimer -= dt;
+    if (game.spawnTimer <= 0) {
+      spawnOrb();
+      const stage = STAGES[game.stageIndex];
+      const mutationSpeed = game.mutator?.speed || 1;
+      const hazardSpeed = game.hazard?.type === 'gravity' ? 1.22 : 1;
+      const speed = Math.max(.18, .9 - game.wave * .034) / (stage.speed * mutationSpeed * hazardSpeed);
+      game.spawnTimer = speed * (.72 + rand() * .5);
+      if (game.hazard?.type === 'swarm' && rand() < .45) spawnOrb(rand() < .5 ? 'armored' : 'normal');
+    }
+  }
+
+  function pickType() {
+    const r = rand();
+    const w = game.wave;
+    const stage = STAGES[game.stageIndex];
+    const armorBoost = stage.armored + (game.mutator?.armored || 0);
+    const bombBoost = game.mutator?.bombs || 0;
+    const bonusBoost = game.mutator?.bonus || 0;
+    if (w >= 7 && r < .07 + armorBoost * .3) return 'elite';
+    if (w >= 3 && r < .18 + armorBoost) return 'armored';
+    if (w >= 2 && r < .31 + bombBoost) return 'bomb';
+    if (r < .38 + bonusBoost) return 'bonus';
+    if (game.lives < 3 && r < .44) return 'heal';
+    return 'normal';
+  }
+
+  function spawnOrb(type = pickType(), x = null, y = null) {
+    const spec = ORB_TYPES[type];
+    const margin = Math.max(150, game.width * .12);
+    const stage = STAGES[game.stageIndex];
+    const orb = {
+      id: `${game.wave}-${game.destroyed}-${Math.floor(rand()*1e9)}`,
+      type, x: x ?? margin + rand() * Math.max(50, game.width - margin * 2),
+      y: y ?? -spec.radius - rand() * 120,
+      radius: spec.radius * (game.width < 800 ? .82 : 1), hp: spec.hp, maxHp: spec.hp,
+      speed: (48 + game.wave * 5.8) * spec.speed * stage.speed * (game.mutator?.speed || 1), phase: rand() * Math.PI * 2,
+      spin: (rand() - .5) * 2.5, rotation: rand() * Math.PI * 2,
+      pulse: rand() * Math.PI * 2, dead: false, hitFlash: 0
+    };
+    game.orbs.push(orb);
+    return orb;
+  }
+
+  function updateOrbs(dt) {
+    const reactorY = game.height * .84;
+    for (const o of game.orbs) {
+      if (o.dead) continue;
+      const speedMult = (game.overdriveActive ? .76 : 1) * (game.hazard?.type === 'gravity' ? 1.28 : 1);
+      o.y += o.speed * dt * speedMult;
+      o.x += Math.sin(game.time * 1.7 + o.phase) * 10 * dt;
+      o.rotation += o.spin * dt;
+      o.pulse += dt * 3;
+      o.hitFlash = Math.max(0, o.hitFlash - dt * 5);
+      if (o.y + o.radius >= reactorY) {
+        o.dead = true;
+        damageReactor(o.x, reactorY, o.type === 'elite' ? 2 : 1);
+      }
+    }
+    game.orbs = game.orbs.filter(o => !o.dead || o.fade > 0);
+  }
+
+  function hitOrb(o, px, py, chained = false) {
+    if (o.dead) return;
+    const d = distance(o.x, o.y, px, py);
+    const perfectWindow = o.radius * (.27 + game.augments.perfect * .095) * (game.mutator?.perfect || 1) * (game.hazard?.type === 'fracture' ? .58 : 1);
+    const perfect = d <= perfectWindow;
+    o.hp--;
+    o.hitFlash = 1;
+    spark(px, py, ORB_TYPES[o.type].color, perfect ? 18 : 9, perfect ? 1.4 : .8);
+    shockwave(px, py, ORB_TYPES[o.type].color, perfect ? 75 : 42, .25);
+    sound(o.hp <= 0 ? 'hit' : 'armor');
+
+    if (o.hp > 0) {
+      floatingText(o.x, o.y - o.radius, 'ARMOR HIT', '#d7bdff', 18);
+      game.comboTimer = Math.max(game.comboTimer, 1.1);
+      return;
+    }
+
+    destroyOrb(o, perfect, chained);
+  }
+
+  function destroyOrb(o, perfect, chained = false) {
+    if (o.dead) return;
+    o.dead = true;
+    const spec = ORB_TYPES[o.type];
+    const chainMultiplier = chained ? 1.15 : 1;
+    game.combo++;
+    game.maxCombo = Math.max(game.maxCombo, game.combo);
+    game.comboTimer = game.comboDuration;
+    game.destroyed++;
+    game.killsThisWave++;
+    const scoreMult = (1 + Math.min(game.combo, 60) * .045) * (game.overdriveActive ? 2 : 1) * (1 + game.augments.score * .25);
+    let points = Math.round(spec.score * scoreMult * chainMultiplier * (perfect ? 1.7 : 1));
+    game.score += points;
+    reportScore(points, perfect ? 'perfect' : chained ? 'chain' : 'hit');
+    game.overdrive = Math.min(100, game.overdrive + (perfect ? 9 : 5) + (chained ? 3 : 0));
+    game.blast = Math.min(100, game.blast + (perfect ? 10 : 4) * (1 + game.augments.blast * .3));
+    game.runXp += 2 + Math.floor(points / 250);
+    if (game.runMode === 'duel') game.pressure = Math.min(100, game.pressure + (perfect ? 16 : chained ? 20 : Math.min(8, Math.ceil(points / 900))));
+
+    if (perfect) {
+      game.perfects++;
+      floatingText(o.x, o.y, `PERFECT!\n+${format(points)}`, '#ffe23b', 25);
+      sound('perfect');
+      game.slowMo = .42;
+      setTimeout(() => { if (game.mode === 'playing') game.slowMo = 1; }, 70);
+    } else {
+      floatingText(o.x, o.y, `+${format(points)}`, chained ? '#71ff8d' : '#ffffff', 18);
+    }
+
+    explosion(o.x, o.y, spec.color, o.radius * (o.type === 'bomb' ? 2 : 1.35), o.type === 'elite');
+
+    if (o.type === 'bomb') triggerChain(o.x, o.y, 125 + game.augments.chain * 36);
+    if (o.type === 'heal') {
+      game.lives = Math.min(3, game.lives + 1);
+      floatingText(o.x, o.y - 35, '+1 LIFE', '#52ff7a', 21);
+      sound('heal');
+    }
+    if (o.type === 'bonus') {
+      const earned = 4 + Math.floor(game.wave / 2);
+      game.runShards += earned;
+      game.overdrive = Math.min(100, game.overdrive + 12);
+      floatingText(o.x, o.y - 34, `+${earned} ◆`, '#6ccfff', 20);
+    }
+
+    if (game.killsThisWave >= game.waveTarget && !game.waveTransition) completeWave();
+  }
+
+  function triggerChain(x, y, range) {
+    let hits = 0;
+    for (const other of game.orbs) {
+      if (!other.dead && distance(x, y, other.x, other.y) <= range + other.radius) {
+        hits++;
+        setTimeout(() => {
+          if (!other.dead) {
+            other.hp = 1;
+            destroyOrb(other, false, true);
+          }
+        }, 55 + hits * 28);
+      }
+    }
+    if (hits) {
+      game.chains += hits;
+      floatingText(x, y - 55, `CHAIN x${hits + 1}`, '#57ff83', 22);
+      sound('chain');
+    }
+  }
+
+  function completeWave() {
+    game.waveTransition = true;
+    game.orbs.forEach(o => { if (!o.dead) o.speed *= .25; });
+    awardObjective();
+    const completedWave = game.wave;
+    reportScore(1800 + completedWave * 240, 'wave');
+    setTimeout(() => {
+      if (game.mode !== 'playing') return;
+      game.wave++;
+      game.killsThisWave = 0;
+      game.waveTarget = 12 + game.wave * 2 + Math.floor(game.wave / 4) * 2;
+      game.waveTransition = false;
+      configureWave();
+      if (game.wave % 4 === 0) spawnBoss();
+      else if (completedWave % 3 === 0 && game.runMode !== 'duel') showAugments();
+      else { toast(`WAVE ${game.wave} • ${game.mutator.title}`); if (game.wave % 3 === 1) showStageBanner(); }
+    }, 760);
+  }
+
+  function spawnBoss() {
+    game.orbs = game.orbs.filter(o => o.dead);
+    const hp = 24 + game.wave * 6 + game.stageIndex * 8;
+    const stage = STAGES[game.stageIndex];
+    game.boss = {
+      isBoss: true, name: stage.boss, color: stage.colors[2], x: game.width / 2, y: -150, targetY: Math.max(180, game.height * .25),
+      radius: Math.min(108, game.width * .085), hp, maxHp: hp, rotation: 0,
