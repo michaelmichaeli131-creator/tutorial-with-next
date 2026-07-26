@@ -1,6 +1,6 @@
-const CACHE = 'blast-rush-arena-v7-rival-core';
+const CACHE = 'blast-rush-arena-v8-mobile-overdrive';
 const ASSETS = [
-  '/', '/index.html', '/styles.css', '/v7-overrides.css',
+  '/', '/index.html', '/styles.css', '/v7-overrides.css', '/mobile-v8.css',
   '/net.js', '/game.js', '/manifest.webmanifest', '/icons/icon-192.svg', '/icons/icon-512.svg'
 ];
 self.addEventListener('install', (event) => event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting())));
