@@ -1,0 +1,214 @@
+      phase: 0, phaseLevel: 1, spawnTimer: 1.2, attackTimer: 2.5, hitFlash: 0, dead: false
+    };
+    ui.bossName.textContent = `☠ ${stage.boss}`;
+    ui.bossWrap.classList.remove('hidden');
+    toast(`${stage.boss} INCOMING`);
+    sound('boss'); screenFlash(.35);
+  }
+
+  function updateBoss(dt) {
+    const b = game.boss;
+    if (!b) return;
+    b.y += (b.targetY - b.y) * Math.min(1, dt * 1.7);
+    b.x = game.width / 2 + Math.sin(game.time * .7) * Math.min(game.width * .23, 260);
+    b.rotation += dt * .55;
+    b.hitFlash = Math.max(0, b.hitFlash - dt * 4);
+    b.phaseLevel = b.hp / b.maxHp < .34 ? 3 : b.hp / b.maxHp < .67 ? 2 : 1;
+    b.spawnTimer -= dt;
+    b.attackTimer -= dt;
+    if (b.spawnTimer <= 0) {
+      const angle = rand() * Math.PI * 2;
+      spawnOrb(rand() < .28 ? 'armored' : 'normal', b.x + Math.cos(angle) * b.radius * .9, b.y + Math.sin(angle) * b.radius * .55);
+      b.spawnTimer = Math.max(.35, 1.2 - game.wave * .025 - b.phaseLevel * .1);
+    }
+    if (b.attackTimer <= 0) {
+      bossAttack(b);
+      b.attackTimer = Math.max(1.7, 3.4 - b.phaseLevel * .45);
+    }
+  }
+
+  function bossAttack(b) {
+    shockwave(b.x, b.y, '#ff304d', 230, .7);
+    for (let i = 0; i < 12; i++) {
+      const a = i / 12 * Math.PI * 2;
+      particle(b.x, b.y, Math.cos(a) * 140, Math.sin(a) * 140, '#ff304d', 7, 1.2, 'spark');
+    }
+    sound('bossPulse');
+    screenShake(10);
+  }
+
+  function hitBoss(px, py) {
+    const b = game.boss;
+    if (!b || b.dead) return;
+    const d = distance(b.x, b.y, px, py);
+    const perfect = d <= b.radius * (.24 + game.augments.perfect * .07);
+    const damage = perfect ? 2 : 1;
+    b.hp -= damage;
+    b.hitFlash = 1;
+    game.combo++;
+    game.maxCombo = Math.max(game.maxCombo, game.combo);
+    game.comboTimer = game.comboDuration;
+    const points = Math.round((perfect ? 500 : 220) * (game.overdriveActive ? 2 : 1) * (1 + game.augments.score * .25));
+    game.score += points;
+    reportScore(points, perfect ? 'perfect' : 'hit');
+    game.overdrive = Math.min(100, game.overdrive + (perfect ? 7 : 3));
+    game.blast = Math.min(100, game.blast + (perfect ? 8 : 3) * (1 + game.augments.blast * .3));
+    spark(px, py, '#ff4b4b', perfect ? 26 : 13, 1.4);
+    shockwave(px, py, perfect ? '#ffe32f' : '#ff4456', perfect ? 100 : 55, .28);
+    floatingText(px, py - 20, perfect ? `CRITICAL! -${damage}` : `-${damage}`, perfect ? '#ffe32f' : '#ffffff', perfect ? 24 : 17);
+    sound(perfect ? 'perfect' : 'armor');
+    if (b.hp <= 0) destroyBoss();
+  }
+
+  function destroyBoss() {
+    const b = game.boss;
+    if (!b || b.dead) return;
+    b.dead = true;
+    const bonus = 6500 * game.wave;
+    game.score += bonus;
+    reportScore(bonus, 'boss');
+    game.runShards += 35 + game.wave * 2;
+    game.runXp += 180 + game.wave * 8;
+    for (let i = 0; i < 9; i++) {
+      setTimeout(() => explosion(b.x + (Math.random() - .5) * b.radius * 1.6, b.y + (Math.random() - .5) * b.radius * 1.2, i % 2 ? '#ff3b2f' : '#ffb21b', 100 + Math.random() * 80, true), i * 90);
+    }
+    floatingText(b.x, b.y, `BOSS DESTROYED\n+${format(bonus)}`, '#ffe03b', 31);
+    sound('bossDown');
+    screenFlash(.8);
+    screenShake(30);
+    setTimeout(() => {
+      game.boss = null;
+      ui.bossWrap.classList.add('hidden');
+      game.killsThisWave = 0;
+      game.waveTarget = 12 + game.wave * 2;
+      if ((game.wave - 1) % 3 === 0) showAugments();
+      else toast(`WAVE ${game.wave}`);
+    }, 1100);
+  }
+
+  function showAugments() {
+    game.mode = 'augment';
+    setMusicIntensity(.25);
+    const choices = shuffle([...AUGMENTS]).slice(0, 3);
+    ui.augmentCards.innerHTML = '';
+    choices.forEach(a => {
+      const card = document.createElement('button');
+      card.className = 'augment-card';
+      card.style.setProperty('--cardColor', a.color);
+      card.innerHTML = `<div class="augment-icon">${a.icon}</div><h3>${a.title}</h3><p>${a.desc}</p><small>LEVEL ${game.augments[a.key] + 1}</small>`;
+      card.addEventListener('click', () => chooseAugment(a));
+      ui.augmentCards.appendChild(card);
+    });
+    showScreen('augmentScreen');
+  }
+
+  function chooseAugment(a) {
+    game.augments[a.key]++;
+    if (a.key === 'shield') game.shield++;
+    sound('augment');
+    closeAllScreens();
+    ui.hud.classList.remove('hidden');
+    game.mode = 'playing';
+    game.lastTime = performance.now();
+    toast(`${a.title} ACQUIRED`);
+    setMusicIntensity(game.overdriveActive ? 1 : .65);
+  }
+
+  function updateCombo(dt) {
+    if (game.comboTimer > 0) {
+      game.comboTimer -= dt;
+      if (game.comboTimer <= 0) resetCombo();
+    }
+  }
+
+  function resetCombo() {
+    game.combo = 0;
+    game.comboTimer = 0;
+  }
+
+  function activateOverdrive() {
+    if (game.overdrive < 100 || game.overdriveActive) return;
+    game.overdrive = 100;
+    game.overdriveActive = true;
+    game.overdriveTime = game.overdriveDuration * (1 + game.augments.overdrive * .35);
+    toast('OVERDRIVE');
+    sound('overdrive');
+    screenFlash(.45);
+    screenShake(18);
+    setMusicIntensity(1);
+  }
+
+  function updateOverdrive(dt) {
+    if (!game.overdriveActive) return;
+    game.overdriveTime -= dt;
+    game.overdrive = Math.max(0, 100 * game.overdriveTime / (game.overdriveDuration * (1 + game.augments.overdrive * .35)));
+    if (game.overdriveTime <= 0) {
+      game.overdriveActive = false;
+      game.overdrive = 0;
+      setMusicIntensity(.65);
+      toast('OVERDRIVE ENDED');
+    }
+  }
+
+  function activateBlast() {
+    if (game.mode !== 'playing' || game.blast < 100) return;
+    game.blast = 0;
+    const reactorX = game.width / 2;
+    const reactorY = game.height * .86;
+    shockwave(reactorX, reactorY, '#36c9ff', Math.max(game.width, game.height) * 1.1, .9);
+    screenFlash(.9);
+    screenShake(35);
+    sound('blast');
+    let delay = 0;
+    const targets = game.orbs.filter(o => !o.dead);
+    for (const o of targets) {
+      delay += 18;
+      setTimeout(() => {
+        if (!o.dead) {
+          o.hp = 1;
+          destroyOrb(o, false, true);
+        }
+      }, delay);
+    }
+    if (game.boss) {
+      game.boss.hp -= Math.ceil(game.boss.maxHp * .24);
+      floatingText(game.boss.x, game.boss.y, 'REACTOR BLAST!', '#4fddff', 30);
+      if (game.boss.hp <= 0) destroyBoss();
+    }
+  }
+
+  function damageReactor(x, y, amount) {
+    explosion(x, y, '#ff303d', 92, true);
+    screenFlash(.6); screenShake(24); resetCombo();
+    if (game.shield > 0) {
+      game.shield--; floatingText(game.width / 2, game.height * .72, 'SHIELD ABSORBED', '#51c9ff', 25); sound('shield'); return;
+    }
+    game.lives -= amount; sound('damage'); reportScore(-2500 * amount, 'penalty');
+    if (game.runMode === 'duel' && game.lives <= 0) {
+      game.lives = 3; game.score = Math.max(0, game.score - 5000); game.orbs.forEach(o => o.dead = true);
+      floatingText(game.width / 2, game.height * .66, 'REACTOR REBOOT • -5,000', '#ff5574', 25);
+      return;
+    }
+    if (game.lives <= 0) endGame();
+  }
+
+  function endGame(options = {}) {
+    if (game.mode === 'gameover') return;
+    game.mode = 'gameover'; stopMusic();
+    const oldHigh = save.highScore;
+    const persistRun = game.runMode !== 'duel';
+    if (persistRun) {
+      save.runs++; save.highScore = Math.max(save.highScore, game.score); save.bestWave = Math.max(save.bestWave, game.wave);
+    }
+    const xpEarned = persistRun ? Math.max(20, Math.floor(game.score / 900) + game.runXp) : 0;
+    const shardsEarned = persistRun ? game.runShards + Math.floor(game.wave * 2.5) : 0;
+    save.xp += xpEarned; save.shards += shardsEarned;
+    let levels = 0;
+    while (save.xp >= xpForLevel(save.level)) { save.xp -= xpForLevel(save.level); save.level++; save.shards += 50; levels++; }
+    if (game.missionComplete && !save.dailyClaimed && persistRun) { save.dailyClaimed = true; save.shards += mission.reward; }
+    persist();
+    game.lastResult = { score:Math.floor(game.score), wave:game.wave, perfects:game.perfects, maxCombo:game.maxCombo, stage:STAGES[game.stageIndex].name, seed:game.seed };
+
+    $('finalScore').textContent = format(game.score); $('finalWave').textContent = game.wave; $('finalDestroyed').textContent = game.destroyed;
+    $('finalPerfect').textContent = game.perfects; $('finalCombo').textContent = `x${game.maxCombo}`; $('finalXp').textContent = `+${format(xpEarned)}`; $('finalShards').textContent = `+${format(shardsEarned)}`;
+    $('newHighScore').classList.toggle('hidden', !persistRun || game.score <= oldHigh);

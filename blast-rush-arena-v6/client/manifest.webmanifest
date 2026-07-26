@@ -1,0 +1,15 @@
+{
+  "name": "Blast Rush Arena — Premium Command",
+  "short_name": "Blast Rush",
+  "description": "A premium mobile sci-fi arcade with animated monsters, cinematic onboarding, instant matchmaking and full-power battle audio.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#010207",
+  "theme_color": "#050816",
+  "categories": ["games", "entertainment"],
+  "icons": [
+    {"src":"/icons/icon-192.svg","sizes":"192x192","type":"image/svg+xml","purpose":"any maskable"},
+    {"src":"/icons/icon-512.svg","sizes":"512x512","type":"image/svg+xml","purpose":"any maskable"}
+  ]
+}

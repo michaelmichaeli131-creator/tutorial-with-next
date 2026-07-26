@@ -1,0 +1,50 @@
+(() => {
+'use strict';
+const $ = (id) => document.getElementById(id);
+const canvas = $('game'), ctx = canvas.getContext('2d',{alpha:false,desynchronized:true});
+let W=0,H=0,DPR=1,last=0,raf=0;
+const isMobile=matchMedia('(pointer:coarse)').matches||innerWidth<820;
+const reduceMotion=matchMedia('(prefers-reduced-motion:reduce)').matches;
+const quality={mobile:isMobile,particles:isMobile?0.58:1,stars:isMobile?48:96,glow:isMobile?18:34};
+const worlds=[
+ {name:'NEBULA FORGE',bg:['#030615','#142f62'],accent:'#58e8ff',enemy:'#945bff',boss:'SINGULARITY WARDEN'},
+ {name:'CRYSTAL RIFT',bg:['#050413','#28135e'],accent:'#ff6de5',enemy:'#4de4ff',boss:'PRISM HYDRA'},
+ {name:'SOLAR TEMPLE',bg:['#100403','#5d1905'],accent:'#ffca43',enemy:'#ff4d35',boss:'SOLAR COLOSSUS'},
+ {name:'VOID CATHEDRAL',bg:['#02020a','#24063c'],accent:'#b563ff',enemy:'#ff467d',boss:'VOID SERAPH'},
+ {name:'TEMPEST GARDEN',bg:['#02100f','#063c4a'],accent:'#4dffc4',enemy:'#49a8ff',boss:'TEMPEST LEVIATHAN'},
+ {name:'CELESTIAL ENGINE',bg:['#080905','#423b09'],accent:'#fff06b',enemy:'#61d9ff',boss:'CELESTIAL ARCHITECT'}
+];
+const skins=[
+ {id:'nova',name:'Nova',cost:0,c1:'#58e8ff',c2:'#2f5cff'}, {id:'ember',name:'Ember',cost:120,c1:'#ffd25e',c2:'#ff3f43'},
+ {id:'orchid',name:'Orchid',cost:240,c1:'#ff72ed',c2:'#743dff'}, {id:'toxic',name:'Toxic',cost:380,c1:'#b8ff4b',c2:'#13b66f'},
+ {id:'frost',name:'Frost',cost:540,c1:'#eaffff',c2:'#3cb6ff'}, {id:'royal',name:'Royal',cost:720,c1:'#ffdc69',c2:'#ae49ff'},
+ {id:'void',name:'Void',cost:950,c1:'#bba5ff',c2:'#120629'}, {id:'omega',name:'Omega',cost:1400,c1:'#ffffff',c2:'#ff3b62'}
+];
+const AUGMENTS=[
+ {id:'chain',name:'Chain Reactor',desc:'Chain radius +35%',apply:g=>g.chainRadius*=1.35},
+ {id:'precision',name:'Focus Lens',desc:'PERFECT window +25%',apply:g=>g.perfectWindow*=1.25},
+ {id:'overdrive',name:'Time Furnace',desc:'Overdrive lasts +3 sec',apply:g=>g.overdriveDuration+=3},
+ {id:'shield',name:'Phase Shield',desc:'Gain one shield charge',apply:g=>g.shields++},
+ {id:'blast',name:'Nova Capacitor',desc:'Blast charges 30% faster',apply:g=>g.blastGain*=1.3},
+ {id:'score',name:'Golden Signal',desc:'All score +18%',apply:g=>g.scoreMult*=1.18}
+];
+const save=Object.assign({best:0,level:1,xp:0,shards:0,skin:'nova',unlocked:['nova'],music:55,sfx:75,comfort:false,shake:true,runs:0},JSON.parse(localStorage.getItem('blastRushV6')||'{}'));
+function persist(){localStorage.setItem('blastRushV6',JSON.stringify(save));}
+const game={mode:'menu',running:false,paused:false,score:0,wave:1,lives:3,combo:0,maxCombo:0,perfects:0,kills:0,shardsEarned:0,overdrive:0,overdriveTime:0,blast:0,pressure:0,ammo:0,seed:1,rng:1,world:0,elapsed:0,spawnTimer:0,waveTimer:0,waveKills:0,waveTarget:18,objective:'PURGE',objectiveDone:false,orbs:[],particles:[],rings:[],texts:[],projectiles:[],boss:null,shake:0,slow:0,chainRadius:150,perfectWindow:.38,overdriveDuration:8,shields:0,blastGain:1,scoreMult:1,duelEndsAt:0,rival:null,lastResult:null,roomCode:null,gauntletIndex:0,flash:0};
+function resize(){W=innerWidth;H=innerHeight;DPR=Math.min(devicePixelRatio||1,isMobile?1.55:2);canvas.width=Math.round(W*DPR);canvas.height=Math.round(H*DPR);ctx.setTransform(DPR,0,0,DPR,0,0);ctx.imageSmoothingEnabled=true;} addEventListener('resize',resize,{passive:true});resize();
+function rng(){game.rng=(game.rng+0x6D2B79F5)|0;let t=game.rng;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296;}
+function currentSkin(id=save.skin){return skins.find(s=>s.id===id)||skins[0];}
+function showScreen(id){document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));if(id)$(id).classList.add('active');}
+function showGame(){showScreen(null);$('hud').classList.remove('hidden');$('comboHud').classList.remove('hidden');$('powersHud').classList.remove('hidden');}
+function hideGame(){$('hud').classList.add('hidden');$('comboHud').classList.add('hidden');$('powersHud').classList.add('hidden');$('bossHud').classList.add('hidden');}
+function toast(text){const e=$('toast');e.textContent=text;e.classList.add('on');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove('on'),1250);}
+function haptic(pattern=12){if(isMobile&&navigator.vibrate)navigator.vibrate(pattern);}
+function format(n){return Math.floor(Math.max(0,n)).toLocaleString('en-US');}
+function updateMenu(){$('pilotNameLabel').textContent=BlastNetwork.playerName;$('levelLabel').textContent=save.level;$('shardsLabel').textContent=save.shards;$('bestLabel').textContent=format(save.best);paintSkinElement($('skinOrb'),save.skin);}
+function paintSkinElement(el,id){const s=currentSkin(id);el.style.background=`radial-gradient(circle at 35% 28%,#fff 0 7%,${s.c1} 17%,${s.c2} 53%,#02040d 76%)`;el.style.boxShadow=`0 0 24px ${s.c1}`;}
+function updateHud(){const w=worlds[game.world%worlds.length];$('worldName').textContent=w.name;$('waveLabel').textContent=game.wave;$('scoreLabel').textContent=format(game.score);$('livesLabel').textContent='♥ '.repeat(game.lives)+'♡ '.repeat(Math.max(0,3-game.lives));$('comboLabel').textContent=game.combo;$('comboRank').textContent=game.combo>=50?'TRANSCENDENT':game.combo>=30?'LEGENDARY':game.combo>=15?'INSANE':game.combo>=7?'ULTRA':'READY';$('comboBar').style.width=Math.max(0,100-game.waveTimer*12)+'%';$('overdriveText').textContent=Math.floor(Math.min(100,game.overdrive))+'%';$('blastText').textContent=Math.floor(Math.min(100,game.blast))+'%';$('pressureText').textContent=Math.floor(Math.min(100,game.pressure))+'%';$('ammoText').textContent=game.ammo;[['overdriveBtn',game.overdrive>=100],['blastBtn',game.blast>=100],['pressureBtn',game.pressure>=100],['volleyBtn',game.ammo>0]].forEach(([id,on])=>$(id).classList.toggle('ready',on));$('directiveLabel').textContent=`${game.objective} • ${Math.min(game.waveKills,game.waveTarget)}/${game.waveTarget}`;if(game.boss){$('bossHud').classList.remove('hidden');$('bossTitle').textContent=game.boss.name;$('bossBar').style.width=Math.max(0,game.boss.hp/game.boss.maxHp*100)+'%';$('bossPhase').textContent=`PHASE ${['I','II','III'][game.boss.phase-1]||'Ω'}`;}else $('bossHud').classList.add('hidden');}
+function begin(mode='solo',seed){audio.start();game.mode=mode;game.running=true;game.paused=false;game.score=0;game.wave=1;game.lives=3;game.combo=0;game.maxCombo=0;game.perfects=0;game.kills=0;game.shardsEarned=0;game.overdrive=0;game.overdriveTime=0;game.blast=0;game.pressure=0;game.ammo=mode==='duel'?1:0;game.seed=seed||crypto.getRandomValues(new Uint32Array(1))[0]||1;game.rng=game.seed|0;game.world=0;game.elapsed=0;game.spawnTimer=.25;game.waveTimer=0;game.waveKills=0;game.waveTarget=mode==='gauntlet'?1:18;game.objective=mode==='gauntlet'?'TITAN':'PURGE';game.objectiveDone=false;game.orbs=[];game.particles=[];game.rings=[];game.texts=[];game.projectiles=[];game.boss=null;game.shake=0;game.slow=0;game.flash=0;game.chainRadius=150;game.perfectWindow=.38;game.overdriveDuration=8;game.shields=0;game.blastGain=1;game.scoreMult=1;game.gauntletIndex=0;save.runs++;persist();showGame();document.querySelectorAll('.duel-only').forEach(e=>e.classList.toggle('hidden',mode!=='duel'));$('rivalCard').classList.toggle('hidden',mode!=='duel');if(mode==='gauntlet')spawnBoss(true);updateHud();}
+function spawnOrb(type){const choices=['normal','normal','normal','armored','bomb','shard','splitter'];type=type||choices[Math.floor(rng()*choices.length)];const r=(type==='armored'?34:type==='rival'?42:21+rng()*15)*(isMobile?1.12:1);const hp=type==='armored'?2:type==='rival'?2:1;const margin=Math.max(52,r+12);game.orbs.push({id:crypto.randomUUID(),type,x:margin+rng()*Math.max(1,W-margin*2),y:-60-rng()*100,r,hp,maxHp:hp,speed:(52+game.wave*4+rng()*28)*(type==='rival'?1.22:1),phase:rng()*6.28,tier:1,bonus:0,skin:'nova'});}
+function spawnRival(core){const margin=isMobile?58:80,o={id:core.id,type:'rival',x:margin+rng()*(W-margin*2),y:-80,r:(38+core.tier*4)*(isMobile?1.08:1),hp:core.hp,maxHp:core.hp,speed:(75+game.wave*3)*core.speed,phase:0,tier:core.tier,bonus:core.bonus,skin:core.skin};game.orbs.push(o);toast(`${core.from.toUpperCase()} SENT A TIER ${core.tier} CORE`);audio.sfx('volley');haptic([18,20,18]);}
+function spawnBoss(omega=false){const w=worlds[game.world%worlds.length], scale=(omega?1.2:1)*(isMobile?.82:1);game.boss={name:(omega?'OMEGA ':'')+w.boss,x:W/2,y:Math.max(isMobile?125:140,H*.22),r:90*scale,hp:(80+game.wave*16)*(omega?1.5:1),maxHp:(80+game.wave*16)*(omega?1.5:1),phase:1,t:0,weak:[],omega};for(let i=0;i<3+(omega?2:0);i++)game.boss.weak.push({a:i/(3+(omega?2:0))*Math.PI*2,hp:2,alive:true});$('bossHud').classList.remove('hidden');cinematic(`${game.boss.name}\nAWAKENS`);audio.sfx('boss');haptic([35,30,35]);}
+function cinematic(text){toast(text);game.slow=.6;game.flash=.38;game.shake=save.comfort?2:13;for(let i=0;i<5;i++)setTimeout(()=>ring(W/2,H*.3,worlds[game.world].accent,40+i*20),i*90);}
