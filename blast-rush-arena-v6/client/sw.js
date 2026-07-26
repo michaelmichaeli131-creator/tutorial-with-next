@@ -1,11 +1,10 @@
-const CACHE = 'blast-rush-arena-v6-titan-volley';
+const CACHE = 'blast-rush-arena-v7-rival-core';
 const ASSETS = [
-  '/', '/index.html', '/styles.css',
-  '/styles/01.css', '/styles/02.css', '/styles/03.css', '/styles/04.css', '/styles/05.css', '/styles/06.css',
+  '/', '/index.html', '/styles.css', '/v7-overrides.css',
   '/net.js', '/game.js', '/manifest.webmanifest', '/icons/icon-192.svg', '/icons/icon-512.svg'
 ];
-self.addEventListener('install', (event) => event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS))));
-self.addEventListener('activate', (event) => event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))));
+self.addEventListener('install', (event) => event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting())));
+self.addEventListener('activate', (event) => event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key)))).then(() => self.clients.claim())));
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (event.request.method !== 'GET' || url.pathname.startsWith('/api/') || url.pathname === '/ws') return;
