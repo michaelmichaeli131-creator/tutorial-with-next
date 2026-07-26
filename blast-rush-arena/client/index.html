@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#071027" />
+  <meta name="description" content="Blast Rush Arena — cinematic solo runs, live 1v1 duels and shareable friend challenges." />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/icons/icon-192.svg" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.svg" />
+  <link rel="stylesheet" href="/styles.css" />
+  <title>Blast Rush Arena</title>
+</head>
+<body>
+  <div id="app" data-stage="nebula">
+    <canvas id="gameCanvas" aria-label="Blast Rush Arena game field"></canvas>
+    <div class="cinema-bars" aria-hidden="true"></div>
+
+    <div id="hud" class="hidden">
+      <div class="hud-block glass top-left">
+        <button id="pauseButton" class="icon-button" aria-label="Pause">Ⅱ</button>
+        <div><span class="eyebrow">WAVE</span><strong id="waveText">1</strong></div>
+        <div><span class="eyebrow">STAGE</span><strong id="stageText" class="stage-name">NEBULA FORGE</strong></div>
+      </div>
+
+      <div class="top-center glass score-box">
+        <span class="eyebrow" id="scoreLabel">SCORE</span>
+        <strong id="scoreText">0</strong>
+        <small id="bestScoreLine">BEST <span id="bestScoreText">0</span></small>
+      </div>
+
+      <div class="hud-block glass top-right">
+        <div id="livesText" class="lives">❤ ❤ ❤</div>
+        <div class="currency">◆ <span id="shardsHud">0</span></div>
+        <div id="networkPill" class="network-pill offline">OFFLINE</div>
+      </div>
+
+      <div id="objectivePanel" class="objective-panel glass">
+        <span class="eyebrow">WAVE DIRECTIVE</span>
+        <strong id="objectiveTitle">PURGE</strong>
+        <p id="objectiveText">Destroy all unstable cores.</p>
+        <div class="objective-progress"><i id="objectiveBar"></i></div>
+        <small id="objectiveProgressText">0 / 12</small>
+      </div>
+
+      <div class="combo-panel glass">
+        <span class="eyebrow">COMBO</span>
+        <strong>x<span id="comboText">0</span></strong>
+        <em id="comboRank">READY</em>
+        <div class="mini-progress"><i id="comboTimerBar"></i></div>
+      </div>
+
+      <div class="overdrive-panel">
+        <span>OVERDRIVE</span>
+        <div class="vertical-meter"><i id="overdriveBar"></i></div>
+        <strong id="overdriveText">0%</strong>
+        <small>SPACE</small>
+      </div>
+
+      <button id="blastButton" class="blast-button" aria-label="Activate reactor blast">
+        <span>BLAST</span><strong id="blastText">0%</strong><small>B</small>
+      </button>
+
+      <button id="pressureButton" class="pressure-button hidden" aria-label="Send pressure attack">
+        <span>PRESSURE</span><strong id="pressureText">0%</strong><small>Q</small>
+      </button>
+
+      <div id="duelPanel" class="duel-panel glass hidden">
+        <div class="duel-title"><span>ARENA DUEL</span><strong id="duelTimer">1:40</strong></div>
+        <div class="duel-versus">
+          <div class="duelist me"><span id="duelMeName">YOU</span><strong id="duelMeScore">0</strong><i id="duelMeBar"></i></div>
+          <b>VS</b>
+          <div class="duelist opponent"><span id="duelOpponentName">RIVAL</span><strong id="duelOpponentScore">0</strong><i id="duelOpponentBar"></i></div>
+        </div>
+      </div>
+
+      <div id="challengeTarget" class="challenge-target glass hidden">
+        <span class="eyebrow">FRIEND TARGET</span>
+        <strong id="challengeTargetName">PILOT</strong>
+        <b id="challengeTargetScore">0</b>
+        <small id="challengeDelta">0 TO BEAT</small>
+      </div>
+
+      <div id="bossBarWrap" class="boss-bar-wrap hidden">
+        <span id="bossName">☠ SINGULARITY WARDEN</span>
+        <div class="boss-bar"><i id="bossBar"></i></div>
+        <small id="bossPhase">PHASE I</small>
+      </div>
+
+      <div id="hazardBanner" class="hazard-banner hidden"><span id="hazardTitle">GRAVITY SURGE</span><small id="hazardSource">INCOMING</small></div>
+      <div class="controls-hint glass">CLICK CORES • SPACE OVERDRIVE • B BLAST • Q PRESSURE • P PAUSE • F FULLSCREEN</div>
+    </div>
+
+    <section id="menuScreen" class="screen active">
+      <div class="menu-shell">
+        <div class="brand-orbit" aria-hidden="true"><i></i><b></b><em></em></div>
+        <div class="logo-wrap"><h1>BLAST<br><span>RUSH</span></h1><p>ARENA • ASCENSION V5</p></div>
+        <div class="profile-bar glass">
+          <label class="pilot-name"><span>PILOT</span><input id="playerNameInput" maxlength="18" autocomplete="nickname" /></label>
+          <div><span>LEVEL</span><strong id="menuLevel">1</strong></div>
+          <div><span>HIGH SCORE</span><strong id="menuHighScore">0</strong></div>
+          <div><span>BEST WAVE</span><strong id="menuBestWave">0</strong></div>
+          <div><span>SHARDS</span><strong>◆ <b id="menuShards">0</b></strong></div>
+        </div>
+
+        <div class="mode-grid">
+          <button id="soloButton" class="mode-card solo-card">
+            <span class="mode-icon">✹</span><div><small>ROGUELITE RUN</small><strong>SOLO ASCENSION</strong><p>Objectives, stage mutations, bosses and permanent progression.</p></div><b>PLAY</b>
+          </button>
+          <button id="quickDuelButton" class="mode-card duel-card">
+            <span class="mode-icon">⚔</span><div><small>LIVE 1V1</small><strong>QUICK DUEL</strong><p>Same seed, 100 seconds, pressure attacks and instant rematch.</p></div><b>FIND RIVAL</b>
+          </button>
+          <button id="friendDuelButton" class="mode-card friend-card">
+            <span class="mode-icon">∞</span><div><small>VIRAL CHALLENGE</small><strong>CHALLENGE A FRIEND</strong><p>Create a room link for a live duel or share your score after a run.</p></div><b>CREATE ROOM</b>
+          </button>
+          <button id="joinButton" class="mode-card join-card">
+            <span class="mode-icon">⌁</span><div><small>ROOM CODE</small><strong>JOIN A FRIEND</strong><p>Paste an invite code or open a shared link.</p></div><b>JOIN</b>
+          </button>
+        </div>
+
+        <div class="menu-footer">
+          <div class="daily-card glass"><div><span class="eyebrow">DAILY MISSION</span><strong id="dailyMissionText">Destroy 45 cores</strong></div><div class="daily-reward">+<span id="dailyRewardText">120</span> ◆</div></div>
+          <div class="footer-actions"><button id="leaderboardButton" class="secondary-button">🏆 LEADERBOARD</button><button id="tutorialButton" class="secondary-button">? TRAINING</button><button id="settingsButton" class="secondary-button">⚙ SETTINGS</button></div>
+        </div>
+        <p class="desktop-note">Solo works locally. Live rooms and share links work when the Deno server is reachable by both players.</p>
+      </div>
+    </section>
+
+    <section id="lobbyScreen" class="screen modal-screen">
+      <div class="lobby-modal glass">
+        <span class="eyebrow">PRIVATE ARENA</span>
+        <h2 id="lobbyTitle">INVITE YOUR RIVAL</h2>
+        <p id="lobbyStatus">Creating a secure room…</p>
+        <div class="room-code" id="roomCode">-----</div>
+        <div class="lobby-players"><div class="pilot-slot ready"><span>YOU</span><strong id="lobbyMe">Pilot</strong></div><b>VS</b><div class="pilot-slot" id="opponentSlot"><span>RIVAL</span><strong id="lobbyOpponent">WAITING…</strong></div></div>
+        <div id="countdownRing" class="countdown-ring hidden"><strong id="countdownText">3</strong><span>SYNCING SEED</span></div>
+        <button id="shareRoomButton" class="primary-button">SHARE INVITE LINK</button>
+        <button id="copyRoomButton" class="secondary-button">COPY ROOM CODE</button>
+        <button id="leaveLobbyButton" class="ghost-button">CANCEL</button>
+      </div>
+    </section>
+
+    <section id="joinScreen" class="screen modal-screen">
+      <div class="modal glass">
+        <button class="close-button" data-close="joinScreen">×</button>
+        <span class="eyebrow">ENTER THE ARENA</span><h2>JOIN FRIEND</h2>
+        <input id="joinCodeInput" class="code-input" maxlength="8" placeholder="ROOM CODE" autocomplete="off" />
+        <button id="joinCodeButton" class="primary-button">JOIN DUEL</button>
+        <p>Invite codes exclude confusing characters such as O, 0, I and 1.</p>
+      </div>
+    </section>
+
+    <section id="challengeIntroScreen" class="screen modal-screen">
+      <div class="challenge-modal glass">
+        <span class="eyebrow">FRIEND CHALLENGE</span><h2 id="challengeIntroTitle">BEAT THE PILOT</h2>
+        <div class="challenge-score"><small>TARGET SCORE</small><strong id="challengeIntroScore">0</strong></div>
+        <div class="challenge-stats"><span>WAVE <b id="challengeIntroWave">1</b></span><span>PERFECT <b id="challengeIntroPerfect">0</b></span><span>COMBO <b id="challengeIntroCombo">0</b></span></div>
+        <p id="challengeIntroText">Play the same seeded run and prove you can go further.</p>
+        <button id="acceptChallengeButton" class="primary-button">ACCEPT CHALLENGE</button>
+        <button id="challengeHomeButton" class="ghost-button">DECLINE</button>
+      </div>
+    </section>
+
+    <section id="pauseScreen" class="screen modal-screen">
+      <div class="modal glass"><span class="eyebrow">SYSTEM HOLD</span><h2>PAUSED</h2><button id="resumeButton" class="primary-button">RESUME</button><button id="restartButton" class="secondary-button">RESTART RUN</button><button id="pauseSettingsButton" class="secondary-button">SETTINGS</button><button id="homeButton" class="ghost-button">HOME</button></div>
+    </section>
+
+    <section id="augmentScreen" class="screen modal-screen">
+      <div class="augment-modal glass"><span class="eyebrow">ASCENSION PROTOCOL</span><h2>SELECT AN AUGMENT</h2><p>Build a different strategy every run.</p><div id="augmentCards" class="augment-cards"></div></div>
+    </section>
+
+    <section id="gameOverScreen" class="screen modal-screen">
+      <div class="result-modal glass">
+        <span class="eyebrow" id="resultEyebrow">REACTOR OFFLINE</span><h2 id="resultTitle">RUN COMPLETE</h2>
+        <div id="newHighScore" class="new-record hidden">NEW HIGH SCORE!</div><strong id="finalScore" class="final-score">0</strong>
+        <div class="results-grid"><div><span>WAVE</span><strong id="finalWave">1</strong></div><div><span>DESTROYED</span><strong id="finalDestroyed">0</strong></div><div><span>PERFECT</span><strong id="finalPerfect">0</strong></div><div><span>MAX COMBO</span><strong id="finalCombo">0</strong></div><div><span>XP EARNED</span><strong id="finalXp">0</strong></div><div><span>SHARDS</span><strong id="finalShards">0</strong></div></div>
+        <div id="versusResult" class="versus-result hidden"></div><div id="missionResult" class="mission-result"></div>
+        <button id="shareChallengeButton" class="viral-button">⚡ CHALLENGE A FRIEND TO BEAT THIS</button>
+        <button id="rematchButton" class="primary-button hidden">↻ REMATCH</button><button id="retryButton" class="primary-button">↻ PLAY AGAIN</button><button id="gameOverHomeButton" class="secondary-button">HOME</button>
+      </div>
+    </section>
+
+    <section id="leaderboardScreen" class="screen modal-screen">
+      <div class="wide-modal glass"><button class="close-button" data-close="leaderboardScreen">×</button><span class="eyebrow">GLOBAL SIGNAL</span><h2>LEADERBOARD</h2><div id="leaderboardList" class="leaderboard-list"><p>Loading…</p></div></div>
+    </section>
+
+    <section id="tutorialScreen" class="screen modal-screen">
+      <div class="wide-modal glass"><button class="close-button" data-close="tutorialScreen">×</button><span class="eyebrow">COMBAT TRAINING</span><h2>MASTER THE ARENA</h2><div class="tutorial-grid">
+        <article><div class="tutorial-orb"></div><h3>PRECISION</h3><p>Hit the luminous center. PERFECT hits multiply score, charge abilities and fuel pressure attacks.</p></article>
+        <article><div class="tutorial-explosion">✹</div><h3>CHAIN REACTIONS</h3><p>Bomb cores trigger spectacular chains. Read the field before clicking instead of tapping randomly.</p></article>
+        <article><div class="tutorial-meter">ϟ</div><h3>BUILD A RUN</h3><p>Complete wave directives and select augments. Each stage changes enemy behavior and visual atmosphere.</p></article>
+        <article><div class="tutorial-key">Q</div><h3>DUEL PRESSURE</h3><p>In 1v1, fill Pressure and press Q to send a temporary hazard to your rival.</p></article>
+      </div><button id="tutorialPlayButton" class="primary-button">START SOLO TRAINING</button></div>
+    </section>
+
+    <section id="settingsScreen" class="screen modal-screen">
+      <div class="modal glass"><button class="close-button" data-close="settingsScreen">×</button><span class="eyebrow">PREFERENCES</span><h2>SETTINGS</h2>
+        <label class="setting-row"><span>SOUND EFFECTS</span><input id="soundToggle" type="checkbox" checked /></label><label class="setting-row"><span>ADAPTIVE MUSIC</span><input id="musicToggle" type="checkbox" checked /></label><label class="setting-row"><span>COMFORT FX</span><input id="comfortToggle" type="checkbox" /></label><label class="setting-row"><span>SCREEN SHAKE</span><input id="shakeToggle" type="checkbox" checked /></label>
+        <button id="fullscreenButton" class="secondary-button">TOGGLE FULLSCREEN (F)</button><p>Comfort FX reduces flashes, particles and camera shake.</p>
+      </div>
+    </section>
+
+    <div id="stageBanner" class="stage-banner hidden"><small>ENTERING</small><strong id="stageBannerTitle">NEBULA FORGE</strong><p id="stageBannerQuote">Every star is a furnace waiting to awaken.</p></div>
+    <div id="toast" class="toast"></div>
+  </div>
+  <script src="/net.js"></script>
+  <script src="/game.js"></script>
+  <script>if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('/sw.js').catch(() => {});</script>
+</body>
+</html>
