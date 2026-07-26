@@ -1,0 +1,6 @@
+data/
+.DS_Store
+Thumbs.db
+*.log
+
+client/game.js

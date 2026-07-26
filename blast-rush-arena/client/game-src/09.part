@@ -1,0 +1,29 @@
+  async function shareScoreChallenge(){if(!game.lastResult)return;try{const payload=await BlastNetwork.createChallenge(game.lastResult);const code=payload.challenge.code;const url=new URL(location.href);url.search='';url.searchParams.set('challenge',code);await sharePayload({title:'Beat my Blast Rush score',text:`I scored ${format(game.lastResult.score)} in Blast Rush Arena. Can you beat me?`,url:url.href});toast('CHALLENGE LINK READY')}catch(e){toast(`SERVER REQUIRED • ${e.message}`)}}
+  async function sharePayload(data){if(navigator.share){try{await navigator.share(data);return}catch(e){if(e.name==='AbortError')return}}await copyText(`${data.text}\n${data.url}`);toast('INVITE LINK COPIED')}
+  async function copyText(text){try{await navigator.clipboard.writeText(text)}catch{const area=document.createElement('textarea');area.value=text;document.body.appendChild(area);area.select();document.execCommand('copy');area.remove()}}
+
+  async function handleInviteUrl(){const params=new URLSearchParams(location.search);const room=params.get('room');const challenge=params.get('challenge');if(room){$('joinCodeInput').value=room;showOverlay('joinScreen');return}if(challenge){try{const data=await BlastNetwork.getChallenge(challenge);game.challenge=data.challenge;$('challengeIntroTitle').textContent=`BEAT ${game.challenge.creatorName.toUpperCase()}`;$('challengeIntroScore').textContent=format(game.challenge.score);$('challengeIntroWave').textContent=game.challenge.wave;$('challengeIntroPerfect').textContent=game.challenge.perfects;$('challengeIntroCombo').textContent=`x${game.challenge.maxCombo}`;showScreen('challengeIntroScreen')}catch(e){toast(e.message)}}}
+  async function submitChallengeResult(){try{const payload=await BlastNetwork.submitChallenge(game.challenge.code,game.lastResult);const r=payload.result;$('versusResult').classList.remove('hidden');$('versusResult').textContent=r.beatCreator?`VICTORY • You beat ${game.challenge.creatorName} by ${format(game.score-r.creatorScore)} points.`:`${format(r.creatorScore-game.score)} points short • Rank ${r.rank}/${r.attempts}.`; }catch(e){toast(e.message)}}
+
+  async function showLeaderboard(){showOverlay('leaderboardScreen');$('leaderboardList').innerHTML='<p>Receiving global signal…</p>';try{const data=await BlastNetwork.leaderboard();$('leaderboardList').innerHTML=(data.entries||[]).map((e,i)=>`<div class="leaderboard-row"><b>#${i+1}</b><span>${escapeHtml(e.name)}</span><strong>${format(e.score)}</strong><small>W${e.wave}</small></div>`).join('')||'<p>No scores yet. Be the first.</p>'}catch(e){$('leaderboardList').innerHTML=`<p>${escapeHtml(e.message)}</p>`}}
+  function escapeHtml(value){return String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+
+  function rand(){game.rngState=(game.rngState+0x6D2B79F5)|0;let t=game.rngState;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296}
+  function cryptoSeed(){return crypto.getRandomValues(new Uint32Array(1))[0]||1}
+
+  function xpForLevel(level) { return 350 + level * 140; }
+  function format(n) { return Math.max(0, Math.floor(n)).toLocaleString('en-US'); }
+  function distance(x1, y1, x2, y2) { return Math.hypot(x2 - x1, y2 - y1); }
+  function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+  function roundRect(c, x, y, w, h, r) { c.beginPath(); c.roundRect ? c.roundRect(x, y, w, h, r) : c.rect(x, y, w, h); }
+
+  function hexToRgb(hex) {
+    const h = hex.replace('#', ''); const n = parseInt(h.length === 3 ? h.split('').map(x => x + x).join('') : h, 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  function rgbToHex(r, g, b) { return `#${[r, g, b].map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('')}`; }
+  function darken(hex, amount) { const [r,g,b] = hexToRgb(hex); return rgbToHex(r * (1 - amount), g * (1 - amount), b * (1 - amount)); }
+  function lighten(hex, amount) { const [r,g,b] = hexToRgb(hex); return rgbToHex(r + (255-r)*amount, g + (255-g)*amount, b + (255-b)*amount); }
+
+  init();
+})();

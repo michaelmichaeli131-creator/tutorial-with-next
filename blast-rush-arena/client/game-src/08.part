@@ -1,0 +1,61 @@
+    $('lobbyTitle').textContent='INVITE YOUR RIVAL'; $('lobbyStatus').textContent=players.length>1?'Rival connected. Preparing identical combat seed…':'Share the link. The duel begins when your friend joins.'; $('roomCode').textContent=code;
+    const me=players.find(p=>p.id===BlastNetwork.playerId);const rival=players.find(p=>p.id!==BlastNetwork.playerId);$('lobbyMe').textContent=me?.name||BlastNetwork.playerName;$('lobbyOpponent').textContent=rival?.name||'WAITING…';$('opponentSlot').classList.toggle('ready',!!rival);showScreen('lobbyScreen');
+  }
+
+  function beginCountdown(data) {
+    openLobby(data.code,data.players); game.pendingDuelPlayers=data.players; const rival=data.players.find(p=>p.id!==BlastNetwork.playerId); $('lobbyOpponent').textContent=rival?.name||'RIVAL';
+    $('countdownRing').classList.remove('hidden'); let n=Math.max(1,Math.ceil((data.startsAt-Date.now())/1000)); $('countdownText').textContent=n;
+    clearInterval(game.countdownTimer);game.countdownTimer=setInterval(()=>{n=Math.max(0,Math.ceil((data.startsAt-Date.now())/1000));$('countdownText').textContent=n||'GO';if(Date.now()>=data.startsAt)launchDuel(data.seed,data.startsAt+data.durationMs,data.players)},100);
+  }
+
+  function launchDuel(seed, endsAt, players) {
+    clearInterval(game.countdownTimer); $('countdownRing').classList.add('hidden');
+    if (game.mode === 'playing' && game.runMode === 'duel' && game.seed === Number(seed)) {
+      game.duel = { ...(game.duel || {}), endsAt, players: players?.length ? players : (game.duel?.players || []) }; return;
+    }
+    startGame({mode:'duel',seed,duel:{endsAt,players:players||[]}});
+  }
+
+  function syncDuelState(state) {
+    if(game.runMode!=='duel')return; game.duel={...(game.duel||{}),endsAt:state.endsAt,players:state.players};
+    const me=state.players.find(p=>p.id===BlastNetwork.playerId); if(me) { game.pressure=me.pressure; game.score=me.score; }
+  }
+
+  function updateDuelUi() {
+    if(game.runMode!=='duel'||!game.duel)return;const players=game.duel.players||[];const me=players.find(p=>p.id===BlastNetwork.playerId)||{name:BlastNetwork.playerName,score:game.score,pressure:game.pressure};const op=players.find(p=>p.id!==BlastNetwork.playerId)||{name:'RIVAL',score:0};
+    ui.duelMeName.textContent=me.name;ui.duelOpponentName.textContent=op.name;ui.duelMeScore.textContent=format(me.score??game.score);ui.duelOpponentScore.textContent=format(op.score||0);const max=Math.max(1,me.score||game.score,op.score||0);ui.duelMeBar.style.width=`${(me.score||game.score)/max*100}%`;ui.duelOpponentBar.style.width=`${(op.score||0)/max*100}%`;
+    const left=Math.max(0,(game.duel.endsAt-Date.now())/1000);ui.duelTimer.textContent=`${Math.floor(left/60)}:${String(Math.floor(left%60)).padStart(2,'0')}`;
+  }
+
+  function finishDuel(data) {
+    if(game.runMode!=='duel')return;const me=data.standings.find(p=>p.id===BlastNetwork.playerId);const op=data.standings.find(p=>p.id!==BlastNetwork.playerId);game.score=me?.score??game.score;
+    const draw=!data.winnerId;const won=data.winnerId===BlastNetwork.playerId;endGame({title:draw?'DRAW':won?'VICTORY':'DEFEAT',versusText:`${me?.name||'YOU'} ${format(me?.score||0)} — ${format(op?.score||0)} ${op?.name||'RIVAL'}`,detail:won?'Pressure, precision and timing secured the arena.':draw?'Perfectly matched signals. Rematch recommended.':'Study the rival score curve and strike back.'});
+  }
+
+  function activatePressure() { if(game.runMode!=='duel'||game.pressure<100||game.mode!=='playing')return;BlastNetwork.pressure();game.pressure=0;sound('overdrive');screenFlash(.35); }
+  function applyHazard(type,durationMs,from) { game.hazard={type,time:durationMs/1000};document.body.classList.add(type);$('hazardTitle').textContent=type==='gravity'?'GRAVITY SURGE':type==='emp'?'EMP VEIL':type==='fracture'?'TIME FRACTURE':'VOID SWARM';$('hazardSource').textContent=`SENT BY ${from}`;ui.hazardBanner.classList.remove('hidden');setTimeout(()=>ui.hazardBanner.classList.add('hidden'),1500);toast('RIVAL PRESSURE ATTACK'); }
+  function updateHazard(dt){if(!game.hazard)return;game.hazard.time-=dt;if(game.hazard.time<=0)clearHazard()}
+  function clearHazard(){if(game.hazard)document.body.classList.remove(game.hazard.type);game.hazard=null;document.body.classList.remove('gravity','emp','fracture','swarm')}
+
+  function reportScore(delta,event){if(game.runMode==='duel')BlastNetwork.score(delta,event,game.combo,game.wave)}
+
+  function configureWave(initial=false) {
+    const old=game.stageIndex;game.stageIndex=Math.floor((game.wave-1)/3)%STAGES.length;document.querySelector('#app').dataset.stage=STAGES[game.stageIndex].key;
+    const objective=OBJECTIVES[(game.wave+Math.floor(rand()*OBJECTIVES.length))%OBJECTIVES.length];game.objective={...objective,target:objective.key==='perfect'?3+Math.floor(game.wave*.55):objective.key==='chain'?4+game.wave:objective.key==='combo'?8+game.wave*2:objective.key==='survive'?1:game.waveTarget};
+    game.objectiveStart={perfects:game.perfects,chains:game.chains,maxCombo:game.maxCombo,lives:game.lives,destroyed:game.destroyed};game.objectiveComplete=false;game.mutator=MUTATORS[Math.floor(rand()*MUTATORS.length)];
+    if(!initial&&old!==game.stageIndex)initSpace();updateObjectiveUi();
+  }
+
+  function objectiveValue(){const o=game.objective;if(!o)return 0;if(o.key==='perfect')return game.perfects-game.objectiveStart.perfects;if(o.key==='chain')return game.chains-game.objectiveStart.chains;if(o.key==='combo')return game.combo;if(o.key==='survive')return game.killsThisWave>=game.waveTarget&&game.lives>=game.objectiveStart.lives?1:0;return game.killsThisWave}
+  function updateObjective(){if(!game.objective||game.objectiveComplete)return;if(objectiveValue()>=game.objective.target){game.objectiveComplete=true;toast('DIRECTIVE COMPLETE');sound('augment');reportScore(5000+game.wave*500,'objective')}}
+  function awardObjective(){if(!game.objectiveComplete)return;const bonus=5000+game.wave*500;game.score+=bonus;game.runShards+=3+game.wave;floatingText(game.width/2,game.height*.38,`DIRECTIVE +${format(bonus)}`,STAGES[game.stageIndex].colors[0],26)}
+  function updateObjectiveUi(){if(!game.objective)return;const value=Math.min(game.objective.target,objectiveValue());ui.objectiveTitle.textContent=game.objectiveComplete?`${game.objective.title} ✓`:game.objective.title;ui.objectiveText.textContent=`${game.objective.text} • ${game.mutator?.title||''}`;ui.objectiveBar.style.width=`${value/game.objective.target*100}%`;ui.objectiveProgress.textContent=`${value} / ${game.objective.target}`}
+
+  function showStageBanner(){const stage=STAGES[game.stageIndex];$('stageBannerTitle').textContent=stage.name;$('stageBannerQuote').textContent=stage.quote;$('stageBanner').classList.remove('hidden');setTimeout(()=>$('stageBanner').classList.add('hidden'),2300)}
+  function drawCrystalRifts(a,c){ctx.save();ctx.globalAlpha=.13;ctx.strokeStyle=a;for(let i=0;i<7;i++){const x=(i+1)*game.width/8;ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x-50+Math.sin(game.time+i)*35,game.height*.68);ctx.lineTo(x+20,game.height);ctx.stroke()}ctx.restore()}
+  function drawSolarFlares(a,c){ctx.save();ctx.globalAlpha=.12;ctx.strokeStyle=c;ctx.lineWidth=3;for(let i=0;i<5;i++){ctx.beginPath();ctx.arc(game.width*.5,game.height*.9,game.width*(.2+i*.1)+Math.sin(game.time+i)*20,Math.PI*1.05,Math.PI*1.95);ctx.stroke()}ctx.restore()}
+  function drawVoidArches(a,b){ctx.save();ctx.globalAlpha=.1;ctx.strokeStyle=b;ctx.lineWidth=5;for(let i=0;i<4;i++){ctx.beginPath();ctx.ellipse(game.width*(.2+i*.2),game.height*.48,90+i*15,game.height*.42,0,0,Math.PI*2);ctx.stroke()}ctx.restore()}
+
+  async function shareRoom(){const code=$('roomCode').textContent;const url=new URL(location.href);url.search='';url.searchParams.set('room',code);await sharePayload({title:'Blast Rush Arena Duel',text:`I challenge you to a live Blast Rush duel. Room ${code}`,url:url.href});}
+  async function copyRoomCode(){await copyText($('roomCode').textContent);toast('ROOM CODE COPIED')}
+  function leaveLobby(){BlastNetwork.leave();goHome()}

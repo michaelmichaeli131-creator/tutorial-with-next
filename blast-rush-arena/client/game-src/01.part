@@ -1,0 +1,151 @@
+(() => {
+  'use strict';
+
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d', { alpha: false });
+  const $ = (id) => document.getElementById(id);
+
+  const ui = {
+    hud: $('hud'), menu: $('menuScreen'), pause: $('pauseScreen'), augment: $('augmentScreen'),
+    gameOver: $('gameOverScreen'), tutorial: $('tutorialScreen'), settings: $('settingsScreen'),
+    wave: $('waveText'), stage: $('stageText'), score: $('scoreText'), best: $('bestScoreText'), lives: $('livesText'),
+    combo: $('comboText'), comboRank: $('comboRank'), comboBar: $('comboTimerBar'),
+    overdriveBar: $('overdriveBar'), overdriveText: $('overdriveText'), blastText: $('blastText'),
+    blastButton: $('blastButton'), pressureButton: $('pressureButton'), pressureText: $('pressureText'),
+    bossWrap: $('bossBarWrap'), bossBar: $('bossBar'), bossName: $('bossName'), bossPhase: $('bossPhase'),
+    shardsHud: $('shardsHud'), toast: $('toast'), augmentCards: $('augmentCards'),
+    objectiveTitle: $('objectiveTitle'), objectiveText: $('objectiveText'), objectiveBar: $('objectiveBar'), objectiveProgress: $('objectiveProgressText'),
+    duelPanel: $('duelPanel'), duelTimer: $('duelTimer'), duelMeName: $('duelMeName'), duelMeScore: $('duelMeScore'),
+    duelOpponentName: $('duelOpponentName'), duelOpponentScore: $('duelOpponentScore'), duelMeBar: $('duelMeBar'), duelOpponentBar: $('duelOpponentBar'),
+    challengeTarget: $('challengeTarget'), hazardBanner: $('hazardBanner'), networkPill: $('networkPill')
+  };
+
+  const STORAGE_KEY = 'blastRushArenaV5';
+  const defaultSave = {
+    highScore: 0, bestWave: 0, runs: 0, xp: 0, level: 1, shards: 0,
+    dailyDate: '', dailyClaimed: false,
+    settings: { sound: true, music: true, comfort: false, shake: true }
+  };
+
+  const save = loadSave();
+  const mission = dailyMission();
+
+  const game = {
+    mode: 'menu', runMode: 'solo', time: 0, lastTime: 0, dt: 0,
+    width: innerWidth, height: innerHeight, dpr: 1,
+    score: 0, lives: 3, wave: 1, killsThisWave: 0, waveTarget: 12,
+    combo: 0, maxCombo: 0, comboTimer: 0, comboDuration: 2.3,
+    overdrive: 0, overdriveActive: false, overdriveTime: 0, overdriveDuration: 8,
+    blast: 0, pressure: 0, shield: 0, destroyed: 0, perfects: 0, chains: 0,
+    runShards: 0, runXp: 0, missionProgress: 0, missionComplete: false,
+    spawnTimer: 0, nextSpawn: 0.9, boss: null, waveTransition: false,
+    shake: 0, flash: 0, slowMo: 1, pointer: { x: 0, y: 0, down: false },
+    orbs: [], particles: [], shockwaves: [], floatingTexts: [], stars: [], nebulae: [],
+    augments: { chain: 0, perfect: 0, overdrive: 0, blast: 0, score: 0, shield: 0 },
+    seed: 1, rngState: 1, stageIndex: 0, objective: null, objectiveStart: {}, objectiveComplete: false,
+    mutator: null, hazard: null, duel: null, challenge: null, serverSeq: 0, lastResult: null
+  };
+
+  const ORB_TYPES = {
+    normal:   { color: '#ff304d', core: '#fff5e6', hp: 1, radius: 31, score: 100, speed: 1.00 },
+    armored:  { color: '#8b49ff', core: '#f5dcff', hp: 2, radius: 36, score: 240, speed: 0.76 },
+    bomb:     { color: '#ff711c', core: '#fff04d', hp: 1, radius: 33, score: 180, speed: 0.88 },
+    heal:     { color: '#25e65b', core: '#eaffea', hp: 1, radius: 30, score: 80,  speed: 0.92 },
+    bonus:    { color: '#1b9dff', core: '#e8fbff', hp: 1, radius: 28, score: 330, speed: 1.22 },
+    elite:    { color: '#ee39ff', core: '#ffffff', hp: 3, radius: 40, score: 420, speed: 0.67 }
+  };
+
+  const AUGMENTS = [
+    { key: 'chain', icon: '⌬', title: 'BIGGER CHAIN', desc: 'Chain reaction range +25%.', color: '#42ff70' },
+    { key: 'perfect', icon: '◎', title: 'PERFECT WINDOW+', desc: 'Center-hit window becomes 35% wider.', color: '#43c6ff' },
+    { key: 'overdrive', icon: 'ϟ', title: 'LONGER OVERDRIVE', desc: 'Overdrive duration +35%.', color: '#ff7a24' },
+    { key: 'blast', icon: '✹', title: 'FAST CHARGE', desc: 'BLAST charges 30% faster.', color: '#ffdb35' },
+    { key: 'score', icon: '◆', title: 'SCORE MULTIPLIER', desc: 'All score gains +25%.', color: '#a866ff' },
+    { key: 'shield', icon: '⬡', title: 'PHASE SHIELD', desc: 'Gain one shield that absorbs a reactor hit.', color: '#4b9eff' }
+  ];
+
+
+
+  const STAGES = [
+    { key:'nebula', name:'NEBULA FORGE', quote:'Every star is a furnace waiting to awaken.', colors:['#42d9ff','#8b43ff','#ff4ca7'], speed:1, armored:0, boss:'SINGULARITY WARDEN' },
+    { key:'crystal', name:'CRYSTAL RIFT', quote:'Precision turns chaos into a constellation.', colors:['#62efff','#6757ff','#ef66ff'], speed:1.08, armored:.06, boss:'PRISM HYDRA' },
+    { key:'solar', name:'SOLAR TEMPLE', quote:'Stand where light becomes a weapon.', colors:['#ffe067','#ff7828','#ff315f'], speed:1.16, armored:.1, boss:'SOLAR COLOSSUS' },
+    { key:'void', name:'VOID CATHEDRAL', quote:'The silence between stars is watching.', colors:['#d7c6ff','#873cff','#24c7ff'], speed:1.25, armored:.14, boss:'VOID SERAPH' }
+  ];
+
+  const MUTATORS = [
+    { key:'velocity', title:'VELOCITY STORM', text:'Cores move 28% faster.', speed:1.28 },
+    { key:'armor', title:'ARMORED CONSTELLATION', text:'More armored and elite cores.', armored:.18 },
+    { key:'bombs', title:'CHAIN REACTOR', text:'Bomb cores dominate this wave.', bombs:.24 },
+    { key:'precision', title:'ZERO MARGIN', text:'PERFECT window is narrower, rewards are higher.', perfect:.72 },
+    { key:'abundance', title:'SHARD RAIN', text:'Bonus cores appear more often.', bonus:.16 }
+  ];
+
+  const OBJECTIVES = [
+    { key:'purge', title:'PURGE', text:'Destroy the required number of cores.' },
+    { key:'perfect', title:'PRECISION TRIAL', text:'Land PERFECT hits before the wave ends.' },
+    { key:'chain', title:'DOMINO PROTOCOL', text:'Destroy cores through chain reactions.' },
+    { key:'combo', title:'UNBROKEN SIGNAL', text:'Build a high combo without missing.' },
+    { key:'survive', title:'REACTOR OATH', text:'Finish the wave without reactor damage.' }
+  ];
+
+  let audio = null;
+  let musicTimer = null;
+  let musicStep = 0;
+  let toastTimer = null;
+
+  function loadSave() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || localStorage.getItem('blastRushDesktopV1') || 'null');
+      const merged = { ...defaultSave, ...(parsed || {}), settings: { ...defaultSave.settings, ...((parsed || {}).settings || {}) } };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+      return merged;
+    } catch (_) { return structuredClone(defaultSave); }
+  }
+
+  function persist() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(save));
+  }
+
+  function dailyMission() {
+    const date = new Date().toISOString().slice(0, 10);
+    if (save.dailyDate !== date) {
+      save.dailyDate = date;
+      save.dailyClaimed = false;
+      persist();
+    }
+    const seed = [...date].reduce((a, c) => a + c.charCodeAt(0), 0) % 3;
+    return [
+      { type: 'destroy', target: 45, reward: 120, text: 'Destroy 45 cores' },
+      { type: 'perfect', target: 14, reward: 150, text: 'Land 14 PERFECT hits' },
+      { type: 'wave', target: 7, reward: 180, text: 'Reach wave 7' }
+    ][seed];
+  }
+
+  function init() {
+    bindUi();
+    bindNetwork();
+    resize();
+    initSpace();
+    updateMenu();
+    updateSettingsUi();
+    showScreen('menuScreen');
+    handleInviteUrl();
+    BlastNetwork.connect().catch(() => {});
+    requestAnimationFrame(loop);
+  }
+
+  function bindUi() {
+    $('soloButton').addEventListener('click', () => startGame({ mode: 'solo' }));
+    $('tutorialPlayButton').addEventListener('click', () => startGame({ mode: 'solo' }));
+    $('quickDuelButton').addEventListener('click', startQuickDuel);
+    $('friendDuelButton').addEventListener('click', createFriendRoom);
+    $('joinButton').addEventListener('click', () => showOverlay('joinScreen'));
+    $('joinCodeButton').addEventListener('click', () => joinRoom($('joinCodeInput').value));
+    $('tutorialButton').addEventListener('click', () => showOverlay('tutorialScreen'));
+    $('settingsButton').addEventListener('click', () => showOverlay('settingsScreen'));
+    $('leaderboardButton').addEventListener('click', showLeaderboard);
+    $('pauseSettingsButton').addEventListener('click', () => showOverlay('settingsScreen', true));
+    $('pauseButton').addEventListener('click', pauseGame);
+    $('resumeButton').addEventListener('click', resumeGame);
+    $('restartButton').addEventListener('click', () => startGame({ mode: game.runMode, seed: game.seed, challenge: game.challenge }));

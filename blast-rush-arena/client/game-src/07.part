@@ -1,0 +1,149 @@
+  function floatingText(x, y, text, color, size) {
+    game.floatingTexts.push({ x, y, text, color, size, life: 1.05 });
+  }
+
+  function screenShake(amount) { game.shake = Math.max(game.shake, amount); }
+  function screenFlash(amount) { game.flash = Math.max(game.flash, amount); }
+
+  function ensureAudio() {
+    if (!audio) audio = new (window.AudioContext || window.webkitAudioContext)();
+    if (audio.state === 'suspended') audio.resume();
+  }
+
+  function sound(type) {
+    if (!save.settings.sound) return;
+    ensureAudio();
+    const now = audio.currentTime;
+    const master = audio.createGain();
+    master.gain.setValueAtTime(.0001, now);
+    master.gain.exponentialRampToValueAtTime(type.includes('explosion') || type === 'blast' ? .34 : .16, now + .008);
+    master.gain.exponentialRampToValueAtTime(.0001, now + (type === 'blast' ? 1.1 : .36));
+    master.connect(audio.destination);
+
+    const osc = audio.createOscillator();
+    const gain = audio.createGain();
+    osc.connect(gain); gain.connect(master);
+    const map = {
+      select: [420, 650], start: [160, 520], hit: [240, 90], armor: [150, 110], miss: [90, 70],
+      perfect: [680, 1280], chain: [390, 820], heal: [440, 880], damage: [95, 38],
+      shield: [520, 240], augment: [330, 980], overdrive: [110, 740], boss: [75, 38],
+      bossPulse: [120, 55], bossDown: [170, 45], gameOver: [220, 72], blast: [70, 920],
+      explosion: [115, 45], explosionHeavy: [82, 28]
+    };
+    const [f1, f2] = map[type] || [220, 110];
+    osc.type = ['perfect', 'heal', 'augment', 'select'].includes(type) ? 'sine' : 'sawtooth';
+    osc.frequency.setValueAtTime(f1, now);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(20, f2), now + (type === 'blast' ? .85 : .3));
+    gain.gain.setValueAtTime(.7, now); gain.gain.exponentialRampToValueAtTime(.001, now + (type === 'blast' ? 1 : .34));
+    osc.start(now); osc.stop(now + (type === 'blast' ? 1.05 : .36));
+
+    if (type.includes('explosion') || type === 'blast' || type === 'damage') noiseBurst(master, now, type === 'blast' ? .95 : .28, type === 'blast' ? .55 : .22);
+  }
+
+  function noiseBurst(destination, now, duration, volume) {
+    const length = Math.floor(audio.sampleRate * duration);
+    const buffer = audio.createBuffer(1, length, audio.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < length; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 2.3);
+    const src = audio.createBufferSource();
+    const filter = audio.createBiquadFilter();
+    const g = audio.createGain();
+    filter.type = 'lowpass'; filter.frequency.setValueAtTime(900, now); filter.frequency.exponentialRampToValueAtTime(80, now + duration);
+    g.gain.setValueAtTime(volume, now); g.gain.exponentialRampToValueAtTime(.001, now + duration);
+    src.buffer = buffer; src.connect(filter); filter.connect(g); g.connect(destination); src.start(now);
+  }
+
+  function startMusic() {
+    stopMusic();
+    if (!save.settings.music || game.mode === 'menu') return;
+    ensureAudio();
+    musicStep = 0;
+    musicTimer = setInterval(playMusicStep, 240);
+  }
+
+  function stopMusic() {
+    if (musicTimer) clearInterval(musicTimer);
+    musicTimer = null;
+  }
+
+  function playMusicStep() {
+    if (!save.settings.music || !audio || game.mode === 'menu' || game.mode === 'gameover') return;
+    const seq = game.overdriveActive ? [55, 82.41, 110, 164.81, 110, 82.41, 220, 164.81] : [55, 55, 82.41, 55, 73.42, 55, 82.41, 98];
+    const f = seq[musicStep++ % seq.length];
+    const now = audio.currentTime;
+    const osc = audio.createOscillator();
+    const g = audio.createGain();
+    const filter = audio.createBiquadFilter();
+    osc.type = game.overdriveActive ? 'sawtooth' : 'triangle';
+    osc.frequency.value = f;
+    filter.type = 'lowpass'; filter.frequency.value = game.overdriveActive ? 1100 : 420;
+    g.gain.setValueAtTime(.0001, now);
+    g.gain.exponentialRampToValueAtTime(game.mode === 'paused' || game.mode === 'augment' ? .008 : .025, now + .012);
+    g.gain.exponentialRampToValueAtTime(.0001, now + .19);
+    osc.connect(filter); filter.connect(g); g.connect(audio.destination);
+    osc.start(now); osc.stop(now + .21);
+  }
+
+  function setMusicIntensity(_) { /* Sequence reads live state; kept for API clarity. */ }
+
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+    else document.exitFullscreen?.();
+  }
+
+  function toast(text) {
+    ui.toast.textContent = text;
+    ui.toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => ui.toast.classList.remove('show'), 1600);
+  }
+
+  function bindNetwork() {
+    BlastNetwork.addEventListener('connection', (e) => {
+      ui.networkPill.textContent = e.detail.connected ? `ONLINE • ${Math.round(BlastNetwork.latency)}ms` : 'OFFLINE';
+      ui.networkPill.classList.toggle('online', e.detail.connected); ui.networkPill.classList.toggle('offline', !e.detail.connected);
+      if (game.runMode === 'duel') toast(e.detail.connected ? 'CONNECTION RESTORED' : 'CONNECTION LOST • RECONNECTING');
+    });
+    BlastNetwork.addEventListener('pong', () => { if (BlastNetwork.connected) ui.networkPill.textContent = `ONLINE • ${Math.round(BlastNetwork.latency)}ms`; });
+    BlastNetwork.addEventListener('queue', () => { $('lobbyTitle').textContent='SEARCHING THE ARENA'; $('lobbyStatus').textContent='Finding a rival near your skill signal…'; $('roomCode').textContent='•••••'; showScreen('lobbyScreen'); });
+    BlastNetwork.addEventListener('room_created', (e) => openLobby(e.detail.code, e.detail.players));
+    BlastNetwork.addEventListener('room_joined', (e) => openLobby(e.detail.code, e.detail.players));
+    BlastNetwork.addEventListener('match_found', (e) => beginCountdown(e.detail));
+    BlastNetwork.addEventListener('match_start', (e) => launchDuel(e.detail.seed, e.detail.endsAt, game.pendingDuelPlayers || []));
+    BlastNetwork.addEventListener('match_state', (e) => syncDuelState(e.detail));
+    BlastNetwork.addEventListener('player_connection', (e) => {
+      if (e.detail.playerId === BlastNetwork.playerId || game.runMode !== 'duel') return;
+      ui.duelPanel.classList.toggle('rival-offline', !e.detail.connected);
+      toast(e.detail.connected ? 'RIVAL RECONNECTED' : 'RIVAL RECONNECTING • 10s');
+    });
+    BlastNetwork.addEventListener('opponent_attack', (e) => applyHazard(e.detail.kind,e.detail.durationMs,e.detail.from));
+    BlastNetwork.addEventListener('pressure_sent', (e) => { game.pressure=0; toast(`${e.detail.kind.toUpperCase()} SENT`); });
+    BlastNetwork.addEventListener('match_end', (e) => finishDuel(e.detail));
+    BlastNetwork.addEventListener('opponent_left', () => { if(game.runMode==='duel') endGame({title:'VICTORY',versusText:'Your rival disconnected. The arena awards you the win.'}); });
+    BlastNetwork.addEventListener('rematch_state', () => toast('REMATCH SIGNAL SENT'));
+    BlastNetwork.addEventListener('error', (e) => { toast(e.detail.message || 'NETWORK ERROR'); if(game.mode!=='playing') goHome(); });
+  }
+
+  async function startQuickDuel() {
+    BlastNetwork.setName($('playerNameInput').value);
+    if (!(await BlastNetwork.connect())) return toast('SERVER OFFLINE • START DENO SERVER');
+    showScreen('lobbyScreen'); $('lobbyTitle').textContent='SEARCHING THE ARENA'; $('lobbyStatus').textContent='Matching you with a live rival…'; $('roomCode').textContent='QUICK';
+    BlastNetwork.quickMatch();
+  }
+
+  async function createFriendRoom() {
+    BlastNetwork.setName($('playerNameInput').value);
+    if (!(await BlastNetwork.connect())) return toast('SERVER OFFLINE • START DENO SERVER');
+    showScreen('lobbyScreen'); $('lobbyTitle').textContent='CREATING PRIVATE ARENA'; $('lobbyStatus').textContent='Generating invite code…'; $('roomCode').textContent='-----';
+    BlastNetwork.createRoom();
+  }
+
+  async function joinRoom(code) {
+    const clean=String(code||'').toUpperCase().replace(/[^A-Z0-9]/g,''); if(!clean)return toast('ENTER A ROOM CODE');
+    BlastNetwork.setName($('playerNameInput').value);
+    if (!(await BlastNetwork.connect())) return toast('SERVER OFFLINE');
+    showScreen('lobbyScreen'); $('lobbyTitle').textContent='JOINING PRIVATE ARENA'; $('lobbyStatus').textContent='Synchronizing with your rival…'; $('roomCode').textContent=clean;
+    BlastNetwork.joinRoom(clean);
+  }
+
+  function openLobby(code, players=[]) {
