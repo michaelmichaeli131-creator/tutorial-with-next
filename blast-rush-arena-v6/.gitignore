@@ -1,0 +1,4 @@
+data/
+*.log
+.DS_Store
+client/game.js.tmp
