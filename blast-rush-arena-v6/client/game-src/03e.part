@@ -1,0 +1,50 @@
+const v13Launch=$('launchScreen'),v13Enter=$('enterArenaBtn'),v13Progress=$('bootProgress'),v13Status=$('bootStatus'),v13Coach=$('coachOverlay'),v13Ready=$('coachReadyBtn'),v13Network=$('networkPill');
+let v13Entered=false,v13BootStarted=performance.now();
+function v13AssetProgress(){
+ const images=Object.values(v12Sprites),ready=images.filter(v12SpriteReady).length,failed=images.filter((image)=>image.dataset.failed==='1').length;
+ const audioReady=v12Track.readyState>=2?1:0,total=images.length+1,done=ready+failed+audioReady;
+ return{percent:Math.max(8,Math.min(100,Math.round(done/total*100))),ready,failed,audioReady,total};
+}
+function v13UpdateBoot(){
+ if(!v13Launch)return;
+ const state=v13AssetProgress(),elapsed=performance.now()-v13BootStarted;
+ if(v13Progress)v13Progress.style.width=state.percent+'%';
+ if(v13Status)v13Status.textContent=state.percent>=100?'COMBAT SYSTEMS READY':state.failed?'OPTIMIZING FALLBACK SYSTEMS':`LOADING COMBAT ASSETS • ${state.percent}%`;
+ if(v13Enter&&elapsed>700){v13Enter.disabled=false;v13Enter.querySelector('small').textContent=state.percent>=82?'SOUND ON • TAP TO DEPLOY':'PLAY NOW • REMAINING ASSETS LOAD IN BATTLE';}
+ if(state.percent<100&&elapsed<7000)requestAnimationFrame(v13UpdateBoot);else if(v13Progress)v13Progress.style.width='100%';
+}
+async function v13EnterArena(){
+ if(v13Entered)return;
+ v13Entered=true;
+ haptic(12);
+ await v12StartMusic();
+ v13Launch?.classList.add('is-leaving');
+ document.body.classList.remove('launch-active');
+ sessionStorage.setItem('blastRushLaunchSeen','1');
+ setTimeout(()=>{v13Launch?.classList.add('hidden');v13Launch?.setAttribute('aria-hidden','true');document.querySelectorAll('.mode-command button').forEach((button,index)=>{button.style.animationDelay=`${index*60}ms`;button.classList.add('v13-reveal');});if(!localStorage.getItem('blastRushCoachV13'))setTimeout(()=>v13Coach?.classList.add('active'),220);},520);
+}
+if(v13Launch){
+ requestAnimationFrame(v13UpdateBoot);
+ v13Enter?.addEventListener('click',v13EnterArena);
+ v13Launch.addEventListener('pointerdown',(event)=>{if(event.target===v13Launch&&v13Enter&&!v13Enter.disabled)v13EnterArena();});
+}
+v13Ready?.addEventListener('click',()=>{localStorage.setItem('blastRushCoachV13','1');v13Coach?.classList.remove('active');haptic(10);});
+v13Coach?.addEventListener('pointerdown',(event)=>{if(event.target===v13Coach){localStorage.setItem('blastRushCoachV13','1');v13Coach.classList.remove('active');}});
+BlastNetwork.addEventListener('connection',(event)=>{const connected=Boolean(event.detail.connected);v13Network?.classList.toggle('offline',!connected);const label=v13Network?.querySelector('span');if(label)label.textContent=connected?'LIVE NETWORK':'RECONNECTING';});
+function v13RefreshMenuUX(){
+ const level=$('levelLabel'),best=$('bestLabel'),quick=$('quickBtn');
+ if(level)level.setAttribute('aria-label',`Pilot level ${save.level}`);
+ if(best)best.setAttribute('aria-label',`Best score ${save.best}`);
+ if(quick){const live=quick.querySelector('.mode-live-copy');if(live)live.textContent=document.body.classList.contains('offline')?'SERVER RECONNECTING':'LIVE MATCHMAKING READY';}
+}
+const v13UpdateMenuBase=updateMenu;
+updateMenu=function(){v13UpdateMenuBase();v13RefreshMenuUX();};
+const v13ShowScreenBase=showScreen;
+showScreen=function(id){v13ShowScreenBase(id);document.body.dataset.screen=id||'game';if(id){const screen=$(id);screen?.querySelector('.panel')?.scrollTo({top:0,behavior:'instant'});}};
+for(const button of document.querySelectorAll('button')){
+ button.addEventListener('pointerdown',()=>{if(!button.disabled){button.classList.add('pressing');haptic(4);}}, {passive:true});
+ button.addEventListener('pointerup',()=>button.classList.remove('pressing'),{passive:true});
+ button.addEventListener('pointercancel',()=>button.classList.remove('pressing'),{passive:true});
+}
+addEventListener('keydown',(event)=>{if((event.key==='Enter'||event.key===' ')&&v13Launch&&!v13Launch.classList.contains('hidden')&&v13Enter&&!v13Enter.disabled){event.preventDefault();v13EnterArena();}if(event.key==='Escape'&&v13Coach?.classList.contains('active')){localStorage.setItem('blastRushCoachV13','1');v13Coach.classList.remove('active');}});
+v13RefreshMenuUX();
