@@ -1,6 +1,6 @@
-const CACHE = 'blast-rush-arena-v13-premium-command';
+const CACHE = 'blast-rush-arena-v14-reckoning';
 const ASSETS = [
-  '/', '/index.html', '/styles.css', '/v7-overrides.css', '/mobile-v8.css', '/cinematic-v9.css', '/mobile-cinematic-v10.css', '/cinematic-v11.css', '/mobile-pro-v12.css', '/premium-v13.css',
+  '/', '/index.html', '/styles.css', '/v7-overrides.css', '/mobile-v8.css', '/cinematic-v9.css', '/mobile-cinematic-v10.css', '/cinematic-v11.css', '/mobile-pro-v12.css', '/premium-v13.css', '/v14-campaign.css',
   '/net.js', '/game.js', '/manifest.webmanifest', '/icons/icon-192.svg', '/icons/icon-512.svg'
 ];
 self.addEventListener('install', (event) => event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting())));

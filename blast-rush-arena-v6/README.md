@@ -1,9 +1,23 @@
-# Blast Rush Arena V6 — Titan Volley
+# Blast Rush Arena V6 — Reckoning (V14)
 
-A cinematic competitive browser arcade game with a Deno backend, six-world solo progression, Titan Gauntlet boss rush, public tables, private invite rooms, live seeded 1v1, player-launched Rival Cores, pressure attacks, skins, asynchronous challenges, PWA installation and a persistent leaderboard.
+A cinematic competitive browser arcade game with a Deno backend, a fifteen-stage campaign with saved
+progression, unlockable pilots and weapons bought with earned credits, six-world endless progression,
+Titan Gauntlet boss rush, public tables, private invite rooms, live seeded 1v1, player-launched Rival
+Cores, pressure attacks, skins, asynchronous challenges, PWA installation and a persistent leaderboard.
 
 ## Highlights
 
+- **Campaign:** fifteen hand-authored stages across four worlds with six objective types (purge,
+  elite, precision, survival, titan, gauntlet), five hazard modifiers, per-stage star ratings and a
+  save that resumes exactly where you stopped.
+- **Weapons:** six lateral weapon systems with five upgrade levels each. Base damage always lands;
+  only special effects are cooldown-gated, so nothing you buy becomes a fire-rate advantage.
+- **Pilots:** six original characters drawn procedurally as genuinely different silhouettes, each
+  with one modest perk.
+- **Economy:** credits earned from offline play buy weapons, weapon levels and pilots. Duels strip
+  damage, score and economy perks so a bigger wallet cannot out-stat a rival.
+- **Original launch artwork:** the launch screen is a live canvas scene — parallax starfield, rim-lit
+  planet, spire skyline, approaching hostiles and your equipped pilot — with no external art.
 - Six procedural worlds with distinct palettes, movement, mutations and boss architecture.
 - Six multi-phase bosses plus escalating Omega Titan forms.
 - Titan Gauntlet mode: consecutive colossal boss battles with augment choices.
@@ -39,6 +53,10 @@ The current Deno Deploy platform is configured as a dynamic application with `se
 ## Project layout
 
 - `client/` — Canvas renderer, PWA shell, adaptive audio, networking and game source fragments.
+- `client/game-src/03f.part` — V14 campaign data model: stages, weapons, pilots, hazards, save schema.
+- `client/game-src/03g.part` — V14 original pilot artwork, drawn on any 2D context.
+- `client/game-src/03h.part` — V14 combat: stage flow, difficulty curve, weapon behaviour, rewards.
+- `client/game-src/03i.part` — V14 interface: launch scene, stage select, armory.
 - `scripts/build_client.ts` — assembles the ordered source fragments into `client/game.js` without npm.
 - `server/main.ts` — HTTP server, public-table API, challenge APIs and WebSocket upgrade.
 - `server/matchmaker.ts` — matchmaking, public/private rooms, Core Volley, pressure, reconnect and score validation.

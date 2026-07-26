@@ -1,7 +1,7 @@
 {
-  "name": "Blast Rush Arena — Premium Command",
+  "name": "Blast Rush Arena — Reckoning",
   "short_name": "Blast Rush",
-  "description": "A premium mobile sci-fi arcade with animated monsters, cinematic onboarding, instant matchmaking and full-power battle audio.",
+  "description": "A mobile sci-fi arcade with a fifteen-stage campaign, unlockable pilots and weapons, an earned credit economy, animated monsters and instant live duels.",
   "start_url": "/",
   "display": "standalone",
   "orientation": "any",

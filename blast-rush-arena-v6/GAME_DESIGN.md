@@ -1,5 +1,62 @@
 # Blast Rush Arena V6 — Game and Social Design
 
+## V14 campaign foundation
+
+V14 adds the long-form spine the game was missing: a stage ladder, a save that remembers where you
+stopped, and an economy that turns offline play into permanent progress.
+
+### Stages
+
+Fifteen hand-authored stages span the first four worlds. Each one declares an objective `kind` —
+`purge`, `elite`, `perfect`, `survive`, `boss` or `gauntlet` — and everything else layers on top of a
+single shared difficulty curve (`v14StageCurve`) so the ramp can be read and retuned in one place.
+Across the ladder enemies get roughly 85% faster, armour gains up to two extra hit points, spawn
+intervals compress by 44%, and boss health scales with the same curve.
+
+Stages award one to three stars: clearing the stage earns one, finishing with at least two reactor
+lives earns two, taking no damage at all earns three. Stars are cosmetic prestige plus a 15% credit
+bonus per star, so replaying an early stage well is worth something without being mandatory.
+
+### Hazards
+
+Hazards are stage modifiers that change something the player can actually see: `gravity` (hostiles
+fall much faster), `meteor` (burning debris that must be tapped before it lands), `fog` (a vignette
+that collapses visibility around the reactor), `emp` (Overdrive and Blast go offline in four-second
+bursts every twelve seconds) and `swarm` (periodic reinforcement waves).
+
+### Weapons
+
+Six weapons are lateral rather than a straight power ladder — each wins in a different situation.
+Pulse Driver is the reliable single-target default, Scatter Volley splits into a crowd, Void Lance
+shreds armour and titans, Arc Chain jumps between hostiles to hold combos, Shard Siphon trades
+damage for credits, and Nova Cannon detonates a wide shockwave.
+
+Base tap damage always lands. Only the *special* effect is rate limited by a per-weapon cooldown, so
+buying an expensive weapon never converts into a raw fire-rate advantage — it converts into a
+different shape of engagement. Each weapon has five levels bought with credits at a 1.55× curve.
+
+### Pilots
+
+Six pilots are drawn from scratch as distinct silhouettes — knight, striker, specter, warden, reaper
+and ascendant — not palette swaps of one body. Each carries exactly one modest perk: a wider PERFECT
+window, more weapon damage, faster Overdrive, a free Phase Shield, more credits, or a score and Blast
+bonus.
+
+### Economy and pay-to-win protection
+
+Credits are earned by playing offline stages and Solo/Gauntlet runs; failing a stage still salvages a
+consolation payout so a bad run is never a total loss. Credits buy weapons, weapon levels and pilots.
+
+Duels neutralise the damage, score and credit perks entirely (`v14Mods(duel)` strips them), leaving
+only feel-based perks such as the PERFECT window. A larger wallet therefore cannot out-stat a rival —
+it can only change which weapon shape you bring.
+
+### Persistence
+
+Progression lives under its own `blastRushV14` localStorage key with a schema version and a tolerant
+migration that fills defaults rather than wiping a partially written payload. `v14ExportSave` and
+`v14ImportSave` are the seam a future server-side save will plug into.
+
 ## Product principle
 
 The core action remains instantly understandable: identify the most valuable threat and click it before it reaches the reactor. Depth comes from target priority, boss attack interception, combo preservation, tactical augments and social counterplay—not from hidden rules or pay-to-win power.

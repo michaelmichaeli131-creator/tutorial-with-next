@@ -1,6 +1,14 @@
 # Asset and Audio Licensing
 
-Blast Rush Arena V12 uses a mix of original procedural rendering and third-party runtime assets with documented commercial-use permissions.
+Blast Rush Arena uses a mix of original procedural rendering and third-party runtime assets with documented commercial-use permissions.
+
+## V14 original artwork
+
+All V14 artwork is original and generated at runtime on a 2D canvas — no external files, no third-party art:
+
+- The six playable pilots (`client/game-src/03g.part`) are drawn from scratch as distinct silhouettes and are also used for the in-game player avatar and the armory previews.
+- The launch screen scene (`client/game-src/03i.part`) — parallax starfield, rim-lit planet, spire skyline, approaching hostiles and the ground glow — is composed procedurally each frame.
+- Meteor hazards, ion fog and EMP overlays are procedural.
 
 ## Animated monster sprites
 
