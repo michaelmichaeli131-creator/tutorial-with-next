@@ -1,0 +1,151 @@
+    $('resultEyebrow').textContent = game.runMode === 'challenge' ? 'FRIEND CHALLENGE COMPLETE' : game.runMode === 'duel' ? 'ARENA LINK CLOSED' : 'ASCENSION RUN COMPLETE';
+    $('resultTitle').textContent = options.title || (game.runMode === 'challenge' ? 'CHALLENGE RESULT' : game.runMode === 'duel' ? 'DUEL COMPLETE' : 'RUN COMPLETE');
+    $('versusResult').classList.toggle('hidden', !options.versusText); $('versusResult').textContent = options.versusText || '';
+    $('missionResult').textContent = options.detail || (game.missionComplete ? `DAILY MISSION COMPLETE: +${mission.reward} ◆${levels ? ` • LEVEL UP x${levels}` : ''}` : `${mission.text}: ${Math.min(game.missionProgress, mission.target)}/${mission.target}${levels ? ` • LEVEL UP x${levels}` : ''}`);
+    $('retryButton').classList.toggle('hidden', game.runMode === 'duel'); $('rematchButton').classList.toggle('hidden', game.runMode !== 'duel');
+    $('rematchButton').disabled = false; $('rematchButton').textContent = '↻ REMATCH';
+    ui.hud.classList.add('hidden'); showScreen('gameOverScreen'); sound('gameOver');
+    if (game.runMode === 'challenge' && game.challenge) submitChallengeResult();
+  }
+
+  function updateMissionProgress() {
+    if (mission.type === 'destroy') game.missionProgress = game.destroyed;
+    else if (mission.type === 'perfect') game.missionProgress = game.perfects;
+    else game.missionProgress = game.wave;
+    if (!game.missionComplete && game.missionProgress >= mission.target) {
+      game.missionComplete = true;
+      toast('DAILY MISSION COMPLETE');
+      sound('augment');
+    }
+  }
+
+  function updateHud() {
+    const stage = STAGES[game.stageIndex];
+    ui.wave.textContent = game.wave; ui.stage.textContent = stage.name; ui.score.textContent = format(game.score); ui.best.textContent = format(save.highScore);
+    ui.lives.textContent = `${'❤ '.repeat(Math.max(0, game.lives)).trim()}${' ♡'.repeat(Math.max(0, 3 - game.lives))}`;
+    ui.combo.textContent = game.combo; ui.comboRank.textContent = comboRank(game.combo); ui.comboBar.style.width = `${Math.max(0, game.comboTimer / game.comboDuration * 100)}%`;
+    ui.overdriveBar.style.height = `${game.overdrive}%`; ui.overdriveText.textContent = game.overdriveActive ? `${game.overdriveTime.toFixed(1)}s` : `${Math.floor(game.overdrive)}%`;
+    ui.blastText.textContent = `${Math.floor(game.blast)}%`; ui.blastButton.classList.toggle('ready', game.blast >= 100); ui.shardsHud.textContent = format(save.shards + game.runShards);
+    ui.pressureText.textContent = `${Math.floor(game.pressure)}%`; ui.pressureButton.classList.toggle('ready', game.pressure >= 100);
+    if (game.boss) { ui.bossBar.style.width = `${Math.max(0, game.boss.hp / game.boss.maxHp * 100)}%`; ui.bossPhase.textContent = `PHASE ${['I','II','III'][game.boss.phaseLevel-1]}`; }
+    updateObjectiveUi(); updateDuelUi();
+    if (game.challenge) { const delta=game.challenge.score-game.score; $('challengeDelta').textContent = delta>0 ? `${format(delta)} TO BEAT` : `AHEAD BY ${format(-delta)}`; }
+  }
+
+  function comboRank(c) {
+    if (c >= 50) return 'LEGENDARY!';
+    if (c >= 30) return 'INSANE!';
+    if (c >= 18) return 'ULTRA!';
+    if (c >= 8) return 'COMBO!';
+    return c ? 'RISING' : 'READY';
+  }
+
+  function draw() {
+    ctx.save();
+    ctx.setTransform(game.dpr, 0, 0, game.dpr, 0, 0);
+    drawSpace();
+    const shake = save.settings.shake && !save.settings.comfort ? game.shake : game.shake * .16;
+    const sx = (Math.random() - .5) * shake;
+    const sy = (Math.random() - .5) * shake;
+    ctx.translate(sx, sy);
+    drawReactor();
+    drawOrbs();
+    drawBoss();
+    drawEffects();
+    if (game.overdriveActive) drawOverdriveOverlay();
+    ctx.restore();
+    if (game.flash > 0) {
+      ctx.save();
+      ctx.globalAlpha = save.settings.comfort ? game.flash * .1 : game.flash * .32;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, game.width, game.height);
+      ctx.restore();
+    }
+  }
+
+  function drawSpace() {
+    const stage = STAGES[game.stageIndex];
+    const [a,b,c] = stage.colors;
+    const g = ctx.createRadialGradient(game.width * .5, game.height * .72, 20, game.width * .5, game.height * .55, Math.max(game.width, game.height));
+    g.addColorStop(0, game.overdriveActive ? darken(c,.62) : darken(a,.73)); g.addColorStop(.42, darken(b,.88)); g.addColorStop(1, '#010208');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, game.width, game.height);
+    ctx.save();
+    for (const n of game.nebulae) {
+      const hueShift = game.stageIndex * 38;
+      const ng = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.r);
+      ng.addColorStop(0, `hsla(${n.hue+hueShift}, 95%, 58%, ${n.a * (1 + game.stageIndex*.12)})`); ng.addColorStop(1, `hsla(${n.hue+hueShift}, 95%, 30%, 0)`);
+      ctx.fillStyle = ng; ctx.fillRect(n.x - n.r, n.y - n.r, n.r * 2, n.r * 2);
+    }
+    for (const s of game.stars) {
+      const alpha=.25+Math.sin(game.time*(1+s.z*3)+s.tw)*.18+s.z*.35;ctx.globalAlpha=alpha;ctx.fillStyle=s.z>.8?lighten(a,.55):'#fff';const r=.5+s.z*1.3;ctx.fillRect(s.x,(s.y+game.time*3*s.z)%game.height,r,r);
+    }
+    ctx.restore();
+    ctx.save();ctx.globalAlpha=.1;ctx.strokeStyle=a;ctx.lineWidth=1;const horizon=game.height*.88;
+    for(let i=-12;i<=12;i++){ctx.beginPath();ctx.moveTo(game.width/2,horizon);ctx.lineTo(game.width/2+i*game.width*.09,game.height);ctx.stroke()}
+    for(let y=horizon;y<game.height;y+=20+(y-horizon)*.07){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(game.width,y);ctx.stroke()}ctx.restore();
+    if(game.stageIndex===1) drawCrystalRifts(a,c); else if(game.stageIndex===2) drawSolarFlares(b,c); else if(game.stageIndex===3) drawVoidArches(a,b);
+  }
+
+  function drawReactor() {
+    const x = game.width / 2;
+    const y = game.height * .88;
+    const r = Math.min(94, game.width * .07);
+    ctx.save();
+    const planet = ctx.createRadialGradient(x, y + r * 1.4, 0, x, y + r * 1.4, game.width * .38);
+    planet.addColorStop(0, '#50b9ff'); planet.addColorStop(.12, '#1765c5'); planet.addColorStop(.4, '#061832'); planet.addColorStop(1, 'transparent');
+    ctx.fillStyle = planet;
+    ctx.beginPath(); ctx.arc(x, y + r * 2.2, game.width * .35, Math.PI, Math.PI * 2); ctx.fill();
+
+    ctx.fillStyle = '#08111d';
+    roundRect(ctx, x - r * 2.25, y - r * .05, r * 4.5, r * 1.7, 18); ctx.fill();
+    ctx.strokeStyle = '#16476d'; ctx.lineWidth = 4; ctx.stroke();
+
+    const core = ctx.createRadialGradient(x, y, 0, x, y, r);
+    core.addColorStop(0, '#ffffff'); core.addColorStop(.08, '#77efff'); core.addColorStop(.27, '#0aa8ff'); core.addColorStop(.55, '#063464'); core.addColorStop(.72, '#07121d'); core.addColorStop(1, '#02060b');
+    ctx.fillStyle = core; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = game.shield ? '#54e8ff' : '#285776'; ctx.lineWidth = 8; ctx.stroke();
+
+    ctx.save(); ctx.translate(x, y); ctx.rotate(game.time * .25);
+    ctx.strokeStyle = '#42c9ff'; ctx.globalAlpha = .65; ctx.lineWidth = 3;
+    for (let i = 0; i < 8; i++) {
+      ctx.rotate(Math.PI / 4); ctx.beginPath(); ctx.moveTo(r * .58, 0); ctx.lineTo(r * .92, 0); ctx.stroke();
+    }
+    ctx.restore();
+
+    if (game.shield) {
+      ctx.strokeStyle = '#6df0ff'; ctx.lineWidth = 2; ctx.globalAlpha = .55 + Math.sin(game.time * 5) * .15;
+      ctx.beginPath(); ctx.arc(x, y, r * 1.35, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawOrbs() {
+    for (const o of game.orbs) if (!o.dead) drawOrb(o);
+  }
+
+  function drawOrb(o) {
+    const spec = ORB_TYPES[o.type];
+    const pulse = 1 + Math.sin(o.pulse) * .04;
+    const r = o.radius * pulse;
+    ctx.save();
+    ctx.translate(o.x, o.y);
+    ctx.rotate(o.rotation);
+    ctx.shadowBlur = 22 + Math.sin(o.pulse) * 5;
+    ctx.shadowColor = spec.color;
+
+    const outer = ctx.createRadialGradient(-r * .15, -r * .2, r * .06, 0, 0, r);
+    outer.addColorStop(0, o.hitFlash ? '#ffffff' : spec.core);
+    outer.addColorStop(.12, spec.color);
+    outer.addColorStop(.42, darken(spec.color, .44));
+    outer.addColorStop(.67, '#08090f');
+    outer.addColorStop(.82, darken(spec.color, .7));
+    outer.addColorStop(1, '#020309');
+    ctx.fillStyle = outer;
+    ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = lighten(spec.color, .2); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(0, 0, r * .62, 0, Math.PI * 2); ctx.stroke();
+    for (let i = 0; i < 8; i++) {
+      ctx.rotate(Math.PI / 4);
+      ctx.fillStyle = i % 2 ? '#141822' : darken(spec.color, .55);
