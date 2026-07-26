@@ -1,0 +1,160 @@
+      ctx.beginPath();
+      ctx.moveTo(r * .68, -r * .12); ctx.lineTo(r * .98, -r * .22); ctx.lineTo(r * .98, r * .22); ctx.lineTo(r * .68, r * .12); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = '#27303d'; ctx.stroke();
+    }
+    ctx.rotate(-o.rotation - Math.PI * 2);
+
+    ctx.shadowBlur = 18; ctx.shadowColor = spec.color; ctx.fillStyle = spec.core;
+    ctx.beginPath(); ctx.arc(0, 0, r * .18, 0, Math.PI * 2); ctx.fill();
+
+    if (o.type === 'bomb') drawSymbol('✹', '#ffe04b', r * .72);
+    if (o.type === 'heal') drawSymbol('+', '#ecfff0', r * .9);
+    if (o.type === 'bonus') drawSymbol('◆', '#eaffff', r * .62);
+    if (o.type === 'armored' || o.type === 'elite') {
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = '#ffffff'; ctx.globalAlpha = .75; ctx.lineWidth = 3;
+      for (let i = 0; i < o.maxHp; i++) {
+        ctx.beginPath(); ctx.arc(0, 0, r * (.72 + i * .1), -Math.PI * .9, -Math.PI * .1); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+  }
+
+  function drawSymbol(symbol, color, size) {
+    ctx.save(); ctx.rotate(-game.time * .2); ctx.fillStyle = color; ctx.font = `900 ${size}px Segoe UI`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(symbol, 0, 1); ctx.restore();
+  }
+
+  function drawBoss() {
+    const b = game.boss;
+    if (!b || b.dead) return;
+    ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.rotation);
+    ctx.shadowBlur = 35; ctx.shadowColor = b.color || '#ff1f38';
+    for (let i = 0; i < 8; i++) {
+      ctx.rotate(Math.PI / 4);
+      ctx.fillStyle = '#111722';
+      ctx.strokeStyle = b.color || '#ff3348'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(b.radius * .45, -18); ctx.lineTo(b.radius * 1.18, -9); ctx.lineTo(b.radius * 1.42, 0); ctx.lineTo(b.radius * 1.18, 9); ctx.lineTo(b.radius * .45, 18); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = b.color || '#ff263f'; ctx.beginPath(); ctx.arc(b.radius * 1.1, 0, 8, 0, Math.PI * 2); ctx.fill();
+    }
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, b.radius);
+    const bossColor = b.color || '#ff3348';
+    g.addColorStop(0, b.hitFlash ? '#ffffff' : lighten(bossColor,.72)); g.addColorStop(.08, lighten(bossColor,.24)); g.addColorStop(.26, darken(bossColor,.2)); g.addColorStop(.55, '#13141a'); g.addColorStop(.8, '#05070c'); g.addColorStop(1, darken(bossColor,.68));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, b.radius, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#ff4150'; ctx.lineWidth = 5; ctx.stroke();
+    ctx.rotate(-b.rotation * 2.2); ctx.strokeStyle = '#ff6b45'; ctx.lineWidth = 3;
+    for (let i = 0; i < 6; i++) { ctx.rotate(Math.PI / 3); ctx.beginPath(); ctx.moveTo(b.radius * .48, 0); ctx.lineTo(b.radius * .82, 0); ctx.stroke(); }
+    ctx.shadowBlur = 30; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, 0, b.radius * .17, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  function updateEffects(dt) {
+    for (const p of game.particles) {
+      p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt;
+      p.vx *= Math.pow(.14, dt); p.vy *= Math.pow(.14, dt);
+      if (p.kind === 'smoke') { p.size += dt * 28; p.vy -= dt * 7; }
+      else p.vy += dt * (p.kind === 'debris' ? 95 : 28);
+      p.rotation += p.spin * dt;
+    }
+    game.particles = game.particles.filter(p => p.life > 0);
+    for (const s of game.shockwaves) { s.life -= dt; s.r += s.speed * dt; }
+    game.shockwaves = game.shockwaves.filter(s => s.life > 0);
+    for (const f of game.floatingTexts) { f.life -= dt; f.y -= 36 * dt; }
+    game.floatingTexts = game.floatingTexts.filter(f => f.life > 0);
+  }
+
+  function drawEffects() {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const s of game.shockwaves) {
+      ctx.globalAlpha = Math.max(0, s.life / s.maxLife) * .85;
+      ctx.strokeStyle = s.color; ctx.lineWidth = 2 + s.life * 4;
+      ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.stroke();
+    }
+    for (const p of game.particles) {
+      const alpha = Math.max(0, p.life / p.maxLife);
+      ctx.globalAlpha = alpha;
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rotation);
+      if (p.kind === 'smoke') {
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.fillStyle = p.color; ctx.globalAlpha = alpha * .22;
+        ctx.beginPath(); ctx.arc(0, 0, p.size, 0, Math.PI * 2); ctx.fill();
+        ctx.globalCompositeOperation = 'lighter';
+      } else if (p.kind === 'debris') {
+        ctx.fillStyle = p.color; ctx.fillRect(-p.size, -p.size * .45, p.size * 2, p.size * .9);
+      } else {
+        const g = ctx.createRadialGradient(0, 0, 0, 0, 0, p.size * 2.2);
+        g.addColorStop(0, '#ffffff'); g.addColorStop(.25, p.color); g.addColorStop(1, 'transparent');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, p.size * 2.2, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.fillRect(-p.size * .25, -p.size * 2.5, p.size * .5, p.size * 5);
+      }
+      ctx.restore();
+    }
+    ctx.restore();
+
+    for (const f of game.floatingTexts) {
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, f.life * 1.8);
+      ctx.fillStyle = f.color; ctx.strokeStyle = '#05060a'; ctx.lineWidth = 7;
+      ctx.font = `1000 ${f.size}px Segoe UI, Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const lines = f.text.split('\n');
+      lines.forEach((line, i) => { const yy = f.y + i * (f.size + 2); ctx.strokeText(line, f.x, yy); ctx.fillText(line, f.x, yy); });
+      ctx.restore();
+    }
+  }
+
+  function drawOverdriveOverlay() {
+    ctx.save();
+    ctx.globalAlpha = .12 + Math.sin(game.time * 8) * .035;
+    const g = ctx.createRadialGradient(game.width / 2, game.height / 2, 100, game.width / 2, game.height / 2, Math.max(game.width, game.height) * .7);
+    g.addColorStop(0, 'transparent'); g.addColorStop(.75, '#ff4400'); g.addColorStop(1, '#ffb000');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, game.width, game.height);
+    ctx.strokeStyle = '#ff9b21'; ctx.lineWidth = 2; ctx.globalAlpha = .2;
+    for (let i = 0; i < 20; i++) {
+      const a = i / 20 * Math.PI * 2 + game.time * .15;
+      ctx.beginPath(); ctx.moveTo(game.width / 2 + Math.cos(a) * 80, game.height / 2 + Math.sin(a) * 80); ctx.lineTo(game.width / 2 + Math.cos(a) * game.width, game.height / 2 + Math.sin(a) * game.width); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function explosion(x, y, color, size, heavy = false) {
+    const comfort = save.settings.comfort;
+    const factor = comfort ? .38 : 1;
+    const sparks = Math.floor((heavy ? 55 : 28) * factor);
+    const debris = Math.floor((heavy ? 22 : 10) * factor);
+    const smoke = Math.floor((heavy ? 12 : 5) * factor);
+    shockwave(x, y, color, size * 1.45, heavy ? .55 : .35);
+    shockwave(x, y, '#ffffff', size * .7, .22);
+    for (let i = 0; i < sparks; i++) {
+      const a = Math.random() * Math.PI * 2; const sp = size * (1.5 + Math.random() * 3.6);
+      particle(x, y, Math.cos(a) * sp, Math.sin(a) * sp, Math.random() < .32 ? '#ffffff' : color, 2 + Math.random() * 4, .35 + Math.random() * .55, 'spark');
+    }
+    for (let i = 0; i < debris; i++) {
+      const a = Math.random() * Math.PI * 2; const sp = size * (.7 + Math.random() * 2.2);
+      particle(x, y, Math.cos(a) * sp, Math.sin(a) * sp, Math.random() < .5 ? '#16131a' : darken(color, .5), 4 + Math.random() * 8, .75 + Math.random() * .75, 'debris');
+    }
+    for (let i = 0; i < smoke; i++) {
+      const a = Math.random() * Math.PI * 2; const sp = size * (.12 + Math.random() * .5);
+      particle(x, y, Math.cos(a) * sp, Math.sin(a) * sp - 15, '#566072', 10 + Math.random() * 13, .75 + Math.random() * .7, 'smoke');
+    }
+    screenShake(heavy ? 18 : 8);
+    screenFlash(heavy ? .38 : .18);
+    sound(heavy ? 'explosionHeavy' : 'explosion');
+  }
+
+  function spark(x, y, color, count, intensity) {
+    const n = Math.floor(count * (save.settings.comfort ? .45 : 1));
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2; const sp = (80 + Math.random() * 240) * intensity;
+      particle(x, y, Math.cos(a) * sp, Math.sin(a) * sp, color, 2 + Math.random() * 3, .25 + Math.random() * .35, 'spark');
+    }
+  }
+
+  function particle(x, y, vx, vy, color, size, life, kind) {
+    game.particles.push({ x, y, vx, vy, color, size, life, maxLife: life, kind, rotation: Math.random() * 6.28, spin: (Math.random() - .5) * 10 });
+  }
+
+  function shockwave(x, y, color, maxRadius, life) {
+    game.shockwaves.push({ x, y, r: 2, color, life, maxLife: life, speed: maxRadius / life });
+  }
+
