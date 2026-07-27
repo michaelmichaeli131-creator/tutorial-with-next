@@ -100,6 +100,22 @@
 .v17-mission-head small{flex:0 0 auto;color:var(--f-gold);font:900 8px/1 system-ui;letter-spacing:.16em}
 .v17-mission-head b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:900 11px/1 system-ui;letter-spacing:.07em;color:#eaf6ff}
 
+/* Rival card. It used to live in .hud-cluster.right, which sits at the same coordinates as the
+   V17 lives plate — so during a duel the rival score and your own reactor health were stacked on
+   top of each other and neither was readable. It now flows as a third row of the combat bar. */
+.v17-rival{display:flex!important;align-items:center;gap:8px;padding:5px 10px!important;min-width:0;
+ position:static!important;transform:none!important;border-radius:0!important;background:none;
+ --f-plate:linear-gradient(168deg,#5a1430 0%,#3a0d20 44%,#1a0510 100%)}
+.v17-rival.hidden{display:none!important}
+.v17-rival:before{border-color:rgba(255,90,130,.4)}
+.v17-rival-tag{flex:0 0 auto;padding:2px 6px;border-radius:4px;background:#ff2f52;color:#fff;font:1000 7px/1.4 system-ui;letter-spacing:.12em}
+.v17-rival small{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:900 10px/1 system-ui!important;letter-spacing:.08em;color:#ffd0da;display:block}
+.v17-rival b{font:1000 15px/1 system-ui!important;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.9)}
+.v17-rival span:last-child{flex:0 0 auto;font:900 7px/1 system-ui!important;letter-spacing:.1em;color:#ff9db0;display:block}
+/* A duel adds a HUD row, so the elements pinned below it move down to match. */
+body.duel-active .boss-hud:not(.hidden){top:calc(max(4px,env(safe-area-inset-top)) + 158px)!important}
+body.duel-active .v17-combo{top:calc(max(4px,env(safe-area-inset-top)) + 212px)}
+
 /* Combo banner: floating type on the right, exactly as the references present it. */
 /* Stacked below the boss bar so the two never overlap on a phone. */
 .v17-combo{position:fixed;z-index:9;right:max(9px,env(safe-area-inset-right));top:calc(max(4px,env(safe-area-inset-top)) + 168px);display:flex;flex-direction:column;align-items:flex-end;gap:1px;pointer-events:none;text-align:right;transition:opacity .2s ease,transform .2s ease}

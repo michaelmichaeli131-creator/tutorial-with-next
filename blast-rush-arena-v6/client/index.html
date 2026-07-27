@@ -63,7 +63,7 @@
 </section>
 <canvas id="game"></canvas>
 <div id="fx"></div>
-<header id="hud" class="hud hidden"><div class="hud-cluster left"><button id="pauseBtn" class="icon-btn" aria-label="Pause">Ⅱ</button><div class="chip"><small>WORLD</small><b id="worldName">NEBULA FORGE</b></div><div class="chip"><small>WAVE</small><b id="waveLabel">1</b></div></div><div class="score-card"><small>SCORE</small><b id="scoreLabel">0</b><span id="directiveLabel">PURGE • 0/18</span></div><div class="hud-cluster right"><div class="chip rival hidden" id="rivalCard"><small id="rivalName">RIVAL</small><b id="rivalScore">0</b><span id="rivalState">CONNECTED</span></div><div class="chip lives"><small>REACTOR</small><b id="livesLabel">♥ ♥ ♥</b></div></div></header>
+<header id="hud" class="hud hidden"><div class="hud-cluster left"><button id="pauseBtn" class="icon-btn" aria-label="Pause">Ⅱ</button><div class="chip"><small>WORLD</small><b id="worldName">NEBULA FORGE</b></div><div class="chip"><small>WAVE</small><b id="waveLabel">1</b></div></div><div class="score-card"><small>SCORE</small><b id="scoreLabel">0</b><span id="directiveLabel">PURGE • 0/18</span></div><div class="hud-cluster right"><div class="chip lives"><small>REACTOR</small><b id="livesLabel">♥ ♥ ♥</b></div></div></header>
 <div id="combatBar" class="v17-hud hidden">
   <div class="v17-row">
     <div class="v17-pilot f-plate f-rivets">
@@ -77,6 +77,7 @@
     <div class="v17-mission-head"><small id="cbStageKind">STAGE 1</small><b id="cbStageName">FIRST CONTACT</b></div>
     <div class="f-bar cyan"><i id="cbObjectiveFill"></i><span id="cbObjectiveText">0 / 12</span></div>
   </div>
+  <div class="chip rival hidden v17-rival f-plate f-rule-top" id="rivalCard"><span class="v17-rival-tag">RIVAL LIVE</span><small id="rivalName">RIVAL</small><b id="rivalScore">0</b><span id="rivalState">CONNECTED</span></div>
 </div>
 <aside id="comboBanner" class="v17-combo hidden"><small>COMBO</small><b id="comboBig">0</b><em id="comboRankBig">READY</em><span id="comboBonus">+0%</span></aside>
 <div id="weaponChip" class="v15-weapon-chip hidden"><span id="weaponName">PULSE</span><span id="weaponPips" class="v15-wpips"></span><i class="v15-wcool"><b id="weaponCooldown"></b></i></div>
