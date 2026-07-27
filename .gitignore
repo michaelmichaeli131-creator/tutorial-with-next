@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Ephemeral git worktrees created for parallel agents. These are checkouts of this same
+# repository, so committing them would nest the repo inside itself; they are recreated on demand.
+# Scoped to worktrees/ rather than all of .claude/ so project config or skills stay trackable.
+/.claude/worktrees/
