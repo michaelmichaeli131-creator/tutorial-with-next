@@ -1,0 +1,271 @@
+/* V18 ART PACK PIPELINE — make illustrated art a drop-in.
+   The renderer asks this layer for a sprite first and falls back to the procedural drawing if the
+   pack does not supply one. Fallback is per-entry, not all-or-nothing, so a partial delivery works:
+   ship only the creatures and the pilots keep drawing procedurally until their art arrives.
+
+   Activation is entirely data-driven. Drop `client/art/pack.json` plus its images in place and the
+   game uses them on next load; delete it and the game returns to procedural art. No code changes.
+   See ART_PACK.md for the asset specification. */
+const V18_PACK_URL='/art/pack.json';
+
+const v18Pack={
+ loaded:false,
+ active:false,
+ manifest:null,
+ base:'/art/',
+ entries:new Map(),   /* key -> {image, frames, cols, rows, fw, fh, fps, scale, anchorY, ready} */
+ total:0,
+ done:0,
+ failed:0
+};
+
+function v18Key(kind,id){return kind+':'+id;}
+
+/* One tint buffer, reused. Flashing a sprite white needs an isolated surface — `source-atop`
+   straight onto the game canvas would tint everything already drawn. */
+const v18Tint=document.createElement('canvas');
+const v18TintCtx=v18Tint.getContext('2d');
+
+function v18LoadEntry(kind,id,spec){
+ if(!spec||!spec.src)return null;
+ const entry={
+  frames:Math.max(1,spec.frames||1),
+  cols:Math.max(1,spec.cols||spec.frames||1),
+  fps:spec.fps||10,
+  scale:spec.scale||1,
+  anchorY:spec.anchorY??.5,
+  anchorX:spec.anchorX??.5,
+  loop:spec.loop!==false,
+  ready:false,
+  failed:false,
+  image:new Image()
+ };
+ entry.rows=Math.max(1,Math.ceil(entry.frames/entry.cols));
+ v18Pack.total++;
+ entry.image.decoding='async';
+ entry.image.onload=()=>{
+  entry.fw=entry.image.naturalWidth/entry.cols;
+  entry.fh=entry.image.naturalHeight/entry.rows;
+  entry.ready=entry.fw>0&&entry.fh>0;
+  entry.failed=!entry.ready;
+  v18Pack.done++;
+  if(entry.failed)v18Pack.failed++;
+ };
+ entry.image.onerror=()=>{
+  entry.failed=true;
+  v18Pack.done++;
+  v18Pack.failed++;
+  console.warn(`[art-pack] missing asset for ${kind}:${id} (${spec.src}) — falling back to procedural art`);
+ };
+ entry.image.src=v18Pack.base+spec.src;
+ v18Pack.entries.set(v18Key(kind,id),entry);
+ return entry;
+}
+
+function v18Get(kind,id){
+ const entry=v18Pack.entries.get(v18Key(kind,id));
+ return entry&&entry.ready?entry:null;
+}
+
+/* Draw one animated frame, anchored and scaled to a target height in world units. */
+function v18DrawSprite(c,entry,x,y,height,options={}){
+ if(!entry||!entry.ready)return false;
+ const frame=options.frame??Math.floor((options.time??performance.now()/1000)*entry.fps);
+ const index=entry.loop?((frame%entry.frames)+entry.frames)%entry.frames:Math.min(entry.frames-1,Math.max(0,frame));
+ const sx=(index%entry.cols)*entry.fw;
+ const sy=Math.floor(index/entry.cols)*entry.fh;
+ const h=height*entry.scale;
+ const w=h*(entry.fw/entry.fh);
+ const dx=-w*entry.anchorX;
+ const dy=-h*entry.anchorY;
+
+ c.save();
+ c.translate(x,y);
+ if(options.rotate)c.rotate(options.rotate);
+ if(options.scaleX||options.scaleY)c.scale(options.scaleX??1,options.scaleY??1);
+ if(options.alpha!==undefined)c.globalAlpha=options.alpha;
+ if(options.glow){c.shadowBlur=options.glow;c.shadowColor=options.glowColor||'#fff';}
+ c.drawImage(entry.image,sx,sy,entry.fw,entry.fh,dx,dy,w,h);
+
+ /* White flash on hit, isolated through the tint buffer. */
+ if(options.flash>0){
+  const tw=Math.max(2,Math.ceil(entry.fw));
+  const th=Math.max(2,Math.ceil(entry.fh));
+  if(v18Tint.width!==tw||v18Tint.height!==th){v18Tint.width=tw;v18Tint.height=th;}
+  v18TintCtx.clearRect(0,0,tw,th);
+  v18TintCtx.drawImage(entry.image,sx,sy,entry.fw,entry.fh,0,0,tw,th);
+  v18TintCtx.globalCompositeOperation='source-atop';
+  v18TintCtx.fillStyle=options.flashColor||'#ffffff';
+  v18TintCtx.fillRect(0,0,tw,th);
+  v18TintCtx.globalCompositeOperation='source-over';
+  c.globalAlpha=Math.min(1,options.flash);
+  c.drawImage(v18Tint,dx,dy,w,h);
+ }
+ c.restore();
+ return true;
+}
+
+/* ---------- Manifest load ---------- */
+async function v18LoadPack(){
+ let manifest=null;
+ try{
+  const response=await fetch(V18_PACK_URL,{cache:'no-cache'});
+  if(response.ok)manifest=await response.json();
+ }catch{ /* No pack present: this is the normal procedural path, not an error. */ }
+ v18Pack.loaded=true;
+ if(!manifest||manifest.enabled===false){
+  console.info('[art-pack] none installed — using procedural art');
+  return;
+ }
+ v18Pack.manifest=manifest;
+ v18Pack.base=manifest.basePath||'/art/';
+ for(const [id,spec] of Object.entries(manifest.creatures||{}))v18LoadEntry('creature',id,spec);
+ for(const [id,spec] of Object.entries(manifest.bosses||{}))v18LoadEntry('boss',id,spec);
+ for(const [id,spec] of Object.entries(manifest.pilots||{})){
+  v18LoadEntry('pilot',id,spec);
+  if(spec.portrait)v18LoadEntry('portrait',id,{src:spec.portrait,frames:1,cols:1,scale:1});
+ }
+ for(const [id,spec] of Object.entries(manifest.abilities||{}))v18LoadEntry('ability',id,spec);
+ (manifest.background?.layers||[]).forEach((spec,index)=>v18LoadEntry('bg',String(index),spec));
+ v18Pack.active=v18Pack.total>0;
+ console.info(`[art-pack] "${manifest.name||'unnamed'}" v${manifest.version||1} — ${v18Pack.total} assets`);
+}
+v18LoadPack();
+
+/* Boot progress reflects real art loading once a pack is installed. */
+const v18AssetProgressBase=v13AssetProgress;
+v13AssetProgress=function(){
+ if(!v18Pack.active)return v18AssetProgressBase();
+ const total=v18Pack.total+1;
+ const done=v18Pack.done+(v12Track.readyState>=2?1:0);
+ return{
+  percent:Math.max(8,Math.min(100,Math.round(done/total*100))),
+  ready:v18Pack.done-v18Pack.failed,
+  failed:v18Pack.failed,
+  audioReady:v12Track.readyState>=2?1:0,
+  total
+ };
+};
+
+/* ---------- Renderer integration ---------- */
+const v18DrawOrbProcedural=drawOrb;
+drawOrb=function(o,w){
+ const entry=v18Get('creature',o.type);
+ if(!entry){v18DrawOrbProcedural(o,w);return;}
+ const attack=o.v11Attack||0;
+ v18DrawSprite(ctx,entry,o.x,o.y,o.r*2,{
+  time:o.v11Age||0,
+  rotate:Math.sin(o.phase*.6+(o.variant||0))*.07+attack*.1,
+  scaleY:1+attack*.12,
+  flash:Math.max(0,o.v11Hit||0),
+  glow:isMobile?10:16,
+  glowColor:(v15Skin(o)||{}).glow
+ });
+ if(o.maxHp>1){
+  const width=Math.max(34,o.r*1.6);
+  const y=o.y-o.r*1.72;
+  const ratio=Math.max(0,o.hp/o.maxHp);
+  ctx.save();
+  ctx.fillStyle='rgba(2,6,16,.82)';
+  v14Art.round(ctx,o.x-width/2,y,width,5,2.5);ctx.fill();
+  ctx.fillStyle=ratio>.5?'#7ee8ff':'#ff6a7f';
+  v14Art.round(ctx,o.x-width/2,y,width*ratio,5,2.5);ctx.fill();
+  ctx.restore();
+ }
+};
+
+const v18DrawBossProcedural=drawBoss;
+drawBoss=function(b,w){
+ const entry=v18Get('boss',String(game.world))||v18Get('boss','default');
+ if(!entry){v18DrawBossProcedural(b,w);return;}
+ v18DrawSprite(ctx,entry,b.x,b.y,b.r*2,{
+  time:b.t,
+  scaleX:1+Math.sin(b.t*1.7)*.02,
+  scaleY:1-Math.sin(b.t*1.7)*.02,
+  glow:isMobile?18:30,
+  glowColor:w.accent
+ });
+ /* Weak points stay procedural: they are gameplay markers, not decoration. */
+ for(const weak of b.weak){
+  if(!weak.alive)continue;
+  const x=b.x+Math.cos(weak.a+b.t*.6)*(b.r+36);
+  const y=b.y+Math.sin(weak.a+b.t*.6)*(b.r*.65+28);
+  ctx.save();
+  ctx.globalCompositeOperation='lighter';
+  ctx.shadowBlur=26;ctx.shadowColor='#ffd85c';
+  ctx.fillStyle='#ffe27a';
+  v14Art.poly(ctx,[[x,y-16],[x+13,y-5],[x+9,y+13],[x-9,y+13],[x-13,y-5]]);
+  ctx.fill();
+  ctx.restore();
+ }
+};
+
+/* Pilots keep the exact signature of the procedural routine so the launch hero, the armory
+   previews, the HUD portrait and the in-game avatar all switch over together. */
+const v18CharacterProcedural=v14DrawCharacter;
+v14DrawCharacter=function(c,characterId,time,options={}){
+ const id=characterId||v14Save.character;
+ const entry=(options.portrait&&v18Get('portrait',id))||v18Get('pilot',id);
+ if(!entry){v18CharacterProcedural(c,characterId,time,options);return;}
+ const ch=v14Character(id);
+ const scale=options.scale||1;
+ c.save();
+ c.translate(options.x||0,options.y||0);
+ if(options.aura!==false){
+  c.save();
+  c.globalCompositeOperation='lighter';
+  const radius=(options.auraRadius||86)*scale;
+  const aura=c.createRadialGradient(0,0,4,0,0,radius);
+  aura.addColorStop(0,'#ffffff');
+  aura.addColorStop(.16,ch.c1+'cc');
+  aura.addColorStop(.52,ch.c2+'55');
+  aura.addColorStop(1,'transparent');
+  c.globalAlpha=options.auraAlpha??.85;
+  c.fillStyle=aura;
+  c.beginPath();c.arc(0,0,radius,0,Math.PI*2);c.fill();
+  c.restore();
+ }
+ v18DrawSprite(c,entry,0,0,120*scale,{time,glow:options.glow??16,glowColor:ch.c1});
+ c.restore();
+};
+
+/* Ability card art. */
+const v18PaintAbilityBase=v17PaintAbilityArt;
+v17PaintAbilityArt=function(){
+ v18PaintAbilityBase();
+ for(const button of document.querySelectorAll('.v17-ability')){
+  const entry=v18Get('ability',button.dataset.art);
+  if(!entry)continue;
+  const canvasEl=button.querySelector('.v17-ab-art');
+  const context=canvasEl.getContext('2d');
+  const size=v14FitCanvas(canvasEl,context);
+  if(!size)continue;
+  context.clearRect(0,0,size.w,size.h);
+  v18DrawSprite(context,entry,size.w/2,size.h/2,size.h,{frame:0});
+ }
+};
+
+/* Optional painted parallax layers replace the procedural sky when supplied. */
+const v18BackgroundProcedural=drawBackground;
+drawBackground=function(w){
+ const layers=(v18Pack.manifest?.background?.layers||[])
+  .map((spec,index)=>({spec,entry:v18Get('bg',String(index))}))
+  .filter((item)=>item.entry);
+ if(!layers.length){v18BackgroundProcedural(w);return;}
+ const t=game.elapsed;
+ ctx.save();
+ for(const {spec,entry} of layers){
+  const speed=spec.speed??.05;
+  const height=H*(spec.height??1);
+  const width=height*(entry.fw/entry.fh);
+  const offset=((t*speed*H)%height);
+  const top=(spec.y??0)*H;
+  /* Vertical scroll with wraparound, tiled horizontally to cover any aspect ratio. */
+  for(let y=-height+offset;y<H;y+=height){
+   for(let x=0;x<W;x+=width){
+    ctx.drawImage(entry.image,0,0,entry.fw,entry.fh,x,y+top,width,height);
+   }
+  }
+ }
+ ctx.restore();
+};

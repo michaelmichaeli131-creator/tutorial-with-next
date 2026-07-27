@@ -1,5 +1,19 @@
 # Blast Rush Arena V6 — Impact (V16)
 
+## Art packs
+
+Every creature, pilot and background is drawn procedurally by default. An **art pack** replaces any
+of that with illustrated sprite sheets with no code change: drop `client/art/pack.json` and its
+images in place and the game uses them on next load.
+
+Fallback is **per entry**, not all-or-nothing — ship only the creatures and the pilots keep drawing
+procedurally until their art arrives, so art can land incrementally. A missing or broken file logs a
+warning and that one asset falls back; everything else still uses the pack.
+
+`deno task build` validates an installed pack and fails on a missing file, a malformed manifest or a
+bad frame grid — the failure modes that are otherwise silent at runtime. See `ART_PACK.md` for the
+asset specification.
+
 ## V16 — game feel, destruction and pressure
 
 Built against the standard game-feel recipe rather than by taste.

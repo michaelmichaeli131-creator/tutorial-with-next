@@ -14,6 +14,15 @@ runtime on a 2D canvas:
 - The arena background, ground plane, vignette and colour grade (`client/game-src/03l.part`) are procedural.
 - Meteor hazards, ion fog and EMP overlays are procedural.
 
+## Art packs
+
+The game supports drop-in illustrated art via `client/art/pack.json` (see `ART_PACK.md`). **No art
+pack is installed** — the repository ships procedural art only, which is why there is nothing to
+license above.
+
+If a pack is added, every asset in `client/art/` must be cleared for commercial use and
+redistribution as part of a web game, and recorded in this file before merging.
+
 ## Retired third-party sprites
 
 The animated monster sprite sheets listed below were used in V12–V14 and are **no longer fetched or

@@ -25,6 +25,16 @@ const MIME: Record<string, string> = {
   ".webmanifest": "application/manifest+json; charset=utf-8",
   ".svg": "image/svg+xml",
   ".png": "image/png",
+  // Art-pack formats. Without these an art pack is served as octet-stream, which browsers will
+  // often still decode but which breaks caching heuristics and Safari's image pipeline.
+  ".webp": "image/webp",
+  ".avif": "image/avif",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".ktx2": "image/ktx2",
+  ".mp3": "audio/mpeg",
+  ".ogg": "audio/ogg",
+  ".wav": "audio/wav",
 };
 
 Deno.serve({ port: PORT }, async (request) => {

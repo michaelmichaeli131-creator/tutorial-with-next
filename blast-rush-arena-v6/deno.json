@@ -5,7 +5,7 @@
     "check": "deno task build && deno check --unstable-kv server/main.ts server/matchmaker.ts server/store.ts scripts/build_client.ts scripts/validate_client.ts client/net.js client/game.js",
     "fmt": "deno fmt",
     "test": "deno test --allow-read --unstable-kv server/",
-    "build": "deno run --allow-read --allow-write scripts/build_client.ts && deno run --allow-read scripts/validate_client.ts"
+    "build": "deno run --allow-read --allow-write scripts/build_client.ts && deno run --allow-read scripts/validate_client.ts && deno run --allow-read scripts/validate_art_pack.ts"
   },
   "compilerOptions": {
     "strict": true,
