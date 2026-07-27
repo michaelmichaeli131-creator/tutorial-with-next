@@ -110,8 +110,23 @@ it can only change which weapon shape you bring.
 ### Persistence
 
 Progression lives under its own `blastRushV14` localStorage key with a schema version and a tolerant
-migration that fills defaults rather than wiping a partially written payload. `v14ExportSave` and
-`v14ImportSave` are the seam a future server-side save will plug into.
+migration that fills defaults rather than wiping a partially written payload.
+
+Tolerant is not the same as trusting. The first version of the migration clamped numbers with
+`Math.max(0, Math.round(value || 0))`, which does nothing to a string: `Math.round('abc')` is NaN and
+every comparison against NaN is false. A NaN field is worse than a missing one — `v14Spend` tests
+`credits < amount`, so a NaN wallet approved every purchase for free and displayed "NaN"; a NaN
+`unlocked` count failed every `index <= unlocked` test and locked the entire stage ladder. Every
+field is now coerced, checked with `Number.isFinite`, then clamped, and the stage-keyed star and
+best-score maps are rebuilt entry by entry so out-of-range keys and non-numeric values are dropped
+rather than copied. Weapon and pilot entries are filtered against the ids this build actually
+defines, so a tampered save cannot equip a weapon that has no stats function behind it.
+
+`BlastRushSave.export()` and `BlastRushSave.import()` are the seam a server-side save plugs into.
+The whole client is one IIFE, so these are published on `window` deliberately — and narrowly: read
+the save, replace the save, read the schema number, nothing else. An imported payload goes through
+the same migration as a local one, which is why that hardening matters: the import seam is the one
+place a save arrives from outside the player's own device.
 
 ## Product principle
 

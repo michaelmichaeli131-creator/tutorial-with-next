@@ -116,28 +116,65 @@ function v14Defaults(){
  };
 }
 
-/* Migration is deliberately tolerant: a partially written or older payload still boots with
-   defaults filled in rather than wiping a player's progress. */
-function v14Migrate(raw){
- const base=v14Defaults();
- if(!raw||typeof raw!=='object')return base;
- const next=Object.assign(base,raw,{schema:V14_SCHEMA});
- next.stars=Object.assign({},raw.stars);
- next.best=Object.assign({},raw.best);
- next.totals=Object.assign(base.totals,raw.totals);
- next.weapons=Object.assign({},raw.weapons);
- next.characters=Object.assign({},raw.characters);
- if(!next.weapons.pulse)next.weapons.pulse={owned:true,level:1};
- if(!next.characters.vanguard)next.characters.vanguard={owned:true};
- for(const weapon of v14Weapons){
-  const entry=next.weapons[weapon.id];
-  if(entry)entry.level=Math.max(1,Math.min(weapon.max,Math.round(entry.level||1)));
+/* Tolerance is not the same as trust. `Math.round('abc')` is NaN and `Math.max(0,NaN)` is NaN,
+   so the old clamps let a non-numeric field through intact, and a NaN is worse than a missing
+   value: v14Spend tests `credits<amount`, which is false for NaN, so every purchase succeeds
+   for free and the wallet renders "NaN"; a NaN `unlocked` fails every `index<=unlocked` test and
+   locks the whole ladder; a NaN weapon level makes stats() return NaN damage so taps stop
+   killing anything. Coerce first, fall back when the result is not finite, then clamp. */
+function v14Num(value,fallback,min,max){
+ const n=typeof value==='number'?value:Number(value);
+ if(!Number.isFinite(n))return fallback;
+ return Math.max(min,Math.min(max,Math.round(n)));
+}
+
+/* Stage-keyed maps are rebuilt entry by entry rather than copied, so a string or array payload
+   cannot leak non-numeric values into star totals, and keys outside the ladder are dropped. */
+function v14StageMap(raw,max){
+ const out={};
+ if(!raw||typeof raw!=='object')return out;
+ for(const key of Object.keys(raw)){
+  const index=v14Num(key,0,1,v14StageCount);
+  if(String(index)!==String(key).trim())continue;
+  const value=v14Num(raw[key],0,0,max);
+  if(value>0)out[index]=value;
  }
- if(!next.weapons[next.weapon]?.owned)next.weapon='pulse';
- if(!next.characters[next.character]?.owned)next.character='vanguard';
- next.credits=Math.max(0,Math.round(next.credits||0));
- next.unlocked=Math.max(1,Math.min(v14StageCount,Math.round(next.unlocked||1)));
- next.lastStage=Math.max(1,Math.min(next.unlocked,Math.round(next.lastStage||1)));
+ return out;
+}
+
+/* Only ids this build actually defines survive, so a tampered save cannot equip a weapon with
+   no stats function behind it or a pilot with no frame to draw. */
+function v14OwnedMap(raw,defs,levelled){
+ const out={};
+ const source=raw&&typeof raw==='object'?raw:{};
+ for(const def of defs){
+  const entry=source[def.id];
+  if(!entry||typeof entry!=='object')continue;
+  out[def.id]=levelled?{owned:Boolean(entry.owned),level:v14Num(entry.level,1,1,def.max)}:{owned:Boolean(entry.owned)};
+ }
+ return out;
+}
+
+/* Migration is deliberately tolerant: a partially written or older payload still boots with
+   defaults filled in rather than wiping a player's progress. It is also the seam v14ImportSave
+   hands an arbitrary server payload to, so every field is validated, not just filled. */
+function v14Migrate(raw){
+ const next=v14Defaults();
+ if(!raw||typeof raw!=='object')return next;
+ next.stars=v14StageMap(raw.stars,3);
+ next.best=v14StageMap(raw.best,Number.MAX_SAFE_INTEGER);
+ for(const key of Object.keys(next.totals))next.totals[key]=v14Num(raw.totals?.[key],0,0,Number.MAX_SAFE_INTEGER);
+ next.weapons=v14OwnedMap(raw.weapons,v14Weapons,true);
+ next.characters=v14OwnedMap(raw.characters,v14Characters,false);
+ next.weapons.pulse={owned:true,level:next.weapons.pulse?.level||1};
+ next.characters.vanguard={owned:true};
+ next.weapon=next.weapons[raw.weapon]?.owned?raw.weapon:'pulse';
+ next.character=next.characters[raw.character]?.owned?raw.character:'vanguard';
+ /* A save that never wrote a wallet is a new player, so the fallback is the starting grant. */
+ next.credits=v14Num(raw.credits,next.credits,0,Number.MAX_SAFE_INTEGER);
+ next.unlocked=v14Num(raw.unlocked,1,1,v14StageCount);
+ next.lastStage=v14Num(raw.lastStage,1,1,next.unlocked);
+ next.updatedAt=v14Num(raw.updatedAt,0,0,Number.MAX_SAFE_INTEGER);
  return next;
 }
 
@@ -158,6 +195,16 @@ function v14ImportSave(payload){
   return true;
  }catch{return false;}
 }
+
+/* The whole build lives inside one IIFE, so the seam above was documented as the hook for a
+   server-side save while being unreachable from outside it. Publish exactly that seam — read the
+   save, replace the save, know which schema it is — and nothing else. */
+window.BlastRushSave={
+ schema:V14_SCHEMA,
+ export:v14ExportSave,
+ import:v14ImportSave,
+ key:V14_SAVE_KEY
+};
 
 function v14Character(id=v14Save.character){return v14Characters.find((c)=>c.id===id)||v14Characters[0];}
 function v14WeaponDef(id=v14Save.weapon){return v14Weapons.find((w)=>w.id===id)||v14Weapons[0];}
@@ -180,15 +227,18 @@ function v14StageUnlocked(index){return index<=v14Save.unlocked;}
 function v14TotalStars(){return Object.values(v14Save.stars).reduce((sum,value)=>sum+value,0);}
 
 function v14AddCredits(amount){
- const gain=Math.max(0,Math.round(amount));
+ const gain=v14Num(amount,0,0,Number.MAX_SAFE_INTEGER);
  v14Save.credits+=gain;
  v14Save.totals.creditsEarned+=gain;
  return gain;
 }
 
+/* Written as "can afford" rather than "cannot afford" on purpose: a NaN on either side makes
+   every comparison false, so the negated form would have approved the purchase. */
 function v14Spend(amount){
- if(v14Save.credits<amount)return false;
- v14Save.credits-=amount;
+ const cost=v14Num(amount,Number.NaN,0,Number.MAX_SAFE_INTEGER);
+ if(!(Number.isFinite(cost)&&v14Save.credits>=cost))return false;
+ v14Save.credits-=cost;
  v14Persist();
  return true;
 }
