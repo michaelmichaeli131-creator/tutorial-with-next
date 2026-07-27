@@ -1,0 +1,49 @@
+/* V18 — drive the restructured home screen: identity portrait and the level/XP meter.
+   Level and XP already existed in the save but were only ever shown as a bare number, so there was
+   nothing to show progress toward. */
+const v18MenuPortrait=$('menuPortrait');
+const v18MenuPortraitCtx=v18MenuPortrait?v18MenuPortrait.getContext('2d'):null;
+let v18PortraitFor='';
+
+function v18LevelNeed(level){return 350+level*140;}
+
+function v18DrawMenuPortrait(force=false){
+ if(!v18MenuPortraitCtx)return;
+ const id=v14Save.character;
+ const size=v14FitCanvas(v18MenuPortrait,v18MenuPortraitCtx);
+ if(!size)return;
+ if(!force&&id===v18PortraitFor)return;
+ v18PortraitFor=id;
+ v18MenuPortraitCtx.clearRect(0,0,size.w,size.h);
+ v14DrawCharacter(v18MenuPortraitCtx,id,.8,{
+  x:size.w*.5,
+  y:size.h*.71,
+  scale:size.h/61,
+  auraRadius:44,
+  auraAlpha:.32,
+  glow:14,
+  portrait:true
+ });
+}
+
+const v18UpdateMenuBase=updateMenu;
+updateMenu=function(){
+ v18UpdateMenuBase();
+ v18DrawMenuPortrait();
+ const need=v18LevelNeed(save.level);
+ const xp=Math.max(0,Math.min(need,save.xp));
+ $('menuXp').style.width=(xp/need*100).toFixed(1)+'%';
+ $('menuXpText').textContent=`${format(xp)} / ${format(need)}`;
+};
+
+/* The equipped pilot can change in the armory, so repaint when returning to the menu. */
+const v18ShowScreenBase=showScreen;
+showScreen=function(id){
+ v18ShowScreenBase(id);
+ if(id==='menuScreen')requestAnimationFrame(()=>v18DrawMenuPortrait(true));
+};
+
+addEventListener('resize',()=>{
+ if(v18MenuPortrait)v18MenuPortrait.width=0;
+ v18PortraitFor='';
+},{passive:true});

@@ -1,0 +1,62 @@
+/* V18 — home screen restructured to the reference composition:
+   player identity top-left, wallet top-right, a framed logo, the hero presented large, then the
+   modes. The previous layout was a marketing landing page — eyebrow, headline, body paragraph —
+   which is what read as a website rather than a game. */
+
+/* The hero panel is now a full-bleed stage, not a card. */
+#menuScreen .hero.panel{padding:calc(10px + env(safe-area-inset-top)) 12px calc(96px + env(safe-area-inset-bottom))!important;text-align:center}
+
+/* ---------- Top bar ---------- */
+.v18-top{display:flex;align-items:stretch;gap:8px;margin-bottom:10px}
+.v18-identity{flex:1 1 auto;display:flex;align-items:center;gap:8px;padding:6px 10px 6px 6px;min-width:0;border:0;color:#fff;text-align:left;cursor:pointer}
+.v18-id-meta{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}
+.v18-id-meta>b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:900 12px/1 system-ui;letter-spacing:.06em;color:#eaf6ff}
+.v18-xp{height:11px;width:100%}
+.v18-xp span{font-size:8px}
+.v18-orb{width:14px;height:14px;flex:0 0 auto;border-radius:50%}
+.v18-wallet{display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:4px}
+.v18-wallet .f-coin{width:100%;justify-content:flex-end}
+.v18-wallet .icon-btn{width:34px;height:34px;min-height:34px;font-size:15px}
+/* The pill collapsed to a bare dot once it left the old topbar, and connection state is already
+   reported in the Quick Duel card copy, so it is redundant here. Kept in the DOM because the
+   network layer writes to it. */
+.v18-net{display:none!important}
+
+/* ---------- Logo ---------- */
+/* Same construction as the launch mark: a thick dark stroke layer with the metallic fill on top,
+   because a single gradient-clipped layer reads thin. */
+.v18-logo{margin:2px 0 0;padding-top:.06em;display:flex;flex-direction:column;align-items:center}
+.v18-logo span{position:relative;display:block;font:1000 clamp(42px,13vw,84px)/.94 system-ui,sans-serif;letter-spacing:-.045em;font-style:italic;
+ color:#070b18;-webkit-text-stroke:8px #070b18;
+ filter:drop-shadow(0 3px 0 rgba(120,52,0,.9)) drop-shadow(0 6px 0 rgba(64,26,0,.7)) drop-shadow(0 11px 18px rgba(0,0,0,.8))}
+.v18-logo span:after{content:attr(data-text);position:absolute;left:0;top:0;width:100%;
+ -webkit-text-stroke:0;
+ background:linear-gradient(180deg,#fffdf2 0%,#ffe382 24%,#ffb02e 50%,#f77e12 64%,#ffd35f 82%,#ffa424 100%);
+ -webkit-background-clip:text;background-clip:text;color:transparent}
+.v18-logo span:last-child{margin-top:-.1em}
+
+/* ---------- Hero ---------- */
+/* The hero panel is a flex container inherited from earlier layers, and V13 pinned .hero-visual to
+   `order:-1` for its old two-column layout. Left alone that drags the canvas above the logo, and a
+   collapsed min-height lets it overflow across everything. Order is set explicitly on every child
+   so the composition cannot be reordered by an inherited rule. */
+#menuScreen .v18-top{order:0}
+#menuScreen .v18-net{order:1}
+#menuScreen .v18-logo{order:2}
+#menuScreen .hero-visual{order:3!important;min-height:min(238px,60vw)!important;margin:2px 0 10px;position:relative}
+#menuScreen .v18-loadout{order:4}
+#menuScreen .mode-command{order:5}
+#menuScreen .hero-visual:before{content:"";position:absolute;left:50%;bottom:6px;width:min(230px,62vw);height:26px;transform:translateX(-50%);border-radius:50%;background:radial-gradient(ellipse,rgba(96,196,255,.34),transparent 70%);filter:blur(2px)}
+#menuScreen .v14-menu-art{width:min(238px,60vw);height:min(238px,60vw)}
+
+/* ---------- Loadout row ---------- */
+.v18-loadout{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.v18-slot{display:flex;flex-direction:column;gap:3px;padding:8px 10px;border:0;color:#fff;text-align:left;cursor:pointer}
+.v18-slot small{color:#7fa8cf;font:900 8px/1 system-ui;letter-spacing:.16em}
+.v18-slot b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:900 13px/1 system-ui;color:var(--f-gold-lt)}
+
+@media (min-width:760px){
+ #menuScreen .hero.panel{max-width:620px;margin:0 auto}
+ #menuScreen .v14-menu-art{width:260px;height:260px}
+ .v18-logo span{font-size:clamp(64px,7vw,92px)}
+}

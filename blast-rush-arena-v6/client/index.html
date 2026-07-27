@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="format-detection" content="telephone=no">
-  <title>Blast Rush Arena V16</title>
+  <title>Blast Rush Arena V18</title>
   <link rel="preconnect" href="https://opengameart.org" crossorigin>
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="stylesheet" href="/styles.css">
@@ -23,6 +23,7 @@
   <link rel="stylesheet" href="/v15-vision.css">
   <link rel="stylesheet" href="/v16-impact.css">
   <link rel="stylesheet" href="/v17-hud.css">
+  <link rel="stylesheet" href="/v18-home.css">
 </head>
 <body class="launch-active">
 <section id="launchScreen" class="v16-launch" aria-label="Blast Rush launch screen">
@@ -90,10 +91,24 @@
 </aside>
 <div id="toast" class="toast"></div><div id="countdown" class="countdown hidden">3</div>
 <main id="menuScreen" class="screen active"><section class="hero panel">
-  <div class="menu-topbar"><div class="brand-mini"><i></i> BLAST RUSH // V16</div><div id="networkPill" class="network-pill"><i></i><span>LIVE NETWORK</span></div></div>
-  <div class="hero-layout">
-    <div class="hero-copy"><div class="eyebrow">CAMPAIGN COMBAT ARCADE</div><h1><span>BLAST</span><span>RUSH</span></h1><div class="edition">IMPACT • V16</div><p>Fight a fifteen-stage campaign, bank credits offline, then spend them on weapons, pilots and skins before you take a rival live.</p></div>
-    <div class="hero-visual" aria-hidden="true"><div class="hero-core"></div><canvas id="menuArt" class="v14-menu-art"></canvas></div>
+  <div class="v18-top">
+    <button id="profileBtn" class="v18-identity f-plate f-rivets">
+      <span class="f-portrait"><canvas id="menuPortrait" aria-hidden="true"></canvas><span class="f-lvl"><b id="levelLabel">1</b></span></span>
+      <span class="v18-id-meta"><b id="pilotNameLabel">PILOT</b><span class="v18-xp f-bar gold"><i id="menuXp"></i><span id="menuXpText">0 / 500</span></span></span>
+      <span id="skinOrb" class="skin-orb v18-orb"></span>
+    </button>
+    <div class="v18-wallet">
+      <span class="f-coin"><em>◆</em><b id="creditsLabel">0</b></span>
+      <span class="f-coin"><em>◈</em><b id="shardsLabel">0</b></span>
+      <button id="settingsBtn" class="icon-btn" aria-label="Settings">⚙</button>
+    </div>
+  </div>
+  <div id="networkPill" class="network-pill v18-net"><i></i><span>LIVE NETWORK</span></div>
+  <h1 class="v18-logo"><span data-text="BLAST">BLAST</span><span data-text="RUSH">RUSH</span></h1>
+  <div class="hero-visual" aria-hidden="true"><canvas id="menuArt" class="v14-menu-art"></canvas></div>
+  <div class="v18-loadout">
+    <button id="armoryBtn" class="v18-slot f-plate"><small>WEAPON</small><b id="armoryHint">PULSE</b></button>
+    <div class="v18-slot f-plate"><small>BEST RUN</small><b id="bestLabel">0</b></div>
   </div>
   <div class="mode-command">
     <button id="campaignBtn" class="primary huge campaign-mode"><span class="mode-icon">◆</span>CAMPAIGN<small id="campaignBtnHint">15 stages • continue where you stopped</small></button>
@@ -102,7 +117,6 @@
     <button id="gauntletBtn" class="secondary huge titan"><span class="mode-icon">☠</span>TITAN GAUNTLET<small>Boss rush • maximum pressure</small></button>
     <button id="socialBtn" class="secondary huge social-mode"><span class="mode-icon">⌁</span>PLAY WITH FRIENDS<small>Private invite, room code or public arena</small></button>
   </div>
-  <div class="profile-strip v14-strip"><button id="profileBtn" class="profile-card"><span id="skinOrb" class="skin-orb"></span><span><small>PILOT</small><b id="pilotNameLabel">PILOT</b></span></button><button id="armoryBtn" class="profile-card armory-card"><span class="v14-armory-icon">⛨</span><span><small>ARMORY</small><b id="armoryHint">WEAPONS</b></span></button><button id="settingsBtn" class="icon-btn" aria-label="Settings">⚙</button><div><small>LEVEL</small><b id="levelLabel">1</b></div><div><small>CREDITS</small><b id="creditsLabel">0</b></div><div><small>SHARDS</small><b id="shardsLabel">0</b></div><div><small>BEST</small><b id="bestLabel">0</b></div></div>
 </section>
 <nav id="menuNav" class="v17-nav f-plate">
   <button id="navWeapons"><i>⚙</i>WEAPONS</button>

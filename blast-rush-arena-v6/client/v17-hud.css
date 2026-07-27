@@ -66,7 +66,9 @@
 
 /* Segmented bar: the tick overlay is what makes a plain fill read as a game meter. */
 .f-bar{position:relative;height:14px;overflow:hidden;background:linear-gradient(180deg,#070d1e,#040812);border:1.5px solid rgba(8,14,30,.95);box-shadow:inset 0 2px 5px rgba(0,0,0,.75)}
-.f-bar>i{display:block;height:100%;width:0;background:linear-gradient(180deg,#ff8f6b,#ff2f52 46%,#c0102f);box-shadow:0 0 12px rgba(255,72,102,.6);transition:width .22s cubic-bezier(.2,.8,.2,1)}
+/* `position:relative` is load-bearing: the bright leading edge below is absolutely positioned, and
+   without it the edge anchors to the track and pins itself to the far right of an empty bar. */
+.f-bar>i{position:relative;display:block;height:100%;width:0;background:linear-gradient(180deg,#ff8f6b,#ff2f52 46%,#c0102f);box-shadow:0 0 12px rgba(255,72,102,.6);transition:width .22s cubic-bezier(.2,.8,.2,1)}
 .f-bar>i:after{content:"";position:absolute;top:0;bottom:0;width:3px;right:0;background:#fff;box-shadow:0 0 10px #fff}
 .f-bar.cyan>i{background:linear-gradient(180deg,#9bf0ff,#2fc8ff 46%,#1274c8);box-shadow:0 0 12px rgba(64,200,255,.6)}
 .f-bar.gold>i{background:linear-gradient(180deg,var(--f-gold-lt),var(--f-gold) 48%,var(--f-gold-dk));box-shadow:0 0 12px rgba(255,194,71,.55)}
