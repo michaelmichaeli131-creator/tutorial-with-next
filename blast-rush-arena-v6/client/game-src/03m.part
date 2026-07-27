@@ -146,10 +146,9 @@ update=function(dt){
  }
 };
 
-/* Bracing sentinels flash their shield so the pause is readable rather than feeling like lag. */
-const v15BraceDrawBase=drawOrb;
-drawOrb=function(o,w){
- v15BraceDrawBase(o,w);
+/* Bracing sentinels flash their shield so the pause is readable rather than feeling like lag.
+   Registered as an overlay so it survives whichever body renderer is active. */
+v19OrbOverlays.push((o)=>{
  if(o.type!=='armored'||!o.v15Brace)return;
  ctx.save();
  ctx.globalCompositeOperation='lighter';
@@ -158,4 +157,4 @@ drawOrb=function(o,w){
  ctx.lineWidth=2.5;
  ctx.beginPath();ctx.arc(o.x,o.y,o.r*1.5,0,Math.PI*2);ctx.stroke();
  ctx.restore();
-};
+});

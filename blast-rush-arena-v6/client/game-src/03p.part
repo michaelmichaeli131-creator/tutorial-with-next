@@ -123,10 +123,9 @@ score=function(delta,event='hit'){
  v16ScoreBase(delta*multiplier,event);
 };
 
-/* Elites read at a glance: a coloured ring plus a tag. */
-const v16DrawOrbBase=drawOrb;
-drawOrb=function(o,w){
- v16DrawOrbBase(o,w);
+/* Elites read at a glance: a coloured ring plus a tag. Registered as an overlay so the marking
+   survives an installed art pack — it is a readout the player needs, not decoration. */
+v19OrbOverlays.push((o)=>{
  if(!o.elite)return;
  const pulse=.55+.45*Math.sin(game.elapsed*5+(o.anim||0));
  ctx.save();
@@ -146,7 +145,7 @@ drawOrb=function(o,w){
  ctx.shadowColor=o.elite.color;
  ctx.fillText(o.elite.name,o.x,o.y-o.r*1.95);
  ctx.restore();
-};
+});
 
 /* Elites are worth taking out of turn. */
 const v16EliteReward=hitOrb;

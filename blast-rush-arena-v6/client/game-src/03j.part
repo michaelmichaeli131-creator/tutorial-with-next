@@ -469,3 +469,16 @@ hitOrb=function(o,x,y,chain=false){
  o.v11Hit=1;
  v15HitOrbBase(o,x,y,chain);
 };
+
+/* Gameplay overlays (elite rings, brace tells) are registered rather than layered as drawOrb
+   wrappers. Wrapping only decorates whichever body renderer happens to be last in the chain, so an
+   installed art pack would silently drop them — and they are readouts, not decoration. */
+const v19OrbOverlays=[];
+function v19DrawOrbOverlays(o,w){
+ for(const overlay of v19OrbOverlays)overlay(o,w);
+}
+const v19OverlayBase=drawOrb;
+drawOrb=function(o,w){
+ v19OverlayBase(o,w);
+ v19DrawOrbOverlays(o,w);
+};

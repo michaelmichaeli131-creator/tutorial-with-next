@@ -172,6 +172,8 @@ drawOrb=function(o,w){
   v14Art.round(ctx,o.x-width/2,y,width*ratio,5,2.5);ctx.fill();
   ctx.restore();
  }
+ /* Elite rings and brace tells are gameplay readouts, so they draw over pack art too. */
+ v19DrawOrbOverlays(o,w);
 };
 
 const v18DrawBossProcedural=drawBoss;
