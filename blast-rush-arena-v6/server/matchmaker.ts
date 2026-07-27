@@ -9,6 +9,8 @@ import {
   type ClientMessage,
   type AttackKind,
   ATTACKS,
+  buildSpawnSchedule,
+  type SpawnEntry,
   type HazardKind,
   type PublicPlayer,
   type PublicTable,
@@ -48,6 +50,7 @@ interface Room {
   players: PlayerState[];
   status: "waiting" | "countdown" | "playing" | "finished";
   seed: number;
+  spawns: SpawnEntry[];
   startsAt: number;
   endsAt: number;
   timer: number | null;
@@ -186,7 +189,7 @@ export class Matchmaker {
           reconnected: true,
         });
       } else if (room.status === "playing") {
-        this.send(socket, { type: "match_start", startsAt: room.startsAt, endsAt: room.endsAt, seed: room.seed, reconnected: true });
+        this.send(socket, { type: "match_start", startsAt: room.startsAt, endsAt: room.endsAt, seed: room.seed, spawns: room.spawns, reconnected: true });
         this.send(socket, { type: "match_state", serverAt: Date.now(), endsAt: room.endsAt, players: room.players.map(publicPlayer) });
       } else if (room.status === "finished") {
         const standings = [...room.players].sort((a, b) => b.score - a.score).map(publicPlayer);
@@ -253,6 +256,7 @@ export class Matchmaker {
       players,
       status: "waiting",
       seed: crypto.getRandomValues(new Uint32Array(1))[0],
+      spawns: [],
       startsAt: 0,
       endsAt: 0,
       timer: null,
@@ -286,6 +290,7 @@ export class Matchmaker {
     if (room.players.length !== 2 || room.status === "countdown" || room.status === "playing") return;
     room.status = "countdown";
     room.seed = crypto.getRandomValues(new Uint32Array(1))[0];
+    room.spawns = buildSpawnSchedule(room.seed, MATCH_DURATION_MS);
     room.startsAt = Date.now() + COUNTDOWN_MS;
     room.endsAt = room.startsAt + MATCH_DURATION_MS;
     for (const player of room.players) this.resetPlayer(player);
@@ -302,7 +307,7 @@ export class Matchmaker {
     setTimeout(() => {
       if (room.status !== "countdown") return;
       room.status = "playing";
-      this.broadcast(room, { type: "match_start", startsAt: room.startsAt, endsAt: room.endsAt, seed: room.seed });
+      this.broadcast(room, { type: "match_start", startsAt: room.startsAt, endsAt: room.endsAt, seed: room.seed, spawns: room.spawns });
       room.timer = setTimeout(() => this.finish(room, "time"), MATCH_DURATION_MS + 250) as unknown as number;
     }, COUNTDOWN_MS);
   }

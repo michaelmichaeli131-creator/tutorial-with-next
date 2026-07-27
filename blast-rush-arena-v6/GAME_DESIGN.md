@@ -1,5 +1,21 @@
 # Blast Rush Arena V6 — Game and Social Design
 
+## Duel fairness
+
+Duels were simulated locally from a shared seed, which only produces the same field if both clients
+consume the generator in the same order at the same rate. They do not. `dt` is clamped to 33ms per
+frame to prevent a spiral of death, so a client running at 20fps advances its world roughly a third
+slower than one at 60fps while the match clock keeps real time — the slower player met fewer enemies
+and had fewer chances to score in the same 120 seconds. Visual effects consuming the same generator
+made it worse, since `explode()` draws several values per hit and hits are player-driven.
+
+The server now builds the entire spawn schedule at match start and sends it with `match_start`.
+Both clients replay it against wall-clock time, so the two arenas hold identical enemies at
+identical moments regardless of frame rate. Difficulty in a duel ramps on match progress rather than
+each player's own wave, so both duellists face exactly the same gauntlet and the score gap reflects
+play. Surges are suppressed in duels for the same reason — they fire off a local timer and would
+break that guarantee. Solo and campaign keep the local spawner, which is correct for one player.
+
 ## Duel sends
 
 A duel used to offer one random hazard and one core, so there was nothing to decide. Charge earned
