@@ -1,5 +1,74 @@
 # Blast Rush Arena V6 — Game and Social Design
 
+## V21 — a price for being wrong
+
+The game could not be lost. That is not a figure of speech: a bot tapping twelve random points a
+second, never reading the screen, survived two minutes on three lives, and a bot with human-like
+aim survived a full five minutes at wave 16 **without losing a single life**. Worse, on the same
+harness random mashing out-scored careful aiming — 173,287 against 167,038. The game was actively
+rewarding the player for not looking at it.
+
+No difficulty number fixes that. A faster version of a game you cannot lose is still a game you
+cannot lose. The cause was structural: `pointer` hit-tested the tap and silently returned when it
+found nothing, so a tap that missed cost nothing at all. With unlimited free attempts and hit
+boxes generous enough to be hit by accident, covering the screen in taps was the dominant
+strategy. `perfect` was decided purely by distance from the centre, so there was no timing
+dimension either — only "tap everything, as fast as possible".
+
+Four changes, ordered by how much each one alters the decision the player is making.
+
+**Reactor heat.** Every shot heats the reactor and heat decays continuously; at the ceiling the
+reactor locks out for just over a second while it vents. A tap that lands costs 7, a tap that
+finds nothing costs 17, and kills and centre hits vent heat back. The intent is not to slow the
+player down — accurate fire at four taps a second adds 28 heat against 34 of passive decay plus
+whatever kills return, so a precise player never climbs and can fire as fast as they like. The
+same four taps at spam accuracy add well over a hundred. Accuracy now buys rate of fire, which is
+the trade the game never had. The lockout deliberately does not break the combo; stacking a combo
+wipe on the lockout turns one mistimed burst into a ruined run.
+
+**Ward windows.** Armoured hostiles and shielded elites raise a ward on a fixed cycle. Tapping a
+raised ward costs heat and does nothing, so those targets have to be read and timed rather than
+merely found. The ward is open slightly longer than it is shut, so patience always has a way
+through and only haste is punished. Chain and blast damage ignore wards on purpose — the ward
+tests the timing of a tap, and letting it stop area weapons would quietly delete the reason to buy
+them. Both states are drawn clearly: a ward the player cannot see until it blocks them teaches
+nothing except that the game is unfair.
+
+**Divers.** Everything used to fall at one rate, so a target left for later cost exactly as much
+as a target taken now and there was no priority to get right. A diver drifts down slowly — which
+is what makes it tempting to ignore — then commits at nearly triple speed past the halfway line.
+It is marked from the moment it spawns, because a priority test the player cannot see coming is
+just a random death.
+
+**A ramp that ramps.** Difficulty was indexed on the wave number alone, and a wave takes twenty
+seconds or more to clear, so a run spent its opening minutes in the shallow end. Time in the arena
+now counts as well. The arrival interval is clamped rather than scaled — a multiplier drives the
+gap towards zero and produces a wall no reaction speed can clear, whereas a clamp can only ever
+tighten the base spawner, never loosen it, and keeps a floor under it.
+
+Measured on the same harness, before and after:
+
+| bot | before | after |
+| --- | --- | --- |
+| random mashing, 12 taps/s | 93s, wave 5, 173,287 | 38s, wave 1, 5,023 |
+| aimed, 6 taps/s | 180s survived, wave 4, 167,038 | 180s survived, wave 8, 314,515 |
+| human accuracy, 5 taps/s | **300s, never died**, wave 13 | 233s, wave 10, run ended |
+| human accuracy, 8 taps/s | **300s, never died**, wave 16 | 270s, wave 11, run ended |
+
+Mashing went from out-scoring skilled play to a thirty-fourth of it, skilled play got *better*
+rather than harder — wave 4 to wave 8, and nearly double the score, because precision now vents
+heat and the ramp supplies more to kill — and a realistic player now has a run that ends. Scoring
+rate per second is essentially unchanged (2,281/s against 2,191/s); what changed is that the run
+has a ceiling. Campaign winnability was checked the same way: stages 3, 6, 9, 12 and 15 produce
+the identical pass/fail pattern before and after, so the ladder is not newly impossible.
+
+Duel scope is deliberate. Heat is a rule about the player's own input — identical on both clients,
+needing no synchronisation — so it applies everywhere. Wards, divers and the ramp change what is
+on the field, and V20 made the field server-authoritative precisely so that two duellists meet
+identical enemies at identical moments. They stay off in duels rather than putting that guarantee
+at risk.
+
+
 ## Duel fairness
 
 Duels were simulated locally from a shared seed, which only produces the same field if both clients

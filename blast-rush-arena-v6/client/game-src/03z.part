@@ -1,0 +1,320 @@
+/* V21 CHALLENGE — make being wrong cost something.
+
+   Measured before any of this was written. A bot tapping twelve random points a second, never
+   looking at the screen, survived a full two minutes on three lives at wave 4. A bot that aimed
+   at the lowest enemy scored 3.6x more — but the spammer never died either. Skill moved the
+   score and nothing else, because a tap that hits nothing costs nothing, so the dominant
+   strategy was to cover the screen in taps and let the hit boxes do the work.
+
+   Difficulty numbers cannot fix that. A faster version of a game you cannot lose is still a game
+   you cannot lose. What was missing is a price for being wrong, and a reason to look before
+   tapping. Four additions, ordered by how much each changes the decision the player is making:
+
+   1. Reactor heat — an inaccurate tap is paid for, so accuracy sets your rate of fire.
+   2. Ward windows — some targets must be timed, not merely found.
+   3. Divers — leaving the wrong target for later has a price.
+   4. A tighter arrival ramp, which only matters once the three above exist.
+
+   Duel scope is deliberate. Heat is a rule about the player's own input, identical on both
+   clients and needing no synchronisation, so it applies everywhere. Wards, divers and the ramp
+   change what is on the field, and V20 made the field server-authoritative so that two players
+   meet identical enemies at identical moments. They stay off in duels rather than putting that
+   guarantee at risk. */
+
+const V21_HEAT={
+ max:100,
+ miss:17,      /* a tap that finds nothing at all */
+ hit:7,        /* a tap that lands */
+ blocked:12,   /* a tap on a raised ward: better than a miss, worse than a hit */
+ ventKill:5,
+ ventPerfect:9,
+ decay:34,     /* per second, while not overheated */
+ lockout:1.15
+};
+
+const V21_WARD={open:1.05,closed:.8,tell:.28};
+
+function v21Stage(){return game.mode==='campaign'&&game.v14?game.v14.stage.index:game.wave;}
+
+/* Wards, divers and the arrival ramp are solo and campaign only — see the note at the top. */
+function v21Live(){return game.running&&!game.paused&&game.mode!=='duel';}
+
+const v21BeginChallenge=begin;
+begin=function(mode='solo',seed){
+ v21BeginChallenge(mode,seed);
+ game.v21Heat=0;
+ game.v21Lock=0;
+ game.v21Landed=false;
+ game.v21ToastAt=0;
+ game.v21Overheats=0;
+};
+
+/* ---- Reactor heat -------------------------------------------------------------------------
+   The point is not to slow the player down. A player who lands their taps can fire as fast as
+   they like: four accurate taps a second add 28 heat against 34 of passive decay plus whatever
+   kills vent, so they never climb. The same four taps a second at spam accuracy add well over a
+   hundred. Accuracy buys rate of fire, which is the trade the game was missing. */
+
+function v21AddHeat(amount){
+ game.v21Heat=Math.min(V21_HEAT.max,(game.v21Heat||0)+amount);
+ if(game.v21Heat>=V21_HEAT.max&&game.v21Lock<=0)v21Overheat();
+}
+
+function v21Vent(amount){game.v21Heat=Math.max(0,(game.v21Heat||0)-amount);}
+
+function v21Overheat(){
+ game.v21Heat=V21_HEAT.max;
+ game.v21Lock=V21_HEAT.lockout;
+ game.v21Overheats=(game.v21Overheats||0)+1;
+ toast('REACTOR OVERHEAT • VENTING');
+ audio.sfx('warning');
+ haptic([20,30,20]);
+ /* Deliberately does not break the combo. The lockout is already the punishment; stacking a
+    combo wipe on top turns one mistimed burst into a ruined run. */
+}
+
+/* The lockout has to read as the reactor venting, not as the game dropping input, or a player
+   will think the touch handler is broken. Every swallowed tap says so. */
+function v21Blocked(){
+ const now=performance.now();
+ if(now-(game.v21ToastAt||0)>420){
+  game.v21ToastAt=now;
+  toast('VENTING • HOLD FIRE');
+  haptic(8);
+ }
+}
+
+const v21TapBase=v12HandleTap;
+v12HandleTap=function(clientX,clientY,event){
+ if(!game.running||game.paused)return v21TapBase(clientX,clientY,event);
+ if(game.v21Lock>0){
+  if(event&&event.cancelable)event.preventDefault();
+  v21Blocked();
+  return;
+ }
+ /* Whether the tap landed is read from what the base handler actually did, rather than by
+    repeating its hit test here — the test has moved twice already and a copy would drift.
+    hitOrb and bossClick report themselves; a defused projectile shows up as one fewer in
+    flight, which is the only one of the three that leaves no other trace. */
+ game.v21Landed=false;
+ const projectiles=game.projectiles.length;
+ v21TapBase(clientX,clientY,event);
+ const landed=game.v21Landed||(game.projectiles.length<projectiles);
+ v21AddHeat(landed==='blocked'?V21_HEAT.blocked:landed?V21_HEAT.hit:V21_HEAT.miss);
+};
+
+const v21BossClickBase=bossClick;
+bossClick=function(x,y){
+ const hit=v21BossClickBase(x,y);
+ if(hit)game.v21Landed=true;
+ return hit;
+};
+
+/* ---- Ward windows -------------------------------------------------------------------------
+   Armoured hostiles and shielded elites raise a ward on a fixed cycle. Tapping a raised ward
+   costs heat and does nothing, so these targets have to be read and timed rather than simply
+   found. The ward drops for slightly longer than it holds, so a patient player is never stuck —
+   only a hurried one is punished. */
+
+function v21WardPhase(o){
+ const cycle=V21_WARD.open+V21_WARD.closed;
+ return ((game.elapsed+o.v21WardOffset)%cycle+cycle)%cycle;
+}
+
+function v21WardUp(o){return o.v21Warded?v21WardPhase(o)>=V21_WARD.open:false;}
+
+/* True during the moment before the ward snaps shut, so the visual can warn rather than surprise. */
+function v21WardClosing(o){
+ if(!o.v21Warded)return false;
+ const phase=v21WardPhase(o);
+ return phase<V21_WARD.open&&phase>V21_WARD.open-V21_WARD.tell;
+}
+
+function v21WardBlock(o){
+ ring(o.x,o.y,'#7fd4ff',18);
+ for(let i=0;i<6;i++){
+  const a=Math.random()*Math.PI*2;
+  game.particles.push({x:o.x+Math.cos(a)*o.r,y:o.y+Math.sin(a)*o.r,vx:Math.cos(a)*150,vy:Math.sin(a)*150,
+   life:.22,max:.22,r:2,color:'#bfe9ff',drag:.9,gravity:0});
+ }
+ audio.sfx('armor');
+ haptic(6);
+}
+
+const v21HitBase=hitOrb;
+hitOrb=function(o,x,y,chain=false){
+ /* Chain and blast damage ignore wards on purpose. The ward tests the timing of a tap; making
+    it stop area weapons as well would quietly delete the reason to buy them. */
+ if(!chain&&o.v21Warded&&v21WardUp(o)){
+  game.v21Landed='blocked';
+  v21WardBlock(o);
+  return;
+ }
+ game.v21Landed=true;
+ const alive=o.hp;
+ const perfect=Math.hypot(x-o.x,y-o.y)<o.r*game.perfectWindow;
+ v21HitBase(o,x,y,chain);
+ if(chain)return;
+ /* Landing vents, and landing well vents more, so a precise player's ceiling keeps rising. */
+ if(alive>0&&o.hp<=0||!game.orbs.includes(o))v21Vent(V21_HEAT.ventKill);
+ if(perfect)v21Vent(V21_HEAT.ventPerfect);
+};
+
+/* ---- Divers -------------------------------------------------------------------------------
+   Everything used to fall at one steady rate, so a target left for later cost exactly as much
+   as a target taken now and there was no priority to get right. A diver drifts down slowly,
+   which is what makes it tempting to ignore, then commits at nearly triple speed once it is
+   past the halfway line. */
+
+const V21_DIVE={speed:2.7, trigger:.46, drift:.62};
+
+const v21SpawnBase=spawnOrb;
+spawnOrb=function(type){
+ v21SpawnBase(type);
+ const o=game.orbs.at(-1);
+ if(!o||o.type==='rival')return;
+ const cycle=V21_WARD.open+V21_WARD.closed;
+ /* Derived from the spawn position rather than rng(). The shared generator is consumed at
+    different rates by different clients — that is exactly what V20 had to stop relying on — and
+    a position-derived offset stays identical anywhere the same enemy exists. */
+ if(o.type==='armored'||o.elite?.id==='shielded'){
+  o.v21Warded=true;
+  o.v21WardOffset=(Math.abs(o.x)*.0173)%cycle;
+ }
+ if(!v21Live())return;
+ const stage=v21Stage();
+ o.speed*=1+Math.min(.5,v21Pressure()*.028);
+ /* Divers stay a minority: they are a priority test, and a field of nothing but divers is just
+    a faster field. */
+ if(o.type==='normal'&&(Math.abs(o.x)*7.3)%1<Math.min(.34,.15+stage*.02)){
+  o.v21Dive=true;
+  o.speed*=V21_DIVE.drift;
+ }
+};
+
+function v21Commit(o){
+ o.v21Dive=false;
+ o.v21Diving=true;
+ o.speed*=V21_DIVE.speed;
+ ring(o.x,o.y,'#ff8a3d',14);
+ audio.sfx('warning');
+}
+
+/* ---- Arrival ramp -------------------------------------------------------------------------- */
+
+/* Difficulty used to be indexed on the wave number alone, and a wave takes twenty seconds or more
+   to clear, so a solo run spent its first two minutes in the shallow end and a competent player
+   finished it without losing a life. Time in the arena counts as well, so pressure builds during
+   a run rather than only between them. */
+function v21Pressure(){return v21Stage()+game.elapsed/16;}
+
+/* Clamping the time remaining rather than scaling it keeps a floor under the interval. A
+   multiplier would drive the gap towards zero and produce a wall no reaction speed could clear;
+   a clamp can only ever tighten the base spawner, never loosen it. */
+function v21Interval(){return Math.max(.28,.92-v21Pressure()*.042);}
+
+const v21UpdateBase=update;
+update=function(dt){
+ v21UpdateBase(dt);
+ if(!game.running||game.paused)return;
+
+ if(game.v21Lock>0){
+  game.v21Lock-=dt;
+  /* Venting is the whole point of the lockout, so heat empties across it rather than sitting
+     at the ceiling and overheating again on the first tap after it lifts. */
+  v21Vent(V21_HEAT.max/V21_HEAT.lockout*dt);
+  if(game.v21Lock<=0)game.v21Heat=0;
+ }else v21Vent(V21_HEAT.decay*dt);
+
+ if(!v21Live())return;
+
+ const target=v21Interval();
+ if(game.spawnTimer>target&&game.spawnTimer!==Number.MAX_SAFE_INTEGER)game.spawnTimer=target;
+
+ for(const o of game.orbs)if(o.v21Dive&&o.y>H*V21_DIVE.trigger)v21Commit(o);
+};
+
+/* ---- Readouts ------------------------------------------------------------------------------
+   The heat gauge is drawn around the reactor rather than added to the HUD. Creatures enter from
+   the top, so every row of chrome is a row the player cannot see threats in — and heat belongs
+   visually to the thing that is overheating. */
+
+v19OrbOverlays.push((o)=>{
+ if(o.v21Warded){
+  const up=v21WardUp(o);
+  const closing=v21WardClosing(o);
+  ctx.save();
+  /* The open state stays clearly visible rather than fading out. A ward the player cannot see
+     until it blocks them teaches nothing except that the game is unfair; the lesson has to be
+     "that one is shielded, wait for the gap", which needs the gap to be legible as a state
+     change on something already on screen. */
+  /* Sits clear of the body rather than on it. At r+7 the hexagon landed inside the armoured
+     creature's own glow and vanished; the ward has to be readable against the brightest art in
+     the game, so it rides outside it over a dark backing stroke. */
+  const spread=o.r+16;
+  ctx.setLineDash(up?[]:[5,5]);
+  ctx.beginPath();
+  for(let i=0;i<6;i++){
+   const a=i/6*Math.PI*2+game.elapsed*.6;
+   const px=o.x+Math.cos(a)*spread,py=o.y+Math.sin(a)*spread;
+   if(i)ctx.lineTo(px,py);else ctx.moveTo(px,py);
+  }
+  ctx.closePath();
+  ctx.globalAlpha=up?.75:.4;
+  ctx.lineWidth=up?6.5:4.5;
+  ctx.strokeStyle='rgba(4,9,20,.9)';
+  ctx.stroke();
+  ctx.globalAlpha=up?1:closing?.6+Math.sin(game.elapsed*30)*.3:.55;
+  ctx.lineWidth=up?3:1.8;
+  ctx.strokeStyle=up?'#7fd4ff':'#9fc4dd';
+  ctx.stroke();
+  ctx.restore();
+ }
+ if(o.v21Dive||o.v21Diving){
+  /* A diver is only interesting if it can be spotted before it commits, so it is marked from
+     the moment it spawns and the mark sharpens once it is falling. */
+  ctx.save();
+  ctx.globalAlpha=o.v21Diving?.95:.5+Math.sin(game.elapsed*6)*.2;
+  ctx.fillStyle=o.v21Diving?'#ff8a3d':'#ffc48a';
+  ctx.beginPath();
+  ctx.moveTo(o.x,o.y+o.r+13);
+  ctx.lineTo(o.x-7,o.y+o.r+3);
+  ctx.lineTo(o.x+7,o.y+o.r+3);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+ }
+});
+
+const v21DrawReactorBase=drawReactor;
+drawReactor=function(){
+ v21DrawReactorBase();
+ if(!game.running)return;
+ const heat=(game.v21Heat||0)/V21_HEAT.max;
+ if(heat<=.01&&game.v21Lock<=0)return;
+ const y=H-(isMobile?104:70);
+ /* An arc over the pilot's head rather than a ring around them. A full ring reached down behind
+    the weapon chip and the ability cards, where it was clipped into a stray red curve; the space
+    directly above the reactor is empty and is already where the player is looking. */
+ const radius=isMobile?54:64;
+ const from=Math.PI*1.2,span=Math.PI*.6;
+ const locked=game.v21Lock>0;
+ const fill=locked?1:heat;
+ ctx.save();
+ ctx.lineWidth=isMobile?5:6;
+ ctx.lineCap='round';
+ ctx.strokeStyle='rgba(8,14,26,.6)';
+ ctx.beginPath();
+ ctx.arc(W/2,y,radius,from,from+span);
+ ctx.stroke();
+ /* Colour carries the warning before any number could: cool blue, amber past two thirds, red
+    while venting — and it pulses only while locked, so a calm run never flickers. */
+ ctx.strokeStyle=locked?'#ff4f5e':heat>.66?'#ffb02e':'#61efff';
+ ctx.shadowBlur=locked?16:heat>.66?10:5;
+ ctx.shadowColor=ctx.strokeStyle;
+ if(locked)ctx.globalAlpha=.55+Math.sin(game.elapsed*22)*.3;
+ ctx.beginPath();
+ ctx.arc(W/2,y,radius,from,from+span*fill);
+ ctx.stroke();
+ ctx.restore();
+};
