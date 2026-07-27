@@ -7,6 +7,7 @@ export type ClientMessage =
   | { type: "join_room"; code: string }
   | { type: "score"; seq: number; delta: number; event: ScoreEvent; combo?: number; wave?: number }
   | { type: "pressure"; seq: number }
+  | { type: "send_attack"; seq: number; kind: AttackKind }
   | { type: "launch_core"; seq: number }
   | { type: "rematch" }
   | { type: "leave" }
@@ -24,6 +25,29 @@ export type ScoreEvent =
   | "penalty";
 
 export type HazardKind = "gravity" | "emp" | "fracture" | "swarm";
+
+/**
+ * Threats a duellist can buy with in-match charge. Costs and cooldowns live on the server so a
+ * modified client cannot spend what it has not earned — and charge is earned by scoring inside the
+ * match, so nothing bought with real progression can be converted into an advantage here.
+ */
+export type AttackKind = "swarm" | "gravity" | "emp" | "core" | "titan";
+
+export interface AttackSpec {
+  kind: AttackKind;
+  cost: number;
+  cooldownMs: number;
+  durationMs: number;
+  label: string;
+}
+
+export const ATTACKS: Record<AttackKind, AttackSpec> = {
+  swarm: { kind: "swarm", cost: 25, cooldownMs: 3_000, durationMs: 5_500, label: "SWARM" },
+  gravity: { kind: "gravity", cost: 35, cooldownMs: 5_000, durationMs: 5_000, label: "GRAVITY WELL" },
+  emp: { kind: "emp", cost: 45, cooldownMs: 6_000, durationMs: 4_000, label: "EMP VEIL" },
+  core: { kind: "core", cost: 55, cooldownMs: 4_000, durationMs: 0, label: "RIVAL CORE" },
+  titan: { kind: "titan", cost: 90, cooldownMs: 12_000, durationMs: 0, label: "WAR TITAN" },
+};
 
 export interface PublicPlayer {
   id: string;

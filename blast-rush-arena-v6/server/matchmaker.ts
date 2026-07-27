@@ -7,6 +7,8 @@ import {
   SCORE_LIMITS,
   safeNumber,
   type ClientMessage,
+  type AttackKind,
+  ATTACKS,
   type HazardKind,
   type PublicPlayer,
   type PublicTable,
@@ -33,6 +35,7 @@ interface PlayerState {
   rateEvents: number;
   lastPressureAt: number;
   lastLaunchAt: number;
+  attackCooldowns: Record<string, number>;
   connected: boolean;
   rematch: boolean;
   disconnectTimer: number | null;
@@ -146,6 +149,7 @@ export class Matchmaker {
         rateWindowAt: Date.now(),
         rateEvents: 0,
         lastPressureAt: 0,
+        attackCooldowns: {},
         lastLaunchAt: 0,
         connected: true,
         rematch: false,
@@ -200,6 +204,7 @@ export class Matchmaker {
       case "join_room": return this.joinRoom(player, cleanCode(message.code));
       case "score": return this.score(player, message);
       case "pressure": return this.pressure(player, message.seq);
+      case "send_attack": return this.sendAttack(player, message.seq, message.kind);
       case "launch_core": return this.launchCore(player, message.seq);
       case "rematch": return this.rematch(player);
       case "leave": return this.leaveRoom(player);
@@ -269,6 +274,7 @@ export class Matchmaker {
     player.ammo = 1;
     player.ammoProgress = 0;
     player.sentCores = 0;
+    player.attackCooldowns = {};
     player.defusedCores = 0;
     player.lastSeq = 0;
     player.lastPressureAt = 0;
@@ -352,6 +358,72 @@ export class Matchmaker {
     this.send(opponent.socket, { type: "opponent_attack", kind, from: player.name, durationMs: kind === "swarm" ? 5_500 : 4_000 });
     this.send(player.socket, { type: "pressure_sent", kind });
     this.broadcast(room, { type: "arena_flash", playerId: player.id, kind });
+  }
+
+  /**
+   * Buy a chosen threat with in-match charge.
+   *
+   * Cost and cooldown are enforced here rather than in the UI: the client only decides *what* to
+   * ask for. Charge is earned by scoring during the match, so nothing a player bought with campaign
+   * credits can be turned into pressure on an opponent — the anti-pay-to-win rule that applies to
+   * pilot perks applies to sends too.
+   */
+  private sendAttack(player: PlayerState, seq: number, kind: AttackKind): void {
+    const room = this.roomOf(player);
+    if (!room || room.status !== "playing") return;
+    if (!Number.isInteger(seq) || seq <= player.lastSeq) return;
+    player.lastSeq = seq;
+
+    /* hasOwnProperty, not a truthiness check: parseClientMessage only casts, so a crafted kind of
+       "constructor" would otherwise resolve to an inherited member and pass as a valid spec. */
+    if (typeof kind !== "string" || !Object.prototype.hasOwnProperty.call(ATTACKS, kind)) return;
+    const spec = ATTACKS[kind];
+
+    const now = Date.now();
+    if (player.pressure < spec.cost) return;
+    if (now < (player.attackCooldowns[kind] ?? 0)) return;
+
+    const opponent = room.players.find((candidate) => candidate.id !== player.id && candidate.connected);
+    if (!opponent) return;
+
+    player.pressure -= spec.cost;
+    player.attackCooldowns[kind] = now + spec.cooldownMs;
+
+    if (kind === "core" || kind === "titan") {
+      const titan = kind === "titan";
+      const tier = titan
+        ? 5
+        : Math.max(1, Math.min(4, 1 + Math.floor(player.combo / 15) + Math.floor(player.wave / 10)));
+      player.sentCores++;
+      const core = {
+        id: crypto.randomUUID(),
+        tier,
+        titan,
+        from: player.name,
+        skin: player.skin,
+        hp: titan ? 6 : tier >= 3 ? 2 : 1,
+        bonus: titan ? 9_000 : 1_500 + tier * 650,
+        speed: titan ? .82 : 1 + tier * .12,
+        sentAt: now,
+      };
+      this.send(opponent.socket, { type: "rival_core", core });
+      this.broadcast(room, { type: "arena_launch", playerId: player.id, skin: player.skin, tier });
+    } else {
+      this.send(opponent.socket, {
+        type: "opponent_attack",
+        kind: kind as HazardKind,
+        from: player.name,
+        durationMs: spec.durationMs,
+      });
+      this.broadcast(room, { type: "arena_flash", playerId: player.id, kind });
+    }
+
+    this.send(player.socket, {
+      type: "attack_sent",
+      kind,
+      pressure: player.pressure,
+      readyAt: player.attackCooldowns[kind],
+    });
   }
 
   private launchCore(player: PlayerState, seq: number): void {

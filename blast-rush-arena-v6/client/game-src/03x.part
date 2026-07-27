@@ -1,0 +1,121 @@
+/* V19 — the duel send system.
+   The original brief asked for players to spend what they earn on sending each other monsters,
+   bosses and traps, with a different price per threat, cooldowns, and protection against
+   pay-to-win. Until now a duel only had one random hazard and one core, so there was no decision
+   to make. Charge is earned by scoring inside the match, and the server owns every price and
+   cooldown — the client only chooses what to ask for. Nothing bought with campaign credits can be
+   converted into pressure on an opponent. */
+const V19_ATTACKS=[
+ {kind:'swarm',label:'SWARM',cost:25,tone:'#ffd166',desc:'Five extra hostiles'},
+ {kind:'gravity',label:'GRAVITY',cost:35,tone:'#7fd4ff',desc:'Their field falls faster'},
+ {kind:'emp',label:'EMP VEIL',cost:45,tone:'#b985ff',desc:'Their powers go offline'},
+ {kind:'core',label:'RIVAL CORE',cost:55,tone:'#ff7a9c',desc:'An armoured core, tiered by combo'},
+ {kind:'titan',label:'WAR TITAN',cost:90,tone:'#ff4d6d',desc:'A six-hit titan on their field'}
+];
+
+const v19Tray=$('sendTray');
+const v19TrayOptions=$('trayOptions');
+/* Mirrors the server clock so a button greys out the moment it is spent, rather than waiting for
+   a round trip. The server still decides — this is presentation only. */
+const v19Cooldowns={};
+
+function v19BuildTray(){
+ v19TrayOptions.innerHTML='';
+ for(const attack of V19_ATTACKS){
+  const button=document.createElement('button');
+  button.className='v19-send f-plate';
+  button.dataset.kind=attack.kind;
+  button.style.setProperty('--tone',attack.tone);
+  button.innerHTML=`<b>${attack.label}</b><span>${attack.desc}</span><em>${attack.cost}</em>`;
+  button.addEventListener('click',()=>v19Send(attack));
+  v19TrayOptions.append(button);
+ }
+}
+
+function v19Send(attack){
+ if(game.mode!=='duel')return;
+ if(game.pressure<attack.cost){toast('NOT ENOUGH CHARGE');return;}
+ if(performance.now()<(v19Cooldowns[attack.kind]||0))return;
+ if(!BlastNetwork.sendAttack(attack.kind))return;
+ /* Optimistic local feedback; the authoritative pressure value arrives with the next match state. */
+ game.pressure=Math.max(0,game.pressure-attack.cost);
+ v19Cooldowns[attack.kind]=performance.now()+400;
+ toast(`${attack.label} SENT`);
+ audio.sfx('volley');
+ haptic([14,10,16]);
+ v19RefreshTray();
+}
+
+function v19RefreshTray(){
+ $('trayCharge').textContent=Math.floor(game.pressure)+' CHARGE';
+ const now=performance.now();
+ for(const button of v19TrayOptions.children){
+  const attack=V19_ATTACKS.find((a)=>a.kind===button.dataset.kind);
+  const cooling=now<(v19Cooldowns[attack.kind]||0);
+  const affordable=game.pressure>=attack.cost;
+  button.disabled=cooling||!affordable;
+  button.classList.toggle('ready',affordable&&!cooling);
+ }
+}
+
+function v19ToggleTray(force){
+ const show=force??v19Tray.classList.contains('hidden');
+ v19Tray.classList.toggle('hidden',!show);
+ if(show)v19RefreshTray();
+}
+
+BlastNetwork.addEventListener('attack_sent',(event)=>{
+ const detail=event.detail||{};
+ if(Number.isFinite(detail.pressure))game.pressure=detail.pressure;
+ if(detail.readyAt)v19Cooldowns[detail.kind]=performance.now()+Math.max(0,detail.readyAt-Date.now());
+ v19RefreshTray();
+});
+
+/* An incoming titan is a core with far more health, so it reuses the rival-core path and is simply
+   marked up on arrival. */
+const v19SpawnRivalBase=spawnRival;
+spawnRival=function(core){
+ v19SpawnRivalBase(core);
+ const orb=game.orbs.at(-1);
+ if(!orb||!core.titan)return;
+ orb.r*=1.5;
+ orb.hp=orb.maxHp=core.hp;
+ orb.elite={id:'titan',name:'WAR TITAN',color:'#ff4d6d',reward:2.4};
+ cinematic(`${(core.from||'RIVAL').toUpperCase()}\nSENT A WAR TITAN`);
+};
+
+/* The SEND ability card opens the tray instead of firing a random hazard. */
+const v19PressureBtn=$('pressureBtn');
+v19PressureBtn.addEventListener('click',(event)=>{
+ event.stopImmediatePropagation();
+ if(game.mode!=='duel')return;
+ v19ToggleTray();
+},true);
+
+const v19HudTray=updateHud;
+updateHud=function(){
+ v19HudTray();
+ if(game.mode!=='duel'){
+  if(!v19Tray.classList.contains('hidden'))v19Tray.classList.add('hidden');
+  return;
+ }
+ if(!v19Tray.classList.contains('hidden'))v19RefreshTray();
+ /* The card reports the cheapest thing currently affordable, so the pool reads as spendable. */
+ const affordable=V19_ATTACKS.filter((a)=>game.pressure>=a.cost).length;
+ $('pressureText').textContent=affordable?`${affordable} READY`:`${Math.floor(game.pressure)}`;
+ v19PressureBtn.classList.toggle('ready',affordable>0);
+};
+
+const v19BeginTray=begin;
+begin=function(mode='solo',seed){
+ v19BeginTray(mode,seed);
+ v19Tray.classList.add('hidden');
+ for(const key of Object.keys(v19Cooldowns))delete v19Cooldowns[key];
+};
+const v19HideTray=hideGame;
+hideGame=function(){
+ v19HideTray();
+ v19Tray.classList.add('hidden');
+};
+
+v19BuildTray();

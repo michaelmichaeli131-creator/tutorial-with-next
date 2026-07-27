@@ -136,6 +136,11 @@
       return this.send({ type: 'pressure', seq: ++this.seq });
     }
 
+    sendAttack(kind) {
+      if (!this.ready) return false;
+      return this.send({ type: 'send_attack', seq: ++this.seq, kind });
+    }
+
     launchCore() {
       if (!this.ready) return false;
       return this.send({ type: 'launch_core', seq: ++this.seq });

@@ -1,5 +1,17 @@
 # Blast Rush Arena V6 — Game and Social Design
 
+## Duel sends
+
+A duel used to offer one random hazard and one core, so there was nothing to decide. Charge earned
+by scoring inside the match now buys a chosen threat, each at its own price and cooldown: Swarm
+(25), Gravity Well (35), EMP Veil (45), Rival Core (55) and War Titan (90). The expensive options
+are worth pausing for, and the cheap ones let a losing player apply steady pressure.
+
+Every price and cooldown is enforced on the server; the client only chooses what to ask for. Charge
+comes exclusively from in-match scoring, so nothing bought with campaign credits can be converted
+into pressure on an opponent — the same anti-pay-to-win rule the pilot perks follow.
+
+
 ## V15 — making the purchase visible
 
 V14 built the economy but left a hole in it: a player could spend 2,900 credits on the Nova Cannon and
