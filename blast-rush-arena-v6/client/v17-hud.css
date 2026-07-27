@@ -207,3 +207,17 @@ body.duel-active .v17-combo{top:calc(max(4px,env(safe-area-inset-top)) + 212px)}
 .v19-send em{position:absolute;top:7px;right:9px;font-style:normal;font:1000 12px/1 system-ui;color:var(--f-gold-lt)}
 /* The most expensive threat gets the full width — it is the decision worth pausing over. */
 .v19-send[data-kind="titan"]{grid-column:1/-1}
+
+/* V23 — an overcharged Blast and a running Overdrive are states worth reading at a glance,
+   because banking charge is only a decision if the player can see the bank growing. The tone
+   override has to beat the [data-tone] rules above, which are equally specific and come first. */
+.v17-ability.v23-over[data-tone]{--tone:#ffe27a;filter:none}
+.v17-ability.v23-over .v17-ab-pct{color:#ffe27a;text-shadow:0 0 12px rgba(255,226,122,.6)}
+.v17-ability.v23-over:after{
+ content:'';position:absolute;inset:-2px;border-radius:12px;pointer-events:none;
+ border:1px solid rgba(255,226,122,.6);
+ animation:v23Bank 1.4s ease-in-out infinite}
+.v17-ability.v23-active[data-tone]{--tone:#8affc8;filter:none}
+.v17-ability.v23-active .v17-ab-pct{color:#8affc8}
+@keyframes v23Bank{0%,100%{opacity:.2}50%{opacity:.95}}
+@media (prefers-reduced-motion:reduce){.v17-ability.v23-over:after{animation:none;opacity:.65}}

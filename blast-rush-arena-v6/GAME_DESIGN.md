@@ -1,5 +1,67 @@
 # Blast Rush Arena V6 — Game and Social Design
 
+## V23 — two buttons become two decisions
+
+This one began by overturning an assumption behind V21 and V22. Both were tuned against bots that
+never touched Overdrive or Reactor Blast, on the theory that the ability row was decoration. It was
+not. The same bot, same tap rate, same aim error, with the sole addition of pressing both abilities
+the instant they lit up:
+
+| | outcome |
+| --- | --- |
+| never presses an ability | 161s, wave 5, 197,973 |
+| presses on sight | 240s survived, wave 13, **1,301,354** |
+
+Six and a half times the score. The ability row was not decoration, it was the dominant mechanic —
+with no decision attached, because pressing on sight was strictly optimal. That made it a tax on
+knowing to press a button rather than something to think about. Worse, a Blast that wipes the whole
+screen every twenty seconds flattens the priority structure V22 had just built: it does not matter
+which hostile you let through if the field is about to be erased anyway.
+
+Both abilities keep their power. What changed is that spending them early now costs something.
+
+**Blast overcharges.** Charge no longer stops at 100%; it accumulates to 175% and firing spends all
+of it. At the minimum it clears the bottom half of the arena — the panic button it always was —
+and held to full it reaches the top of the screen. An early Blast still saves you, it just no
+longer also erases everything you were meant to be triaging. Blast also no longer charges itself:
+every kill adds charge, including the ones Blast made, so a discharge that caught eleven hostiles
+used to hand back 99% and be ready again immediately. An ability that pays for itself is not a
+resource, and a bank nobody has to save for is not a decision.
+
+**Overdrive defers heat.** The first attempt made it cancel heat outright, and that was a mistake
+worth recording: free immunity made pressing on sight *more* correct than before and suppressed
+V21's heat system for nearly half the run, so the ability quietly disabled the mechanic the entire
+difficulty rework rests on. Measured at 1,641,664 for press-on-sight against 1,278,092 for banking
+— exactly the wrong way round. Heat taken during Overdrive is now banked at a 45% discount and
+lands as one lump when the window shuts, drawn on the reactor gauge as it accrues so the bill can
+be watched running up. Overdrive buys a burst of unlimited fire and charges for it afterwards:
+spend it on a surge and you vent through the calm that follows; spend it on a calm patch for the
+score multiplier and you are venting when the next surge arrives.
+
+With that, timing wins on both axes:
+
+| policy | outcome |
+| --- | --- |
+| presses on sight | died at 190s, wave 10, 695,976 |
+| banks and times | **240s survived on three lives**, wave 12, **864,061** |
+
+Press-on-sight fell from 1,641,664 to 695,976 — the spam route is closed — while a player who uses
+the abilities well still beats one who ignores them (864,061 against roughly 598,000). Using them
+is worth it; using them thoughtlessly is not.
+
+The campaign ladder was re-checked with a bot that presses no abilities at all, which is the
+conservative case: stages 1, 2, 3, 9 and 12 clear on three lives and stage 15 clears on the last
+heart after eight overheats. Stage 6 still fails, as it does on the pre-V21 build.
+
+### A crash found on the way
+
+The banking bot ended a run on **-1 lives**. Two hostiles landing on the same frame each call
+`damage()`, so the last life can be spent twice before `finish()` stops the run, and `updateHud`
+renders lives with `'♥ '.repeat(game.lives)` — `repeat(-1)` throws a `RangeError`, taking the rest
+of that frame's HUD with it. Confirmed in the browser, then fixed at both levels: `damage()` floors
+lives at zero, and the render clamps independently, because a `.repeat()` on a mutable game value
+in a per-frame function should not be one arithmetic change away from throwing.
+
 ## V22 — make it matter which one you let through
 
 V21 priced tapping badly. This is the other half of the same problem. Every hostile that reached
