@@ -1,4 +1,35 @@
-# Blast Rush Arena V6 — Vision (V15)
+# Blast Rush Arena V6 — Impact (V16)
+
+## V16 — game feel, destruction and pressure
+
+Built against the standard game-feel recipe rather than by taste.
+
+**Destruction.** Killing something now shatters it into pieces cut from its own silhouette and
+palette, under a three-stage impact: a white core flash on the impact frame, a fast thin shockwave,
+then gibs, smoke and embers. A hit is registered by the brain during a freeze frame, so kills hold
+the world at 12% speed for 3-5 frames scaled by weight, with a camera punch, roll and chromatic
+fringe on the heaviest ones. Every effect is capped and quality-scaled so the readable game survives
+underneath.
+
+**Audio.** Impacts are rebuilt as three layers whose onsets land on the same instant — transient
+(the snap that makes it read sharp), body (the low weight), tail (debris and space) — with the snap
+mixed hotter than the body, which is what "crisp" actually is. The old single-oscillator blips had a
+body and no transient, which is exactly why they sounded thin. Each species has its own kit
+(metallic ring for armour, glass partials for wraiths, a double thump for twins, a sub-boom for
+raiders), combos raise the pitch, and a voice budget stops chain kills turning to mush.
+
+**Challenge.** A curve that only ever rises is predictable, and predictable is what "boring" means.
+The arena now breathes: announced surge windows alternate with calm ones, elites (Shielded, Swift,
+Siege) demand priority and are worth taking out of turn, Siege elites and phase-two titans shoot
+back with interceptable fire, and the combo decays if you stop killing while paying up to 2x score
+if you hold it.
+
+**Launch screen.** Rebuilt to the conventions these games actually use: one unmistakable gold
+primary action with a solid drop edge that presses down, a chunky outlined logo with real bevel
+depth instead of thin gradient text, and a staged hero diorama with separated background, midground
+and foreground.
+
+
 
 ## V15.1 fixes
 

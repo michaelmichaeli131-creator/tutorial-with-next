@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="format-detection" content="telephone=no">
-  <title>Blast Rush Arena V15</title>
+  <title>Blast Rush Arena V16</title>
   <link rel="preconnect" href="https://opengameart.org" crossorigin>
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="stylesheet" href="/styles.css">
@@ -21,29 +21,28 @@
   <link rel="stylesheet" href="/premium-v13.css">
   <link rel="stylesheet" href="/v14-campaign.css">
   <link rel="stylesheet" href="/v15-vision.css">
+  <link rel="stylesheet" href="/v16-impact.css">
 </head>
 <body class="launch-active">
-<section id="launchScreen" class="v14-launch" aria-label="Blast Rush launch screen">
-  <canvas id="launchArt" class="v14-launch-art" aria-hidden="true"></canvas>
-  <div class="v14-launch-veil" aria-hidden="true"></div>
-  <div class="v14-launch-body">
-    <div class="v14-launch-top">
-      <span class="v14-badge"><i></i>CAMPAIGN • ARENA • DUELS</span>
-      <h1 class="v14-wordmark"><span>BLAST</span><span>RUSH</span></h1>
-      <p class="v14-launch-line">Fifteen escalating stages, six pilots, six weapon systems and live duels — built one-handed for the phone in your hand.</p>
-    </div>
-    <div class="v14-launch-bottom">
-      <div class="v14-launch-stats">
-        <div><small>PILOT</small><b id="launchPilot">NOVA VANGUARD</b></div>
-        <div><small>PROGRESS</small><b id="launchProgress">STAGE 1</b></div>
-        <div><small>CREDITS</small><b id="launchCredits">0</b></div>
+<section id="launchScreen" class="v16-launch" aria-label="Blast Rush launch screen">
+  <canvas id="launchArt" class="v16-art" aria-hidden="true"></canvas>
+  <div class="v16-vignette" aria-hidden="true"></div>
+  <div class="v16-launch-body">
+    <header class="v16-crest">
+      <div class="v16-ribbon"><span>CAMPAIGN · ARENA · DUELS</span></div>
+      <h1 class="v16-logo"><span data-text="BLAST">BLAST</span><span data-text="RUSH">RUSH</span></h1>
+    </header>
+    <div class="v16-launch-foot">
+      <div class="v16-badges">
+        <span class="v16-badge"><small>PILOT</small><b id="launchPilot">NOVA VANGUARD</b></span>
+        <span class="v16-badge"><small>STAGE</small><b id="launchProgress">1</b></span>
+        <span class="v16-badge gold"><small>CREDITS</small><b id="launchCredits">0</b></span>
       </div>
-      <div class="v14-boot">
-        <div class="v14-boot-head"><span id="bootStatus" aria-live="polite">LOADING COMBAT ASSETS • 8%</span><span>V15</span></div>
-        <div class="v14-boot-track"><i id="bootProgress"></i></div>
+      <button id="enterArenaBtn" class="v16-cta" disabled><span class="v16-cta-face"><b>PLAY</b><small>INITIALIZING COMBAT SYSTEMS</small></span></button>
+      <div class="v16-boot">
+        <div class="v16-boot-track"><i id="bootProgress"></i></div>
+        <span id="bootStatus" aria-live="polite">LOADING COMBAT ASSETS • 8%</span>
       </div>
-      <button id="enterArenaBtn" class="v14-cta" disabled><b>ENTER THE ARENA</b><small>INITIALIZING COMBAT SYSTEMS</small></button>
-      <p class="v14-launch-note">♫ Headphones recommended — audio starts on entry</p>
     </div>
   </div>
 </section>
@@ -74,9 +73,9 @@
 <aside id="powersHud" class="powers-hud hidden"><button id="overdriveBtn" class="power-button orange"><span>OVERDRIVE</span><b id="overdriveText">0%</b><small>SPACE</small></button><button id="blastBtn" class="power-button cyan"><span>REACTOR BLAST</span><b id="blastText">0%</b><small>B</small></button><button id="pressureBtn" class="power-button violet duel-only hidden"><span>PRESSURE</span><b id="pressureText">0%</b><small>Q</small></button><button id="volleyBtn" class="power-button red duel-only hidden"><span>SEND CORE</span><b id="ammoText">0</b><small>S</small></button></aside>
 <div id="toast" class="toast"></div><div id="countdown" class="countdown hidden">3</div>
 <main id="menuScreen" class="screen active"><section class="hero panel">
-  <div class="menu-topbar"><div class="brand-mini"><i></i> BLAST RUSH // V15</div><div id="networkPill" class="network-pill"><i></i><span>LIVE NETWORK</span></div></div>
+  <div class="menu-topbar"><div class="brand-mini"><i></i> BLAST RUSH // V16</div><div id="networkPill" class="network-pill"><i></i><span>LIVE NETWORK</span></div></div>
   <div class="hero-layout">
-    <div class="hero-copy"><div class="eyebrow">CAMPAIGN COMBAT ARCADE</div><h1><span>BLAST</span><span>RUSH</span></h1><div class="edition">VISION • V15</div><p>Fight a fifteen-stage campaign, bank credits offline, then spend them on weapons, pilots and skins before you take a rival live.</p></div>
+    <div class="hero-copy"><div class="eyebrow">CAMPAIGN COMBAT ARCADE</div><h1><span>BLAST</span><span>RUSH</span></h1><div class="edition">IMPACT • V16</div><p>Fight a fifteen-stage campaign, bank credits offline, then spend them on weapons, pilots and skins before you take a rival live.</p></div>
     <div class="hero-visual" aria-hidden="true"><div class="hero-core"></div><canvas id="menuArt" class="v14-menu-art"></canvas></div>
   </div>
   <div class="mode-command">

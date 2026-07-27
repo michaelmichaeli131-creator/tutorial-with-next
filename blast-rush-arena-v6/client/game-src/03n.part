@@ -1,0 +1,273 @@
+/* V16 IMPACT — destruction and game feel.
+   Built against the standard juice recipe: a hit has to be registered by the brain before it can
+   feel good, which means a freeze frame (3-5 frames), a flash on the impact frame, a camera punch
+   proportional to the event, and debris that came from the thing you destroyed. Everything here is
+   capped and scaled by device quality so the effects never bury the readable game underneath. */
+const V16_MAX_GIBS=quality.mobile?90:180;
+const V16_MAX_SMOKE=quality.mobile?26:52;
+
+/* Smoke was a createRadialGradient per puff per frame — up to 26 gradient objects every frame,
+   which is one of the most expensive things you can do in canvas 2D. Pre-render one puff and
+   stamp it instead. */
+const v16Puff=document.createElement('canvas');
+v16Puff.width=v16Puff.height=64;
+(() => {
+ const c=v16Puff.getContext('2d');
+ const g=c.createRadialGradient(32,32,0,32,32,32);
+ g.addColorStop(0,'rgba(38,48,78,.95)');
+ g.addColorStop(.55,'rgba(18,26,50,.5)');
+ g.addColorStop(1,'rgba(10,14,30,0)');
+ c.fillStyle=g;
+ c.fillRect(0,0,64,64);
+})();
+
+const v16Gibs=[];
+const v16Smoke=[];
+const v16Waves=[];
+const v16Flashes=[];
+const v16Cam={punchX:0,punchY:0,zoom:0,roll:0,freeze:0,chroma:0};
+
+/* Each species shatters into pieces cut from its own silhouette and palette, so the debris reads
+   as "that creature broke" rather than as a generic particle puff. */
+const v16GibShapes={
+ normal:[[[0,-9],[7,-2],[4,7],[-5,6],[-8,-3]],[[0,-11],[6,4],[-6,4]],[[-8,-4],[8,-6],[6,3],[-7,4]]],
+ armored:[[[-9,-7],[9,-7],[8,7],[-8,7]],[[0,-10],[9,-1],[5,8],[-6,8],[-9,-2]],[[-10,-3],[10,-5],[7,5],[-8,6]]],
+ bomb:[[[0,-10],[8,-3],[6,7],[-6,7],[-8,-3]],[[-7,-6],[7,-8],[5,6],[-6,5]],[[0,-8],[7,6],[-7,6]]],
+ shard:[[[0,-12],[6,0],[0,11],[-6,0]],[[0,-9],[5,3],[-5,3]],[[0,-13],[4,-2],[0,9],[-4,-2]]],
+ splitter:[[[0,-9],[8,-2],[5,7],[-6,7],[-8,-2]],[[-8,-5],[8,-6],[6,5],[-7,5]],[[0,-10],[6,5],[-6,5]]],
+ rival:[[[0,-11],[8,-3],[6,8],[-6,8],[-8,-3]],[[-8,-6],[8,-7],[6,5],[-7,6]],[[0,-9],[7,5],[-7,5]]]
+};
+
+function v16Palette(o){
+ return typeof v15Skin==='function'?v15Skin(o):{body:'#8a7bff',trim:'#dcd4ff',glow:'#a98bff',eye:'#ffffff'};
+}
+
+function v16SpawnGibs(o,power){
+ const pal=v16Palette(o);
+ const shapes=v16GibShapes[o.type]||v16GibShapes.normal;
+ const scale=Math.max(.55,o.r/30);
+ const count=Math.round((quality.mobile?9:14)*power);
+ for(let i=0;i<count;i++){
+  if(v16Gibs.length>=V16_MAX_GIBS)v16Gibs.shift();
+  const angle=Math.PI*2*i/count+rng()*.6;
+  const speed=(120+rng()*330)*power;
+  v16Gibs.push({
+   x:o.x,y:o.y,
+   vx:Math.cos(angle)*speed,
+   vy:Math.sin(angle)*speed-90,
+   rot:rng()*6.28,vr:(rng()-.5)*13,
+   life:.7+rng()*.5,max:1.2,
+   scale:scale*(.55+rng()*.7),
+   shape:shapes[i%shapes.length],
+   fill:i%4===0?pal.trim:i%3===0?pal.glow:pal.body,
+   edge:pal.trim
+  });
+ }
+ /* Smoke sells the aftermath and stops the screen looking sterile a frame later. */
+ const puffs=Math.round((quality.mobile?3:6)*power);
+ for(let i=0;i<puffs;i++){
+  if(v16Smoke.length>=V16_MAX_SMOKE)v16Smoke.shift();
+  v16Smoke.push({
+   x:o.x+(rng()-.5)*o.r,y:o.y+(rng()-.5)*o.r,
+   vx:(rng()-.5)*46,vy:-16-rng()*36,
+   r:o.r*(.5+rng()*.5),grow:34+rng()*40,
+   life:.55+rng()*.55,max:1.1,
+   tint:pal.glow
+  });
+ }
+}
+
+/* The impact frame: a white core that collapses fast, then a thin fast ring. Reading the kill
+   happens in these first ~120ms, so they are bright, short and never linger. */
+function v16Detonate(x,y,color,power,combo){
+ v16Flashes.push({x,y,r:(26+power*30),life:.13,max:.13,color});
+ v16Waves.push({x,y,r:power*10,life:.34,max:.34,width:3.5*power,color});
+ if(power>1.05)v16Waves.push({x,y,r:0,life:.5,max:.5,width:2,color:'#ffffff'});
+ const heat=Math.min(1,combo/24);
+ v16Cam.zoom=Math.min(.09,v16Cam.zoom+.022*power+heat*.012);
+ v16Cam.punchX+=(rng()-.5)*16*power;
+ v16Cam.punchY+=(rng()-.5)*16*power;
+ v16Cam.roll+=(rng()-.5)*.012*power;
+ v16Cam.chroma=Math.min(1,v16Cam.chroma+.4*power);
+ /* 3-5 frames of freeze is the window the brain needs; heavier kills sit at the top of it. */
+ v16Cam.freeze=Math.max(v16Cam.freeze,Math.min(.1,.035+.045*power));
+ game.flash=Math.max(game.flash,Math.min(.34,.1*power));
+}
+
+const v16HitOrbBase=hitOrb;
+hitOrb=function(o,x,y,chain=false){
+ const hpBefore=o.hp;
+ const distance=Math.hypot(x-o.x,y-o.y);
+ const perfect=distance<o.r*game.perfectWindow;
+ const snapshot={x:o.x,y:o.y,r:o.r,type:o.type,skin:o.skin};
+ const comboBefore=game.combo;
+ v16HitOrbBase(o,x,y,chain);
+ const killed=hpBefore<=1;
+ if(killed){
+  const power=(o.type==='armored'||o.type==='rival'?1.35:o.type==='bomb'?1.5:1)*(perfect?1.2:1);
+  v16SpawnGibs(snapshot,power);
+  v16Detonate(snapshot.x,snapshot.y,v16Palette(snapshot).glow,power,comboBefore);
+  if(typeof audio.impact==='function')audio.impact(snapshot.type,power,comboBefore,perfect);
+ }else{
+  /* Surviving a hit still needs feedback, just an order of magnitude smaller. */
+  v16Waves.push({x:o.x,y:o.y,r:o.r*.3,life:.18,max:.18,width:2,color:v16Palette(o).trim});
+  v16Cam.punchX+=(rng()-.5)*5;
+  v16Cam.punchY+=(rng()-.5)*5;
+  v16Cam.freeze=Math.max(v16Cam.freeze,.016);
+ }
+};
+
+const v16UpdateBase=update;
+update=function(dt){
+ /* Hit-stop runs the world in slow motion rather than stopping it dead, which keeps input alive. */
+ let step=dt;
+ if(v16Cam.freeze>0){
+  v16Cam.freeze-=dt;
+  step=dt*.12;
+ }
+ v16UpdateBase(step);
+
+ v16Cam.punchX*=.82;
+ v16Cam.punchY*=.82;
+ v16Cam.zoom*=.9;
+ v16Cam.roll*=.86;
+ v16Cam.chroma*=.88;
+
+ for(let i=v16Gibs.length-1;i>=0;i--){
+  const g=v16Gibs[i];
+  g.x+=g.vx*step;g.y+=g.vy*step;
+  g.vy+=560*step;
+  g.vx*=.985;
+  g.rot+=g.vr*step;
+  g.life-=step;
+  if(g.life<=0)v16Gibs.splice(i,1);
+ }
+ for(let i=v16Smoke.length-1;i>=0;i--){
+  const s=v16Smoke[i];
+  s.x+=s.vx*step;s.y+=s.vy*step;
+  s.vy*=.96;
+  s.r+=s.grow*step;
+  s.life-=step;
+  if(s.life<=0)v16Smoke.splice(i,1);
+ }
+ for(let i=v16Waves.length-1;i>=0;i--){
+  const w=v16Waves[i];
+  w.r+=(w.color==='#ffffff'?900:620)*step;
+  w.life-=step;
+  if(w.life<=0)v16Waves.splice(i,1);
+ }
+ for(let i=v16Flashes.length-1;i>=0;i--){
+  const f=v16Flashes[i];
+  f.life-=dt;
+  if(f.life<=0)v16Flashes.splice(i,1);
+ }
+ if(!game.running){
+  v16Gibs.length=0;v16Smoke.length=0;v16Waves.length=0;v16Flashes.length=0;
+ }
+};
+
+const v16DrawBase=draw;
+draw=function(){
+ const zoom=1+v16Cam.zoom;
+ ctx.save();
+ ctx.translate(W/2+v16Cam.punchX,H/2+v16Cam.punchY);
+ ctx.rotate(v16Cam.roll);
+ ctx.scale(zoom,zoom);
+ ctx.translate(-W/2,-H/2);
+ v16DrawBase();
+
+ /* Smoke sits behind the debris so pieces stay legible against it. */
+ ctx.save();
+ for(const s of v16Smoke){
+  ctx.globalAlpha=Math.max(0,s.life/s.max)*.55;
+  ctx.drawImage(v16Puff,s.x-s.r,s.y-s.r,s.r*2,s.r*2);
+ }
+ ctx.globalAlpha=1;
+ ctx.restore();
+
+ ctx.save();
+ for(const g of v16Gibs){
+  const alpha=Math.max(0,Math.min(1,g.life/.5));
+  ctx.save();
+  ctx.translate(g.x,g.y);
+  ctx.rotate(g.rot);
+  ctx.scale(g.scale,g.scale);
+  /* No shadowBlur here: it is per-shard and there can be ninety of them. The additive rings and
+     flashes already supply the glow, and the bright edge stroke keeps each shard readable. */
+  ctx.globalAlpha=alpha;
+  ctx.fillStyle=g.fill;
+  v14Art.poly(ctx,g.shape);
+  ctx.fill();
+  ctx.globalAlpha=alpha*.9;
+  ctx.strokeStyle=g.edge;
+  ctx.lineWidth=1.3;
+  ctx.stroke();
+  ctx.restore();
+ }
+ ctx.restore();
+
+ ctx.save();
+ ctx.globalCompositeOperation='lighter';
+ for(const w of v16Waves){
+  const k=Math.max(0,w.life/w.max);
+  ctx.globalAlpha=k*k;
+  ctx.strokeStyle=w.color;
+  ctx.lineWidth=Math.max(.6,w.width*k);
+  ctx.beginPath();ctx.arc(w.x,w.y,w.r,0,Math.PI*2);ctx.stroke();
+ }
+ for(const f of v16Flashes){
+  const k=Math.max(0,f.life/f.max);
+  const r=f.r*(1.9-k*.9);
+  const g=ctx.createRadialGradient(f.x,f.y,0,f.x,f.y,r);
+  g.addColorStop(0,`rgba(255,255,255,${k})`);
+  g.addColorStop(.32,f.color);
+  g.addColorStop(1,'transparent');
+  ctx.globalAlpha=k;
+  ctx.fillStyle=g;
+  ctx.beginPath();ctx.arc(f.x,f.y,r,0,Math.PI*2);ctx.fill();
+ }
+ ctx.restore();
+ ctx.globalAlpha=1;
+ ctx.restore();
+
+ /* Chromatic fringing on heavy kills — cheap on canvas as two offset tinted copies of the edges. */
+ if(v16Cam.chroma>.05&&!save.comfort&&!reduceMotion){
+  const shift=v16Cam.chroma*4;
+  ctx.save();
+  ctx.globalCompositeOperation='screen';
+  ctx.globalAlpha=Math.min(.32,v16Cam.chroma*.3);
+  ctx.fillStyle='#ff2e5f';
+  ctx.fillRect(-shift,0,shift,H);
+  ctx.fillStyle='#2effe0';
+  ctx.fillRect(W-shift,0,shift,H);
+  ctx.restore();
+  ctx.globalAlpha=1;
+ }
+};
+
+/* Boss death deserves a sequence rather than a single pop. */
+const v16DefeatBossBase=defeatBoss;
+defeatBoss=function(){
+ const boss=game.boss;
+ if(boss){
+  const w=worlds[game.world%worlds.length];
+  for(let i=0;i<10;i++){
+   setTimeout(()=>{
+    if(!game.running)return;
+    const x=boss.x+(rng()-.5)*boss.r*1.7;
+    const y=boss.y+(rng()-.5)*boss.r*1.3;
+    v16Detonate(x,y,w.accent,1.3,game.combo);
+    v16SpawnGibs({x,y,r:boss.r*.34,type:'armored',skin:'nova'},1.15);
+   },i*95);
+  }
+  v16Cam.freeze=.1;
+ }
+ v16DefeatBossBase();
+};
+
+const v16BeginBase=begin;
+begin=function(mode='solo',seed){
+ v16Gibs.length=0;v16Smoke.length=0;v16Waves.length=0;v16Flashes.length=0;
+ v16Cam.punchX=v16Cam.punchY=v16Cam.zoom=v16Cam.roll=v16Cam.freeze=v16Cam.chroma=0;
+ v16BeginBase(mode,seed);
+};
