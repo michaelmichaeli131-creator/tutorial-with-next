@@ -82,7 +82,12 @@
 <div id="stageIntro" class="v15-stage-intro"><small id="stageIntroKind">PURGE</small><b id="stageIntroName">FIRST CONTACT</b><span id="stageIntroBrief"></span><em id="stageIntroHazard"></em></div>
 <div id="bossHud" class="boss-hud hidden f-plate f-rule-top"><span id="bossTitle">SINGULARITY WARDEN</span><div class="boss-track f-bar"><i id="bossBar"></i><span id="bossPct">100%</span></div><small id="bossPhase">PHASE I</small></div>
 <aside id="comboHud" class="combo-hud hidden"><small>COMBO</small><b>x<span id="comboLabel">0</span></b><em id="comboRank">READY</em><div class="combo-track"><i id="comboBar"></i></div></aside>
-<aside id="powersHud" class="powers-hud hidden"><button id="overdriveBtn" class="power-button orange"><span>OVERDRIVE</span><b id="overdriveText">0%</b><small>SPACE</small></button><button id="blastBtn" class="power-button cyan"><span>REACTOR BLAST</span><b id="blastText">0%</b><small>B</small></button><button id="pressureBtn" class="power-button violet duel-only hidden"><span>PRESSURE</span><b id="pressureText">0%</b><small>Q</small></button><button id="volleyBtn" class="power-button red duel-only hidden"><span>SEND CORE</span><b id="ammoText">0</b><small>S</small></button></aside>
+<aside id="powersHud" class="powers-hud hidden">
+  <button id="overdriveBtn" class="power-button v17-ability f-plate" data-tone="orange" data-art="overdrive"><i class="v17-ab-ring"></i><canvas class="v17-ab-art" aria-hidden="true"></canvas><span class="v17-ab-name">OVERDRIVE</span><b id="overdriveText" class="v17-ab-pct">0%</b></button>
+  <button id="blastBtn" class="power-button v17-ability f-plate" data-tone="cyan" data-art="blast"><i class="v17-ab-ring"></i><canvas class="v17-ab-art" aria-hidden="true"></canvas><span class="v17-ab-name">REACTOR BLAST</span><b id="blastText" class="v17-ab-pct">0%</b></button>
+  <button id="pressureBtn" class="power-button v17-ability f-plate duel-only hidden" data-tone="violet" data-art="pressure"><i class="v17-ab-ring"></i><canvas class="v17-ab-art" aria-hidden="true"></canvas><span class="v17-ab-name">PRESSURE</span><b id="pressureText" class="v17-ab-pct">0%</b></button>
+  <button id="volleyBtn" class="power-button v17-ability f-plate duel-only hidden" data-tone="red" data-art="volley"><i class="v17-ab-ring"></i><canvas class="v17-ab-art" aria-hidden="true"></canvas><span class="v17-ab-name">SEND CORE</span><b id="ammoText" class="v17-ab-pct">0</b></button>
+</aside>
 <div id="toast" class="toast"></div><div id="countdown" class="countdown hidden">3</div>
 <main id="menuScreen" class="screen active"><section class="hero panel">
   <div class="menu-topbar"><div class="brand-mini"><i></i> BLAST RUSH // V16</div><div id="networkPill" class="network-pill"><i></i><span>LIVE NETWORK</span></div></div>
@@ -98,7 +103,14 @@
     <button id="socialBtn" class="secondary huge social-mode"><span class="mode-icon">⌁</span>PLAY WITH FRIENDS<small>Private invite, room code or public arena</small></button>
   </div>
   <div class="profile-strip v14-strip"><button id="profileBtn" class="profile-card"><span id="skinOrb" class="skin-orb"></span><span><small>PILOT</small><b id="pilotNameLabel">PILOT</b></span></button><button id="armoryBtn" class="profile-card armory-card"><span class="v14-armory-icon">⛨</span><span><small>ARMORY</small><b id="armoryHint">WEAPONS</b></span></button><button id="settingsBtn" class="icon-btn" aria-label="Settings">⚙</button><div><small>LEVEL</small><b id="levelLabel">1</b></div><div><small>CREDITS</small><b id="creditsLabel">0</b></div><div><small>SHARDS</small><b id="shardsLabel">0</b></div><div><small>BEST</small><b id="bestLabel">0</b></div></div>
-</section></main>
+</section>
+<nav id="menuNav" class="v17-nav f-plate">
+  <button id="navWeapons"><i>⚙</i>WEAPONS</button>
+  <button id="navShards"><i>◈</i><span class="v17-nav-count" id="navShardCount">0</span></button>
+  <button id="navBattle" class="on"><i>◉</i>BATTLE</button>
+  <button id="navSkins"><i>◐</i>SKINS</button>
+  <button id="navStore"><i>▣</i>PILOTS</button>
+</nav></main>
 <section id="campaignScreen" class="screen"><div class="panel wide v14-panel"><button class="back" data-back>← BACK</button><div class="eyebrow">CAMPAIGN</div><h2>STAGE SELECT</h2>
   <div class="v14-campaign-head">
     <div class="v14-progress-card"><small>CLEARED</small><b id="campaignProgress">0 / 15</b><span id="campaignStars">☆ 0</span></div>

@@ -1,0 +1,125 @@
+/* V17 — ability cards and the home navigation bar.
+   Abilities are presented as cards with their own art and a charge ring rather than flat text
+   buttons, and the home screen gains the persistent bottom nav the reference uses. */
+const V17_ABILITY_ART={
+ overdrive(c,tone){
+  /* Thruster: stacked chevrons over a flame. */
+  c.fillStyle=tone;
+  for(let i=0;i<3;i++){
+   c.globalAlpha=1-i*.24;
+   v14Art.poly(c,[[0,-16+i*11],[9,-6+i*11],[0,-9+i*11],[-9,-6+i*11]]);
+   c.fill();
+  }
+  c.globalAlpha=1;
+  const flame=c.createLinearGradient(0,6,0,20);
+  flame.addColorStop(0,'#ffffff');
+  flame.addColorStop(.4,tone);
+  flame.addColorStop(1,'transparent');
+  c.fillStyle=flame;
+  v14Art.poly(c,[[-6,6],[6,6],[0,20]]);
+  c.fill();
+ },
+ blast(c,tone){
+  /* Reactor core: bright centre with radiating spokes. */
+  c.strokeStyle=tone;
+  c.lineWidth=2.4;
+  for(let i=0;i<8;i++){
+   const a=i*Math.PI/4;
+   c.beginPath();
+   c.moveTo(Math.cos(a)*8,Math.sin(a)*8);
+   c.lineTo(Math.cos(a)*17,Math.sin(a)*17);
+   c.stroke();
+  }
+  const core=c.createRadialGradient(0,0,1,0,0,9);
+  core.addColorStop(0,'#ffffff');
+  core.addColorStop(.5,tone);
+  core.addColorStop(1,'transparent');
+  c.fillStyle=core;
+  c.beginPath();c.arc(0,0,9,0,Math.PI*2);c.fill();
+ },
+ pressure(c,tone){
+  c.fillStyle=tone;
+  v14Art.poly(c,[[3,-18],[-8,1],[-1,1],[-4,18],[9,-3],[1,-3]]);
+  c.fill();
+  c.strokeStyle='#ffffff';
+  c.lineWidth=1.2;
+  c.globalAlpha=.7;
+  c.stroke();
+  c.globalAlpha=1;
+ },
+ volley(c,tone){
+  c.fillStyle=tone;
+  for(let i=0;i<6;i++){
+   const a=i*Math.PI/3;
+   v14Art.poly(c,[[Math.cos(a)*7,Math.sin(a)*7],[Math.cos(a+.28)*17,Math.sin(a+.28)*17],[Math.cos(a+.56)*7,Math.sin(a+.56)*7]]);
+   c.fill();
+  }
+  const core=c.createRadialGradient(0,0,1,0,0,8);
+  core.addColorStop(0,'#ffffff');
+  core.addColorStop(1,tone);
+  c.fillStyle=core;
+  c.beginPath();c.arc(0,0,7,0,Math.PI*2);c.fill();
+ }
+};
+
+function v17PaintAbilityArt(){
+ for(const button of document.querySelectorAll('.v17-ability')){
+  const canvasEl=button.querySelector('.v17-ab-art');
+  const painter=V17_ABILITY_ART[button.dataset.art];
+  if(!canvasEl||!painter)continue;
+  const context=canvasEl.getContext('2d');
+  const size=v14FitCanvas(canvasEl,context);
+  if(!size)continue;
+  const tone=getComputedStyle(button).getPropertyValue('--tone').trim()||'#7ee8ff';
+  context.clearRect(0,0,size.w,size.h);
+  context.save();
+  context.translate(size.w/2,size.h/2);
+  context.scale(size.w/44,size.h/44);
+  context.shadowBlur=10;
+  context.shadowColor=tone;
+  painter(context,tone);
+  context.restore();
+ }
+}
+
+const v17AbilityHudBase=updateHud;
+updateHud=function(){
+ v17AbilityHudBase();
+ const charges=[
+  ['overdriveBtn',Math.min(100,game.overdrive)],
+  ['blastBtn',Math.min(100,game.blast)],
+  ['pressureBtn',Math.min(100,game.pressure)],
+  ['volleyBtn',game.ammo>0?100:0]
+ ];
+ for(const [id,value] of charges)$(id).style.setProperty('--charge',value.toFixed(0));
+};
+
+const v17ShowGameAbility=showGame;
+showGame=function(){
+ v17ShowGameAbility();
+ requestAnimationFrame(v17PaintAbilityArt);
+};
+
+/* ---------- Home navigation ---------- */
+const V17_NAV=[
+ {id:'navWeapons',run:()=>{v14OpenArmory();v14ShowArmoryTab('weapons');}},
+ {id:'navShards',run:()=>{renderSkins();$('pilotNameInput').value=BlastNetwork.playerName;showScreen('profileScreen');}},
+ {id:'navBattle',run:()=>v14OpenCampaign()},
+ {id:'navSkins',run:()=>{renderSkins();$('pilotNameInput').value=BlastNetwork.playerName;showScreen('profileScreen');}},
+ {id:'navStore',run:()=>{v14OpenArmory();v14ShowArmoryTab('pilots');}}
+];
+for(const entry of V17_NAV){
+ bind(entry.id,()=>{
+  for(const other of V17_NAV)$(other.id).classList.toggle('on',other.id===entry.id);
+  haptic(8);
+  entry.run();
+ });
+}
+
+/* The nav reflects the shard balance and resets to BATTLE whenever the menu is shown. */
+const v17MenuNavBase=updateMenu;
+updateMenu=function(){
+ v17MenuNavBase();
+ $('navShardCount').textContent=format(save.shards);
+ for(const entry of V17_NAV)$(entry.id).classList.toggle('on',entry.id==='navBattle');
+};

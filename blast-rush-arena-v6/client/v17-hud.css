@@ -124,6 +124,46 @@
 .boss-hud .boss-track{width:100%;height:15px}
 .boss-hud #bossPhase{font:900 8px/1 system-ui;letter-spacing:.2em;color:#ff8fa6}
 
+/* ============================ ABILITY CARDS ============================ */
+/* The reference presents abilities as collectible-style cards: framed art, a charge ring and a
+   cost/state badge — not flat text buttons. */
+.powers-hud{display:flex!important;gap:8px;justify-content:center;align-items:flex-end;padding:7px max(8px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left))!important}
+.v17-ability{position:relative;flex:1 1 0;max-width:104px;min-width:0;display:flex;flex-direction:column;align-items:center;gap:1px;padding:7px 4px 5px;border:0;overflow:visible;pointer-events:auto;cursor:pointer;
+ --tone:#7ee8ff;--charge:0;
+ filter:saturate(.85) brightness(.92);transition:filter .18s ease,transform .1s ease}
+.v17-ability[data-tone="orange"]{--tone:#ffa63a}
+.v17-ability[data-tone="cyan"]{--tone:#5ce8ff}
+.v17-ability[data-tone="violet"]{--tone:#b985ff}
+.v17-ability[data-tone="red"]{--tone:#ff5f7f}
+.v17-ability.ready{filter:none}
+.v17-ability.ready:before{border-color:var(--tone)}
+.v17-ability:active{transform:translateY(3px)}
+
+/* Charge ring: a conic sweep behind the art, masked to a ring. */
+.v17-ab-ring{position:absolute;top:5px;left:50%;width:42px;height:42px;margin-left:-21px;border-radius:50%;pointer-events:none;
+ background:conic-gradient(var(--tone) calc(var(--charge) * 1%),rgba(120,160,205,.16) 0);
+ -webkit-mask:radial-gradient(circle,transparent 61%,#000 63%);mask:radial-gradient(circle,transparent 61%,#000 63%);
+ filter:drop-shadow(0 0 6px var(--tone))}
+.v17-ab-art{position:relative!important;inset:auto;width:34px;height:34px;margin:4px 0 2px;display:block;background:transparent}
+.v17-ab-name{font:900 8px/1.1 system-ui;letter-spacing:.08em;color:#cfe4ff;text-align:center;text-shadow:0 1px 2px rgba(0,0,0,.9)}
+.v17-ab-pct{font:1000 13px/1 system-ui;color:var(--tone);text-shadow:0 1px 3px rgba(0,0,0,.95)}
+.v17-ability.ready .v17-ab-pct{color:#fff}
+/* A ready ability announces itself rather than just brightening. */
+.v17-ability.ready:after{content:"";position:absolute;inset:-3px;pointer-events:none;clip-path:inherit;box-shadow:0 0 18px var(--tone),inset 0 0 12px var(--tone);opacity:.55;animation:v17Ready 1.2s ease-in-out infinite}
+@keyframes v17Ready{0%,100%{opacity:.3}50%{opacity:.75}}
+.powers-hud .power-button.duel-only.hidden{display:none!important}
+
+/* ============================ BOTTOM NAV ============================ */
+/* Pinned to the viewport so it stays reachable while the menu panel scrolls behind it. */
+#menuNav{position:fixed;left:0;right:0;bottom:0;z-index:22;clip-path:none;padding-bottom:calc(6px + env(safe-area-inset-bottom));border-top:1px solid var(--f-rule-dim)}
+#menuScreen .panel{padding-bottom:calc(96px + env(safe-area-inset-bottom))!important}
+.v17-nav{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;padding:6px 4px}
+.v17-nav button{display:flex;flex-direction:column;align-items:center;gap:3px;min-height:56px;padding:6px 2px;border:0;background:none;color:#8fb0d0;cursor:pointer;font:900 9px/1 system-ui;letter-spacing:.08em;border-radius:10px;transition:background .16s ease,color .16s ease}
+.v17-nav button i{font-style:normal;font-size:19px;line-height:1;filter:drop-shadow(0 2px 4px rgba(0,0,0,.7))}
+.v17-nav button.on{color:#fff;background:linear-gradient(180deg,rgba(64,132,224,.34),rgba(12,26,58,.5));box-shadow:inset 0 1px 0 rgba(255,255,255,.18)}
+.v17-nav button.on i{filter:drop-shadow(0 0 10px rgba(110,210,255,.9))}
+.v17-nav .v17-nav-count{font:900 9px/1 system-ui;color:var(--f-gold-lt)}
+
 /* Currency pill. */
 .f-coin{display:inline-flex;align-items:center;gap:4px;padding:2px 7px 2px 3px;border:1.5px solid rgba(8,14,30,.9);border-radius:99px;background:linear-gradient(180deg,rgba(30,48,88,.95),rgba(9,16,38,.96))}
 .f-coin em{display:grid;place-items:center;width:14px;height:14px;border-radius:50%;background:linear-gradient(180deg,var(--f-gold-lt),var(--f-gold-dk));color:#3a2200;font:1000 9px/1 system-ui;font-style:normal}
