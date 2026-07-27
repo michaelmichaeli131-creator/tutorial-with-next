@@ -1,5 +1,48 @@
 # Blast Rush Arena V6 — Game and Social Design
 
+## V22 — make it matter which one you let through
+
+V21 priced tapping badly. This is the other half of the same problem. Every hostile that reached
+the reactor cost exactly one life, whatever it was — a single line handled all of them, splice the
+orb and call `damage()`. A bomb, a splitter and a shard runner were worth precisely the same to
+stop, so there was no priority to get right, and "tap whatever is lowest" was not merely a decent
+strategy but the optimal one. That is the shape of a game with nothing to decide.
+
+Landing consequences now differ by what landed, which gives the field a top and a bottom:
+
+- **Bomb** — costs a life *and* slams the reactor to full heat. The cost is not one life, it is one
+  life plus the second in which you would have recovered, so it is the target you drop everything
+  for.
+- **Shard runner** — costs no life at all. It escapes with up to six of the shards this run earned
+  and a slice of score. It can never touch shards banked from previous runs: a threat that eats a
+  player's permanent wallet is a punishment, not a decision.
+- **Everything else** — one life, as before.
+
+The runner is the important one. A threat the player may deliberately ignore is what turns a
+crowded field from a reaction test into a choice, and it is the first time in this game that
+letting something reach the reactor can be the correct play. Runners are drawn with a dotted
+escape route so the role is legible before one gets through.
+
+Two bots at the same tap rate and the same shaky finger, differing only in which target they pick:
+
+| bot | outcome |
+| --- | --- |
+| takes whatever is lowest | died at 252s, wave 10, 509,712, 547 taps |
+| ranks bombs first and abandons runners | **survived all 300s on three lives**, wave 11, 469,803, 427 taps |
+
+Correct targeting survives the full run on fewer taps — and scores *less*, because it gives up
+runners worth 400 points each. Greed scores faster and dies sooner. That trade is the decision the
+game was missing.
+
+Campaign winnability was re-checked across stages 1, 2, 3, 6, 9, 12 and 15: the opening stages
+clear on three lives, and stage 15 now clears at two lives after eight overheats — a real fight
+with a way through. Stage 6 fails here and fails identically on the pre-V21 build, so it is
+pre-existing rather than new.
+
+These rules apply in duels. Unlike V21's wards and divers, they describe what a hostile *does* —
+identical on both clients, needing no synchronisation — so they do not disturb the spawn schedule
+V20 made authoritative.
+
 ## V21 — a price for being wrong
 
 The game could not be lost. That is not a figure of speech: a bot tapping twelve random points a
