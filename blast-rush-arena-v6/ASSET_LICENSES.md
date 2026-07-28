@@ -60,3 +60,18 @@ is kept here for the historical record of those releases.
 - Environments, particles, beams, UI decoration, fallback enemies and fallback bosses are rendered procedurally with Canvas and CSS.
 - Sound effects and supplemental music layers are synthesized at runtime with the Web Audio API.
 - If external assets fail to load, the game falls back to the original procedural rendering and audio systems.
+
+## Audio (V28)
+
+**The game fetches no third-party audio.** Earlier versions hotlinked a soundtrack from
+opengameart.org, which made the main music an external download that could be blocked or removed,
+with the procedural layer mixed underneath at 17% as a bed that was never meant to carry a track on
+its own. That hotlink is gone.
+
+The soundtrack in `client/game-src/03zg.part` is generated at runtime with the Web Audio API — kit,
+bass, sub, pads and lead are all synthesised from oscillators and noise buffers, arranged over a
+four-bar minor progression, with sidechain ducking on the kick and an arrangement that adds layers
+as the run intensifies. There is nothing to licence because there is no recording: no samples, no
+external files, no network request.
+
+Sound effects (`client/game-src/03o.part`) are likewise synthesised per event.

@@ -1,4 +1,9 @@
-const V12_MUSIC_URL='https://opengameart.org/sites/default/files/space_battle_bpm130.mp3';
+/* The soundtrack used to be hotlinked from a third-party site, which meant the game's main music
+   was an external download that could be blocked, rate-limited or simply gone — and when it failed
+   the only thing left was the procedural bed, mixed at 17% as a background layer, which is why the
+   music could sound thin and unfinished. V28 replaces it with a self-contained adaptive score, so
+   this is deliberately empty: the element is kept because several functions still reference it. */
+const V12_MUSIC_URL='';
 /* V15 replaced every creature with original artwork (see 03j.part), so no sprite sheets are
    fetched any more. The loader below is kept intact and simply runs over an empty set, which
    keeps the boot-progress reporting in 03e working unchanged. */
@@ -155,7 +160,9 @@ canvas.addEventListener('dblclick',(event)=>event.preventDefault(),{passive:fals
 canvas.addEventListener('touchmove',(event)=>event.preventDefault(),{passive:false});
 canvas.addEventListener('touchend',(event)=>event.preventDefault(),{passive:false});
 const v12Track=new Audio();
-v12Track.src=V12_MUSIC_URL;
+/* Assigning an empty src makes the browser try to load the document itself as media and fail;
+   leaving it unset is the correct way to say "there is no external track". */
+if(V12_MUSIC_URL)v12Track.src=V12_MUSIC_URL;
 v12Track.loop=true;
 v12Track.preload='auto';
 v12Track.playsInline=true;
@@ -178,6 +185,11 @@ async function v12StartMusic(){
  if(audio.ctx&&audio.ctx.state==='suspended')await audio.ctx.resume().catch(()=>{});
  v12ApplyAudioLevels();
  if(save.music<=0)return;
+ /* Only ever await play() when there is something to play. An HTMLMediaElement with no source
+    sits in resource selection and its play() promise never settles — not rejected, pending
+    forever — and this function is awaited by v13EnterArena before it hides the launch screen, so
+    a missing track would leave the player staring at the launch screen with no way past it. */
+ if(!v12Track.src)return;
  try{await v12Track.play();v12MusicUnlocked=true;}catch{}
 }
 const v12AudioUpdateBase=audio.update.bind(audio);
