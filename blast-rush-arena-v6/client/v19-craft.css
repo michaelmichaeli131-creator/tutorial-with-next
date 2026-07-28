@@ -1,0 +1,321 @@
+/* V19 — one craft language, applied everywhere.
+
+   The problem this file solves is not that any single screen was ugly. It is that the game had two
+   design systems running at once. V16 and V17 built a genuinely premium one for the launch screen
+   and the combat HUD: chunky gold actions with a hard drop edge, chamfered steel plates, segmented
+   meters, heavy gold numerals. Every other screen — stage select, armory, profile, settings, social,
+   pause, results — was still wearing the original styles.css look: flat rounded-14px gradient
+   buttons, a 48px centred all-caps <h2>, native OS checkboxes. Opening the game therefore went from
+   something that looked shipped to something that looked like an admin panel, and that jump is what
+   reads as "AI generated".
+
+   Two rules govern everything below.
+   1. ONE loud thing per screen. `.primary` used to be a gold-to-red gradient applied to every
+      actionable button — six UPGRADE buttons on the armory, two stacked CTAs on results, both
+      buttons on social. When the loudest treatment available is used six times it stops meaning
+      anything. Gold is now reserved for the single action the player is most likely to want; every
+      other action wears steel.
+   2. NOTHING NEW IS INVENTED. Colours, radii, bevels and bar construction are the v16/v17 tokens.
+      The fix for "too many competing treatments" cannot be a fourteenth treatment. */
+
+:root{
+ /* One radius scale, so panels, cards, buttons and inputs stop each having their own. */
+ --r-sm:10px;--r-md:14px;--r-lg:18px;
+ /* Reuses --f-gold* from v17-hud.css. Declared here only as the button-specific edge colours. */
+ --btn-gold-edge:#3b1d00;--btn-gold-drop:#8a4300;
+}
+
+/* ============================ BUTTON HIERARCHY ============================ */
+
+/* TIER 1 — gold. The v16 launch CTA language, generalised. A solid dark border plus a hard
+   `0 Npx 0` drop edge is what makes a mobile game button feel like a physical key; a soft blurred
+   shadow reads as a web button. It presses down on :active rather than merely dimming. */
+.primary{
+ position:relative;border:2px solid var(--btn-gold-edge);border-radius:var(--r-md);
+ background:linear-gradient(180deg,#ffe89a 0%,#ffb62e 46%,#e07d0a 54%,#ffc857 100%);
+ color:#42200a;font:1000 15px/1 system-ui;letter-spacing:.06em;
+ box-shadow:inset 0 2px 0 rgba(255,255,255,.65),inset 0 -4px 0 rgba(140,60,0,.38),
+            0 5px 0 var(--btn-gold-drop),0 10px 18px rgba(0,0,0,.5);
+ transition:transform .08s ease,box-shadow .08s ease,filter .18s ease;
+}
+.primary small{color:rgba(66,32,10,.78)}
+.primary:not(:disabled):active{
+ transform:translateY(4px);
+ box-shadow:inset 0 2px 0 rgba(255,255,255,.6),inset 0 -2px 0 rgba(140,60,0,.35),
+            0 1px 0 var(--btn-gold-drop),0 4px 10px rgba(0,0,0,.45);
+}
+/* Hover lift is a desktop-web idiom. On a touch title the press is the feedback, so hover only
+   brightens — the old `translateY(-3px) scale(1.015)` on every button made the UI feel springy
+   and cheap under a mouse. */
+.primary:hover:not(:disabled),.secondary:hover:not(:disabled){transform:none;filter:brightness(1.08)}
+.primary:disabled{filter:saturate(.35) brightness(.78);cursor:default}
+
+/* TIER 2 — steel. Same construction, no gold, no glow. This is the default for anything that is
+   not the one recommended action. */
+.secondary,.v14-tab,.icon-btn{
+ border:2px solid #0a1020;border-radius:var(--r-md);
+ background:linear-gradient(180deg,#31508c 0%,#1c2e5c 48%,#132247 52%,#0d1834 100%);
+ color:#dcecff;font:900 14px/1 system-ui;letter-spacing:.06em;
+ box-shadow:inset 0 2px 0 rgba(255,255,255,.14),inset 0 -3px 0 rgba(0,0,0,.4),
+            0 4px 0 #060b1c,0 8px 16px rgba(0,0,0,.45);
+ transition:transform .08s ease,box-shadow .08s ease,filter .18s ease;
+}
+.secondary small{color:#9db3cf}
+.secondary:not(:disabled):active,.v14-tab:active,.icon-btn:active{
+ transform:translateY(3px);
+ box-shadow:inset 0 2px 0 rgba(255,255,255,.12),0 1px 0 #060b1c,0 3px 8px rgba(0,0,0,.4);
+}
+.secondary:disabled{filter:brightness(.6);cursor:default}
+/* styles.css gave `.secondary` a cyan glow ring on hover and v9 layered a white sweep across both
+   tiers. Two shimmer treatments on the same element is the "everything glows" symptom in miniature. */
+.primary:after,.secondary:after,.primary:before,.secondary:before{display:none!important}
+
+/* TIER 3 — ghost. Back, refresh, and anything the player should be able to find but not be drawn to. */
+.back{
+ display:grid;place-items:center;width:42px;height:42px;min-height:42px;padding:0;
+ border:1.5px solid rgba(126,214,255,.22);border-radius:var(--r-sm);
+ background:rgba(8,17,38,.9);color:#9fd4ee;font:900 24px/1 system-ui;
+ box-shadow:none;
+}
+.back:active{transform:scale(.94)}
+.compact{min-height:40px;padding:0 14px;font-size:12px}
+
+/* ---- Demotion rules: which single action gets to be gold on each screen. ---- */
+
+/* Results used to stack NEXT STAGE and PLAY AGAIN as two identical gold slabs. NEXT STAGE is the
+   action a player who just cleared a stage wants; PLAY AGAIN only becomes primary when the JS has
+   hidden NEXT STAGE (run failed, or the campaign is finished), which the sibling selector detects. */
+#againBtn,#rematchBtn,#nextStageBtn.hidden{
+ background:linear-gradient(180deg,#31508c 0%,#1c2e5c 48%,#132247 52%,#0d1834 100%);
+ border-color:#0a1020;color:#dcecff;
+ box-shadow:inset 0 2px 0 rgba(255,255,255,.14),inset 0 -3px 0 rgba(0,0,0,.4),
+            0 4px 0 #060b1c,0 8px 16px rgba(0,0,0,.45);
+}
+#nextStageBtn.hidden~#againBtn{
+ background:linear-gradient(180deg,#ffe89a 0%,#ffb62e 46%,#e07d0a 54%,#ffc857 100%);
+ border-color:var(--btn-gold-edge);color:#42200a;
+ box-shadow:inset 0 2px 0 rgba(255,255,255,.65),inset 0 -4px 0 rgba(140,60,0,.38),
+            0 5px 0 var(--btn-gold-drop),0 10px 18px rgba(0,0,0,.5);
+}
+
+/* Armory: every weapon and pilot card carried a gold UPGRADE button, so a six-card list was six
+   gold slabs down the page and the wallet — the number that actually matters — disappeared into
+   them. Purchases read as gold *text* on steel instead: still unmistakably the buy action, but the
+   page now has a calm vertical rhythm. */
+.v14-card-actions .primary{
+ background:linear-gradient(180deg,#2b3f6e 0%,#1a2a52 48%,#122040 52%,#0c1730 100%);
+ border-color:#0a1020;color:var(--f-gold-lt);
+ box-shadow:inset 0 1px 0 rgba(255,194,71,.28),inset 0 -3px 0 rgba(0,0,0,.4),
+            0 4px 0 #060b1c,0 8px 14px rgba(0,0,0,.45);
+}
+.v14-card-actions .primary:disabled{color:#6d829f}
+
+/* Social offered two full-width gold buttons for two ways of doing the same thing. Creating a
+   public arena is the headline action; the private invite is an alternative. */
+#createPrivateBtn{
+ background:linear-gradient(180deg,#31508c 0%,#1c2e5c 48%,#132247 52%,#0d1834 100%);
+ border-color:#0a1020;color:#dcecff;
+ box-shadow:inset 0 2px 0 rgba(255,255,255,.14),inset 0 -3px 0 rgba(0,0,0,.4),
+            0 4px 0 #060b1c,0 8px 16px rgba(0,0,0,.45);
+}
+
+/* Skin unlocks were a muddy gold-on-brown gradient repeated eight times down the grid. */
+.skin-card .primary{
+ background:linear-gradient(180deg,#2b3f6e 0%,#1a2a52 48%,#122040 52%,#0c1730 100%);
+ border-color:#0a1020;color:var(--f-gold-lt);font-size:11px;
+ box-shadow:inset 0 1px 0 rgba(255,194,71,.28),0 3px 0 #060b1c;
+}
+
+/* ============================ SCREEN HEADERS ============================ */
+/* The old header was a floating BACK pill, a cyan eyebrow and an <h2> at clamp(30px,11vw,48px)
+   centred — which wrapped "WEAPONS & PILOTS" and "ENTER THE ARENA" onto two lines and spent a
+   quarter of a phone screen announcing where you already knew you were. Shipped titles use a slim
+   bar: back control, title, done. The markup is now a .scr-head row so the back button sits beside
+   the title instead of on top of it. */
+.scr-head{
+ display:flex;align-items:center;gap:12px;
+ position:sticky;top:0;z-index:9;margin:0 0 16px;padding:2px 0 10px;
+ background:linear-gradient(180deg,rgba(4,10,26,.97) 70%,rgba(4,10,26,0));
+}
+/* v14-campaign.css scopes `.v14-panel .back{width:max-content}` for the old "← BACK" text label.
+   With a bare chevron max-content is ~8px wide, so the button collapsed to a sliver. The size has
+   to be restated at this specificity to win. */
+.scr-head .back{flex:0 0 auto;position:static;margin:0;width:42px!important;height:42px;padding:0;backdrop-filter:none}
+.scr-title{min-width:0;text-align:left}
+.scr-title .eyebrow{font-size:9px;letter-spacing:.22em;color:#7fa8cf;font-weight:900}
+.scr-title h2,.panel h2{
+ margin:2px 0 0;text-align:left;
+ font:1000 clamp(19px,5vw,26px)/1.05 system-ui;letter-spacing:.01em;color:#eaf6ff;
+}
+/* Panels without a back control (pause, results, augment) keep the same type, centred. */
+.pause-panel .scr-title,.result-panel .scr-title,#augmentScreen .scr-title{text-align:center;margin-bottom:18px}
+.pause-panel .scr-title h2,.result-panel .scr-title h2,#augmentScreen .scr-title h2{text-align:center}
+h3{font:900 14px/1.2 system-ui;letter-spacing:.06em;color:#eaf6ff}
+.note{color:#7f95b8;font:600 11px/1.5 system-ui;text-align:left}
+
+/* ============================ PANEL RHYTHM ============================ */
+/* Each version invented its own padding and radius. One value each, so the vertical rhythm on
+   stage select matches the armory matches social. */
+.panel{padding:16px 14px calc(28px + env(safe-area-inset-bottom))}
+.v14-panel .back{position:static;margin:0;padding:0;background:none;backdrop-filter:none}
+.v14-panel h2{margin:2px 0 0}
+.mode-card,.skin-card,.augment-card,.table-row,.v14-item-card,.v14-stage-card,
+.v14-wallet>div,.v14-progress-card,.result-grid div,.v14-stage-result{border-radius:var(--r-md)}
+.field input,input[type=text],.mode-card input{border-radius:var(--r-sm);border-color:rgba(126,214,255,.2);background:#04091a}
+.field input:focus,.mode-card input:focus{border-color:rgba(126,214,255,.55);outline:none}
+.eyebrow{color:#7fa8cf}
+
+/* ============================ SETTINGS ============================ */
+/* Native OS checkboxes were the single most obvious tell that this was a web page in a wrapper.
+   They are now switches built from the same steel/gold vocabulary as everything else. */
+.switch-row input[type=checkbox]{
+ appearance:none;-webkit-appearance:none;flex:0 0 auto;position:relative;
+ width:56px;height:30px;margin:0;border:2px solid #0a1020;border-radius:99px;
+ background:linear-gradient(180deg,#0a1330,#060c1e);
+ box-shadow:inset 0 2px 5px rgba(0,0,0,.75);cursor:pointer;transition:background .18s ease;
+}
+.switch-row input[type=checkbox]:after{
+ content:"";position:absolute;top:2px;left:2px;width:22px;height:22px;border-radius:50%;
+ background:linear-gradient(180deg,#c3d6f0,#7e93b4);box-shadow:0 2px 4px rgba(0,0,0,.6);
+ transition:transform .18s cubic-bezier(.2,.8,.2,1),background .18s ease;
+}
+.switch-row input[type=checkbox]:checked{background:linear-gradient(180deg,#a35f06,#5d3604);border-color:#2a1a02}
+.switch-row input[type=checkbox]:checked:after{transform:translateX(26px);background:linear-gradient(180deg,#ffe9a8,#ffc247)}
+.settings-panel label{margin:10px 0;padding:12px 14px;border:1px solid rgba(126,214,255,.16);border-radius:var(--r-md);background:rgba(255,255,255,.03)}
+.settings-panel label span{font:900 12px/1 system-ui;letter-spacing:.1em;color:#dcecff}
+/* The range track was the browser default with an accent colour. A segmented meter matches the
+   objective and XP bars in the HUD, so audio reads as part of the same machine. */
+.settings-panel input[type=range]{
+ appearance:none;-webkit-appearance:none;height:12px;border:1.5px solid rgba(8,14,30,.95);border-radius:99px;
+ background:linear-gradient(180deg,#070d1e,#040812);box-shadow:inset 0 2px 5px rgba(0,0,0,.75);
+}
+.settings-panel input[type=range]::-webkit-slider-thumb{
+ appearance:none;-webkit-appearance:none;width:22px;height:22px;border:2px solid #2a1a02;border-radius:50%;
+ background:linear-gradient(180deg,#ffe9a8,#ffc247 52%,#a35f06);box-shadow:0 2px 0 rgba(0,0,0,.5);cursor:pointer;
+}
+.settings-panel input[type=range]::-moz-range-thumb{
+ width:20px;height:20px;border:2px solid #2a1a02;border-radius:50%;
+ background:linear-gradient(180deg,#ffe9a8,#ffc247 52%,#a35f06);cursor:pointer;
+}
+.audio-value{color:var(--f-gold-lt);font:900 13px/1 system-ui}
+#fullscreenBtn{width:100%;min-height:52px;margin-top:6px}
+
+/* ============================ PAUSE ============================ */
+/* The pause panel inherited .settings-panel, whose labels are the only thing giving it width, so
+   with three bare buttons it collapsed to a top-left huddle in an otherwise empty black screen —
+   the most unfinished-looking surface in the game. */
+/* mobile-cinematic-v10.css makes every mobile panel `height:100%;border-radius:0` so the full-bleed
+   menu works. An overlay dialog must opt out of that or it becomes a full-screen sheet with three
+   buttons at the top — which is exactly how pause looked. */
+.pause-panel,.result-panel{
+ width:min(340px,88vw);height:auto!important;min-height:0!important;max-height:88vh;
+ padding:26px 22px calc(26px + env(safe-area-inset-bottom));
+ border:1px solid rgba(126,214,255,.2)!important;border-radius:var(--r-lg)!important;
+}
+.stack-actions{display:grid;gap:10px}
+.stack-actions button{width:100%;min-height:54px}
+#pauseScreen,#resultScreen,#augmentScreen{align-items:center!important;justify-content:center}
+#pauseScreen .panel,#resultScreen .panel{margin:auto}
+
+/* ============================ RESULTS ============================ */
+.result-panel{text-align:center}
+/* The score is the reward. It is the one thing on this screen allowed to shout, so it gets the
+   heavy gold numeral treatment from the HUD rather than flat yellow text. */
+.final-score{
+ font:1000 clamp(46px,14vw,64px)/1 system-ui;letter-spacing:-.01em;
+ background:linear-gradient(180deg,#fffdf4 0%,#ffe488 34%,#ffb52e 62%,#ff9412 100%);
+ -webkit-background-clip:text;background-clip:text;color:transparent;
+ filter:drop-shadow(0 3px 0 rgba(70,34,0,.95)) drop-shadow(0 6px 12px rgba(0,0,0,.8));
+}
+.result-grid{gap:8px;margin:18px 0}
+.result-grid div{padding:11px 8px;background:rgba(255,255,255,.04);border-color:rgba(126,214,255,.14)}
+.result-grid small{font:900 8px/1 system-ui;letter-spacing:.16em;color:#7fa8cf}
+.result-grid b{font:1000 20px/1 system-ui;color:#eaf6ff}
+.result-panel .button-row{display:grid;gap:9px;margin-top:4px}
+.result-panel .button-row button{width:100%;min-height:50px}
+
+/* ============================ MENU ============================ */
+/* Five mode buttons, two of which were near-identical blue-to-violet gradients, so CAMPAIGN and
+   QUICK DUEL fought each other for the eye and the three below them read as an afterthought.
+   Campaign is the game's spine — it gets the gold plate, and it is the only one that does. */
+/* Steel first, gold second: these selectors have identical specificity, so source order is the
+   only thing deciding which wins and the campaign rule has to come last. */
+.mode-command .huge{
+ min-height:70px!important;padding:12px 14px;border-radius:var(--r-md);font:1000 15px/1 system-ui;
+ background:linear-gradient(180deg,#31508c 0%,#1c2e5c 48%,#132247 52%,#0d1834 100%)!important;
+ border:2px solid #0a1020;color:#dcecff;
+ box-shadow:inset 0 2px 0 rgba(255,255,255,.14),inset 0 -3px 0 rgba(0,0,0,.45),
+            0 4px 0 #050a18,0 9px 18px rgba(0,0,0,.55)!important;
+}
+.mode-command .huge small{margin-top:5px;font:700 9px/1.3 system-ui;letter-spacing:.04em;color:#93add0;opacity:1}
+/* v13 gave quick-mode its own radial-plus-violet fill and a floating LIVE pip, which made it
+   compete with campaign for the eye. Connection state is already stated in its own subtitle. */
+.mode-command .quick-mode:after{display:none}
+.mode-icon{width:30px;height:30px;margin-bottom:8px;border-radius:9px;font-size:15px}
+/* Titan keeps one identifying mark rather than a whole different fill. */
+.mode-command .titan .mode-icon{color:#ff8fa6;border-color:rgba(255,143,166,.35)}
+
+.mode-command .campaign-mode{
+ min-height:88px!important;font-size:18px;
+ background:linear-gradient(180deg,#ffe89a 0%,#ffb62e 44%,#e07d0a 54%,#ffc857 100%)!important;
+ border:2px solid var(--btn-gold-edge)!important;color:#42200a!important;
+ box-shadow:inset 0 2px 0 rgba(255,255,255,.6),inset 0 -5px 0 rgba(140,60,0,.35),
+            0 6px 0 var(--btn-gold-drop),0 14px 26px rgba(0,0,0,.6)!important;
+}
+.mode-command .campaign-mode small{color:rgba(66,32,10,.78)!important}
+.mode-command .campaign-mode .mode-icon{color:rgba(66,32,10,.85);border-color:rgba(66,32,10,.28);background:rgba(66,32,10,.14)}
+.mode-command .campaign-mode:not(:disabled):active{transform:translateY(5px);box-shadow:0 1px 0 var(--btn-gold-drop),0 4px 10px rgba(0,0,0,.5)!important}
+
+/* The hero canvas was pinned at 238px with a small creature floating inside it, which left a band
+   of empty navy between the logo and the loadout row and made the screen feel unfinished. */
+#menuScreen .hero-visual{min-height:min(200px,52vw)!important;margin:0 0 8px}
+#menuScreen .v14-menu-art{width:min(210px,54vw);height:min(210px,54vw)}
+.v18-loadout{margin-bottom:10px}
+/* The identity plate stretched to whatever width was left, so the XP readout printed
+   "260 / 1,330" marooned in the middle of a 200px-wide black trough. Capping the plate keeps the
+   meter short enough that the number sits on the bar, and right-aligning it inside the meter makes
+   it read as a value rather than as stray text. */
+.v18-identity{max-width:230px}
+.v18-xp{height:13px}
+.v18-xp>span{place-items:center end;padding-right:6px;font:900 8px/1 system-ui}
+/* Weapon level pips were the only place left using the blue-to-violet gradient — a fourth accent
+   competing with gold, cyan and steel for no informational reason. */
+.v14-pips i.on{background:linear-gradient(90deg,#9bf0ff,#2fc8ff);box-shadow:0 0 8px rgba(64,200,255,.5)}
+
+/* ============================ COMBAT HUD ============================ */
+/* The pilot plate, score and lives plate are three flex items on one row with no minimum-width
+   protection, so a long pilot name pushed the lives plate past the right edge of a 390px phone and
+   the reactor pips were clipped. The score is the flexible element; the two plates are not. */
+.v17-row>.v17-pilot,.v17-row>.v17-lives-wrap{flex:0 0 auto}
+.v17-pilot-meta>b{max-width:15vw}
+.v17-score{min-width:0}
+
+/* ============================ DESKTOP ============================ */
+/* Mobile-first layers left the desktop as a 620px phone column in a black void with a bottom nav
+   stretched edge to edge across 1440px — the one element that did not match anything else. */
+@media (min-width:760px){
+ #menuNav{
+  left:50%;right:auto;transform:translateX(-50%);width:min(620px,94vw);
+  border:1px solid var(--f-rule-dim);border-bottom:0;border-radius:var(--r-lg) var(--r-lg) 0 0;
+ }
+ .panel{width:min(620px,94vw);padding:20px 22px calc(30px + env(safe-area-inset-bottom));border-radius:var(--r-lg)}
+ .panel.wide{width:min(880px,94vw)}
+ .settings-panel,.pause-panel{width:min(440px,94vw)}
+ .result-panel{width:min(460px,94vw)}
+ .scr-title h2{font-size:26px}
+ .mode-command .huge{min-height:76px!important}
+ .mode-command .campaign-mode{min-height:96px!important}
+ /* The void around the column reads as broken rather than atmospheric. A soft vignette centred on
+    the column ties the empty area to the panel instead of leaving it flat black. */
+ .screen{background:radial-gradient(ellipse 60% 80% at 50% 40%,rgba(32,74,136,.34),rgba(1,3,10,.95) 60%,#01030a 100%)!important}
+}
+
+/* ============================ MOTION ============================ */
+/* Every panel entered with a 3D rotate-and-blur (v11) on top of a translate-and-blur (v13) on top
+   of another (v7). Three entrance animations on one element is why navigation felt woozy. One
+   short rise is enough. */
+.screen.active .panel{animation:v19In .26s cubic-bezier(.2,.8,.2,1) both!important}
+@keyframes v19In{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){
+ .screen.active .panel{animation:none!important}
+}

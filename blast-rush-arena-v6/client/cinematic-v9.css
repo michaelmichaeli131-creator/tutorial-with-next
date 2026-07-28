@@ -1,16 +1,19 @@
 :root{--v9-cyan:#68f4ff;--v9-gold:#ffd76a;--v9-pink:#ff4d8d;--v9-ink:#02040b;--v9-panel:rgba(5,12,28,.9)}
 html,body{background:#010207;touch-action:none;-webkit-tap-highlight-color:transparent}
-body:before,body:after{content:"";position:fixed;inset:-20%;pointer-events:none;z-index:1;mix-blend-mode:screen}
-body:before{background:radial-gradient(circle at 18% 25%,rgba(80,232,255,.16),transparent 27%),radial-gradient(circle at 78% 18%,rgba(168,70,255,.14),transparent 30%),radial-gradient(circle at 45% 88%,rgba(255,66,113,.12),transparent 28%);animation:v9Nebula 14s ease-in-out infinite alternate}
-body:after{opacity:.22;background:repeating-linear-gradient(115deg,transparent 0 54px,rgba(130,230,255,.13) 55px,transparent 57px);animation:v9Warp 18s linear infinite}
+/* One ambient layer, not three. V7 and V11 each added their own full-viewport conic glow on top of
+   this nebula and a second one on ::after; three animated screen-blend washes over the same pixels
+   is what made every screen read as uniformly hazy with no focal point. Those two files are gone
+   and the diagonal warp lines that used to ride on ::after went with them — they crossed the type
+   on every panel and bought nothing. */
+body:before{content:"";position:fixed;inset:-20%;pointer-events:none;z-index:1;mix-blend-mode:screen;background:radial-gradient(circle at 18% 25%,rgba(80,232,255,.16),transparent 27%),radial-gradient(circle at 78% 18%,rgba(168,70,255,.14),transparent 30%),radial-gradient(circle at 45% 88%,rgba(255,66,113,.12),transparent 28%);animation:v9Nebula 14s ease-in-out infinite alternate}
 canvas{z-index:0;filter:saturate(1.16) contrast(1.06)}
 #fx{position:fixed;inset:0;z-index:2;pointer-events:none;background:radial-gradient(circle at 50% 110%,rgba(67,225,255,.12),transparent 38%)}
 .screen{z-index:20;background:radial-gradient(circle at 50% 10%,rgba(22,54,104,.34),rgba(1,3,10,.9) 54%,#010207 100%)}
-.screen:before{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,transparent 49.8%,rgba(100,230,255,.08) 50%,transparent 50.2%),linear-gradient(transparent 49.8%,rgba(100,230,255,.05) 50%,transparent 50.2%);background-size:76px 76px;mask-image:linear-gradient(to bottom,transparent,#000 32%,#000 75%,transparent);animation:v9Grid 10s linear infinite}
-.panel{border-color:rgba(120,225,255,.36);background:linear-gradient(145deg,rgba(11,25,57,.94),rgba(3,7,18,.97));box-shadow:0 36px 110px rgba(0,0,0,.82),0 0 70px rgba(64,199,255,.12),inset 0 0 55px rgba(46,173,255,.055);clip-path:polygon(18px 0,calc(100% - 18px) 0,100% 18px,100% calc(100% - 18px),calc(100% - 18px) 100%,18px 100%,0 calc(100% - 18px),0 18px)}
-.panel:before,.panel:after{content:"";position:absolute;pointer-events:none}
-.panel:before{inset:0;background:linear-gradient(110deg,transparent 0 42%,rgba(122,236,255,.07) 50%,transparent 58%);transform:translateX(-120%);animation:v9Scan 7s ease-in-out infinite}
-.panel:after{left:26px;right:26px;top:0;height:2px;background:linear-gradient(90deg,transparent,var(--v9-cyan),var(--v9-gold),transparent);box-shadow:0 0 18px var(--v9-cyan)}
+/* The scrolling tech grid, the panel scan sweep and the cyan/gold hairline along every panel's top
+   edge were three separate "make it look cool" flourishes with no informational job. Stacked they
+   put four moving things behind static text on every sub-screen, which is precisely the uniform
+   sci-fi wash that reads as generic. Emphasis now comes from one gold action per screen instead. */
+.panel{border-color:rgba(120,225,255,.36);background:linear-gradient(145deg,rgba(11,25,57,.94),rgba(3,7,18,.97));box-shadow:0 36px 110px rgba(0,0,0,.82),0 0 70px rgba(64,199,255,.12),inset 0 0 55px rgba(46,173,255,.055)}
 .hero{overflow:hidden}
 .hero h1{position:relative;z-index:2;text-shadow:0 0 22px rgba(255,98,61,.28)}
 .hero h1 span:first-child{transform:skewX(-6deg)}
@@ -46,16 +49,13 @@ canvas{z-index:0;filter:saturate(1.16) contrast(1.06)}
 .pilot-slot .skin-orb.large{animation:v9Pilot 2.1s ease-in-out infinite alternate}
 .pilot-slot.waiting .skin-orb.large{filter:saturate(.4);animation:v9Search 1.2s ease-in-out infinite}
 @keyframes v9Nebula{to{transform:translate3d(3%,2%,0) scale(1.06) rotate(2deg)}}
-@keyframes v9Warp{to{transform:translate3d(160px,90px,0)}}
-@keyframes v9Grid{to{background-position:76px 76px}}
-@keyframes v9Scan{0%,72%{transform:translateX(-120%)}100%{transform:translateX(120%)}}
 @keyframes v9Unit{to{transform:translateY(-5px) rotate(2deg);filter:brightness(1.25)}}
 @keyframes v9BossBar{to{filter:brightness(1.35)}}
 @keyframes v9Power{to{filter:brightness(1.35);transform:translateY(-3px) scale(1.035)}}
 @keyframes v9Countdown{to{transform:scale(1.035)}}
 @keyframes v9Pilot{to{transform:translateY(-5px) scale(1.04)}}
 @keyframes v9Search{50%{opacity:.42;transform:scale(.92);filter:saturate(.3) blur(.5px)}}
-@media(max-width:800px){body:after{opacity:.11}.screen{padding:calc(8px + env(safe-area-inset-top)) 8px calc(8px + env(safe-area-inset-bottom))}.panel{width:100%;max-height:100%;border-radius:20px;padding:22px 14px 16px}.hero h1{font-size:clamp(54px,18vw,78px);margin-top:12px}.hero-roster{gap:6px;margin:9px 0 12px}.roster-unit{min-height:50px;font-size:8px;letter-spacing:.06em}.roster-unit:before{width:22px;height:29px;margin-right:5px}.menu-grid{grid-template-columns:1fr;gap:8px}.huge{min-height:62px}.huge small{font-size:10px}.profile-strip{margin-top:10px}.score-card{top:env(safe-area-inset-top);min-width:174px;padding:8px 17px 9px}.score-card b{font-size:22px}.hud-cluster.left{top:calc(9px + env(safe-area-inset-top));left:8px}.hud-cluster.right{top:calc(62px + env(safe-area-inset-top));right:8px}.combo-hud{top:calc(112px + env(safe-area-inset-top));left:8px;width:104px;padding:10px}.combo-hud b{font-size:29px}.boss-hud{top:calc(63px + env(safe-area-inset-top));width:75vw}.powers-hud{bottom:calc(7px + env(safe-area-inset-bottom));width:calc(100% - 12px);gap:5px}.power-button{flex:1;min-width:0;width:auto;height:67px}.power-button span{font-size:7px}.power-button small{display:none}.power-button b{font-size:17px}.toast{top:23%;max-width:88vw;text-align:center}.social-grid{grid-template-columns:1fr}.mode-card{padding:15px}.versus-slots{gap:10px;margin:18px 0}.skin-orb.large{width:84px;height:84px}.room-code{font-size:34px}.button-row{flex-direction:column}.button-row button{width:100%;flex:auto}.result-panel{padding-bottom:calc(18px + env(safe-area-inset-bottom))}}
+@media(max-width:800px){.screen{padding:calc(8px + env(safe-area-inset-top)) 8px calc(8px + env(safe-area-inset-bottom))}.panel{width:100%;max-height:100%;border-radius:20px;padding:22px 14px 16px}.hero h1{font-size:clamp(54px,18vw,78px);margin-top:12px}.hero-roster{gap:6px;margin:9px 0 12px}.roster-unit{min-height:50px;font-size:8px;letter-spacing:.06em}.roster-unit:before{width:22px;height:29px;margin-right:5px}.menu-grid{grid-template-columns:1fr;gap:8px}.huge{min-height:62px}.huge small{font-size:10px}.profile-strip{margin-top:10px}.score-card{top:env(safe-area-inset-top);min-width:174px;padding:8px 17px 9px}.score-card b{font-size:22px}.hud-cluster.left{top:calc(9px + env(safe-area-inset-top));left:8px}.hud-cluster.right{top:calc(62px + env(safe-area-inset-top));right:8px}.combo-hud{top:calc(112px + env(safe-area-inset-top));left:8px;width:104px;padding:10px}.combo-hud b{font-size:29px}.boss-hud{top:calc(63px + env(safe-area-inset-top));width:75vw}.powers-hud{bottom:calc(7px + env(safe-area-inset-bottom));width:calc(100% - 12px);gap:5px}.power-button{flex:1;min-width:0;width:auto;height:67px}.power-button span{font-size:7px}.power-button small{display:none}.power-button b{font-size:17px}.toast{top:23%;max-width:88vw;text-align:center}.social-grid{grid-template-columns:1fr}.mode-card{padding:15px}.versus-slots{gap:10px;margin:18px 0}.skin-orb.large{width:84px;height:84px}.room-code{font-size:34px}.button-row{flex-direction:column}.button-row button{width:100%;flex:auto}.result-panel{padding-bottom:calc(18px + env(safe-area-inset-bottom))}}
 @media(max-width:390px){.hero-roster{display:none}.hero>p{font-size:12px;margin:8px auto 12px}.edition{font-size:10px}.profile-strip{grid-template-columns:1fr 1fr 1fr}.profile-card{grid-column:1/-1}.power-button{height:61px}.combo-hud{display:none}.boss-hud{width:84vw}}
 @media(orientation:landscape) and (max-height:520px){.hero-roster,.hero>p{display:none}.hero h1{font-size:48px}.menu-grid{grid-template-columns:1fr 1fr}.huge{min-height:54px}.profile-strip{margin-top:7px}.powers-hud{left:auto;right:8px;bottom:8px;transform:none;flex-direction:column;width:82px}.power-button{width:82px;height:53px}.score-card{left:50%;transform:translateX(-50%)}.boss-hud{top:50px}.panel{max-height:98vh}}
-@media(prefers-reduced-motion:reduce){body:before,body:after,.screen:before,.panel:before,.roster-unit:before,.power-button.ready,.boss-track i,.pilot-slot .skin-orb.large{animation:none!important}}
+@media(prefers-reduced-motion:reduce){body:before,.roster-unit:before,.power-button.ready,.boss-track i,.pilot-slot .skin-orb.large{animation:none!important}}
