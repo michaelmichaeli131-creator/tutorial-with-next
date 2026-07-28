@@ -33,6 +33,29 @@ function v15Carapace(c,pal,points,x0,y0,x1,y1){
  c.stroke();
 }
 
+/* Gradients are resolved when they are created, not when they are painted, so one per colour is
+   enough — and because it is built around the origin it survives any transform the caller has
+   applied. Keyed per context because a gradient belongs to the context that made it. */
+const v15HaloCache=new WeakMap();
+function v15Halo(c,color,radius){
+ let perContext=v15HaloCache.get(c);
+ if(!perContext){perContext=new Map();v15HaloCache.set(c,perContext);}
+ const key=color+'|'+radius;
+ let gradient=perContext.get(key);
+ if(!gradient){
+  gradient=c.createRadialGradient(0,0,radius*.18,0,0,radius);
+  gradient.addColorStop(0,color+'99');
+  gradient.addColorStop(.55,color+'3a');
+  gradient.addColorStop(1,color+'00');
+  perContext.set(key,gradient);
+ }
+ c.save();
+ c.globalCompositeOperation='lighter';
+ c.fillStyle=gradient;
+ c.beginPath();c.arc(0,0,radius,0,Math.PI*2);c.fill();
+ c.restore();
+}
+
 function v15Eye(c,x,y,r,pal,intensity=1){
  c.save();
  c.translate(x,y);
@@ -430,10 +453,13 @@ drawOrb=function(o,w){
 
  ctx.rotate(lean);
  ctx.scale(scale*(1-attack*.08),scale*(1+attack*.14));
- ctx.shadowBlur=isMobile?12:18;
- ctx.shadowColor=pal.glow;
+ /* A creature is built from dozens of fills and strokes, and Canvas 2D re-runs the shadow blur
+    for every one of them — so setting shadowBlur once around the whole body cost dozens of blurs
+    per creature per frame, with ten of them on screen at once. The same mistake was profiled on
+    the pilot at 6.2ms of a 7.2ms frame. One cached radial halo behind the body reads the same at
+    a glance and costs a single fill. */
+ v15Halo(ctx,pal.glow,isMobile?34:40);
  (v15Creatures[o.type]||v15Creatures.normal)(ctx,o,pal,life);
- ctx.shadowBlur=0;
 
  if(flash>0){
   ctx.save();
