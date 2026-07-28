@@ -11,18 +11,10 @@
   <title>Blast Rush Arena V18</title>
   <link rel="preconnect" href="https://opengameart.org" crossorigin>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/styles.css">
-  <link rel="stylesheet" href="/mobile-v8.css">
-  <link rel="stylesheet" href="/cinematic-v9.css">
-  <link rel="stylesheet" href="/mobile-cinematic-v10.css">
-  <link rel="stylesheet" href="/mobile-pro-v12.css">
-  <link rel="stylesheet" href="/premium-v13.css">
-  <link rel="stylesheet" href="/v14-campaign.css">
-  <link rel="stylesheet" href="/v15-vision.css">
-  <link rel="stylesheet" href="/v16-impact.css">
-  <link rel="stylesheet" href="/v17-hud.css">
-  <link rel="stylesheet" href="/v18-home.css">
-  <link rel="stylesheet" href="/v19-craft.css">
+  <!-- One bundle instead of thirteen links: on a phone each separate stylesheet costs a whole
+       round trip before anything can be styled. Built by scripts/build_client.ts, which owns the
+       concatenation order because the cascade depends on it. -->
+  <link rel="stylesheet" href="/bundle.css">
 </head>
 <body class="launch-active">
 <section id="launchScreen" class="v16-launch" aria-label="Blast Rush launch screen">

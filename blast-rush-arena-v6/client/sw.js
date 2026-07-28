@@ -13,9 +13,7 @@ const CACHE = 'blast-rush-arena-' + BUILD;
 const SHELL = '/index.html';
 
 const ASSETS = [
-  '/index.html', '/styles.css', '/mobile-v8.css', '/cinematic-v9.css',
-  '/mobile-cinematic-v10.css', '/mobile-pro-v12.css', '/premium-v13.css',
-  '/v14-campaign.css', '/v15-vision.css', '/v16-impact.css', '/v17-hud.css', '/v18-home.css', '/v19-craft.css', '/v20-duel.css',
+  '/index.html', '/bundle.css',
   '/net.js', '/game.js', '/manifest.webmanifest', '/icons/icon-192.svg', '/icons/icon-512.svg'
 ];
 

@@ -189,7 +189,11 @@ v13UpdateBoot=function(){
  const percent=Math.max(assets.percent,Math.min(100,Math.round(elapsed/1200*100)));
  if(v13Progress)v13Progress.style.width=percent+'%';
  if(v13Status)v13Status.textContent=percent>=100?'COMBAT SYSTEMS ONLINE':`CALIBRATING WEAPONS • ${percent}%`;
- if(v13Enter&&elapsed>650){
+ /* The boot sequence is theatre — the progress bar is driven by a timer, not by anything actually
+    loading — so gating the button behind it was 650ms of dead time imposed on every single launch.
+    Real asset progress still opens it early when there is any; the floor is now short enough to
+    read as a transition rather than as a wait. */
+ if(v13Enter&&(assets.percent>=100||elapsed>220)){
   v13Enter.disabled=false;
   const detail=v13Enter.querySelector('small');
   if(detail)detail.textContent='TAP TO DEPLOY • SOUND ON';

@@ -4,3 +4,4 @@ Thumbs.db
 *.log
 
 client/game.js
+client/bundle.css
