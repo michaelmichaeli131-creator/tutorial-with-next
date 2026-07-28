@@ -319,3 +319,26 @@ h3{font:900 14px/1.2 system-ui;letter-spacing:.06em;color:#eaf6ff}
 @media (prefers-reduced-motion:reduce){
  .screen.active .panel{animation:none!important}
 }
+
+/* ============================ MENU FITS THE PHONE ============================ */
+/* The bottom nav is fixed, and the menu column was 197px taller than a 390x844 viewport, so at
+   the resting scroll position SOLO and TITAN sat underneath it. They looked tappable and were
+   not: a tap landed on the nav and switched tab instead of starting a run. Measured with
+   elementFromPoint at each button's centre — both returned #menuNav, and only scrolling to the
+   very bottom made them reachable.
+   A main menu should not need scrolling to reach its own modes, so the column is trimmed to fit
+   rather than the nav being made to float. The pilot portrait is the decorative element here and
+   gives up the most; the mode buttons stay large enough to be comfortable thumb targets. */
+@media (max-width:759px){
+ #menuScreen .hero-visual{min-height:min(118px,32vw)!important;margin:0 0 2px}
+ #menuScreen .v14-menu-art{width:min(124px,32vw);height:min(124px,32vw)}
+ #menuScreen .v18-logo{margin:2px 0 6px}
+ #menuScreen .v18-logo img,#menuScreen .v18-logo svg{max-height:62px}
+ #menuScreen .mode-command .huge{min-height:96px!important}
+ #menuScreen .mode-command .campaign-mode{min-height:88px!important}
+ /* Still clears the 69px nav on shorter phones, where the column has to scroll no matter what. */
+ #menuScreen .hero.panel{padding-bottom:calc(80px + env(safe-area-inset-bottom))!important}
+}
+/* scrollIntoView does not know about a fixed overlay, so anything scrolled to by the browser can
+   land under the nav even when the padding is right. */
+#menuScreen .hero.panel{scroll-padding-bottom:88px}
