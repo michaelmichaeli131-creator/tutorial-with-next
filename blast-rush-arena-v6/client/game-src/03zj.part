@@ -1,0 +1,93 @@
+/* V29 SKIN PRESENCE — make the thing you bought visible while you play.
+
+   The owner asked twice what a skin actually does, which is the clearest possible signal that the
+   answer was "almost nothing". Tracing it: `drawReactor` has been overridden four times since the
+   original, and the version that actually runs draws the pilot from `v14Save.character` with zero
+   references to `currentSkin` or `save.skin`. So the equipped skin appeared on the menu badge, in
+   the lobby, and on the rival cores an opponent sends you in a duel — and nowhere at all during a
+   solo or campaign run. A player could spend 1,400 shards and never once see it while playing.
+
+   That is a cosmetic economy with a hole in the middle: the reward is invisible at the exact
+   moment the player is looking at the screen.
+
+   The skin is now the reactor's energy signature — the light the pilot stands in, the pool it
+   casts on the ground, and the flash when it fires. Deliberately *not* the projectile: V15 gave
+   each weapon its own colour and shape as its identity, and overwriting that would trade one
+   legibility problem for another. The weapon stays the weapon; the skin is you.
+
+   Cost follows the rule the rendering work established: one pre-rendered sprite per skin, built
+   on first use and drawn with drawImage. No gradient is constructed inside a frame. */
+
+const V29_SPRITE=256;
+const v29Sprites=new Map();
+
+function v29Sprite(skin){
+ let sprite=v29Sprites.get(skin.id);
+ if(sprite)return sprite;
+ sprite=document.createElement('canvas');
+ sprite.width=sprite.height=V29_SPRITE;
+ const c=sprite.getContext('2d');
+ const half=V29_SPRITE/2;
+ const glow=c.createRadialGradient(half,half,2,half,half,half);
+ glow.addColorStop(0,'#ffffff');
+ glow.addColorStop(.1,skin.c1);
+ glow.addColorStop(.34,skin.c1+'66');
+ glow.addColorStop(.68,skin.c2+'22');
+ glow.addColorStop(1,skin.c2+'00');
+ c.fillStyle=glow;
+ c.fillRect(0,0,V29_SPRITE,V29_SPRITE);
+ v29Sprites.set(skin.id,sprite);
+ return sprite;
+}
+
+const v29DrawReactorBase=drawReactor;
+drawReactor=function(){
+ if(!game.running)return v29DrawReactorBase();
+ const skin=currentSkin();
+ const y=H-(isMobile?104:70);
+ const breathe=1+Math.sin(game.elapsed*2.4)*.05;
+ const sprite=v29Sprite(skin);
+
+ /* The ground pool goes underneath, because light on the floor belongs behind the thing casting
+    it. Flattened hard so it reads as a pool rather than a sphere. */
+ ctx.save();
+ ctx.globalCompositeOperation='lighter';
+ ctx.globalAlpha=.34;
+ ctx.translate(W/2,y+(isMobile?28:32));
+ ctx.scale(1,.32);
+ const pool=(isMobile?170:200)*breathe;
+ ctx.drawImage(sprite,-pool/2,-pool/2,pool,pool);
+ ctx.restore();
+
+ v29DrawReactorBase();
+
+ /* The halo goes on top, additively. Drawn underneath it was invisible: the pilot paints its own
+    aura at .85 alpha in the character's colours, so a skin layer beneath it was simply buried and
+    every skin looked the same in play. Additive on top tints that light instead of competing with
+    it — the art still reads, the colour is the player's. */
+ ctx.save();
+ ctx.globalCompositeOperation='lighter';
+ ctx.globalAlpha=.5+Math.sin(game.elapsed*2.4)*.06;
+ const halo=(isMobile?150:176)*breathe;
+ ctx.drawImage(sprite,W/2-halo/2,y-halo/2,halo,halo);
+ ctx.restore();
+};
+
+/* The muzzle flash is the reactor discharging, so it belongs to the skin. The projectile itself is
+   left alone — that colour is the weapon's identity and the player needs to keep reading it. */
+const v29FireBase=v15Fire;
+v15Fire=function(x,y){
+ v29FireBase(x,y);
+ game.v15MuzzleColor=currentSkin().c1;
+};
+
+/* Equipping used to change a menu badge and nothing the player could see afterwards. Repainting on
+   equip means the arena picks the new colour up the moment they back out of the store. */
+if(typeof renderSkins==='function'){
+ const v29RenderSkins=renderSkins;
+ renderSkins=function(){
+  v29RenderSkins();
+  const hint=document.querySelector('#profileScreen .skin-hint,#profileScreen .hint,#profileScreen small');
+  if(hint)hint.textContent='Cosmetic only — no stat advantage. Your skin colours your reactor’s glow, its light on the ground, your muzzle flash, your lobby badge, and the Rival Cores you send a friend in a duel.';
+ };
+}
