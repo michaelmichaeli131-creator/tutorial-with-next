@@ -56,11 +56,14 @@ function v15Halo(c,color,radius){
  c.restore();
 }
 
+/* Eyes are drawn once or twice per creature, so with a full field this ran twenty to forty
+   blurred fills a frame on its own — the largest per-frame blur cost left after the body fix.
+   The glow is the creature's signature, so it is kept, just as one cached halo instead of a blur
+   applied to both the iris and its highlight. */
 function v15Eye(c,x,y,r,pal,intensity=1){
  c.save();
  c.translate(x,y);
- c.shadowBlur=18*intensity;
- c.shadowColor=pal.eye;
+ v15Halo(c,pal.eye,r*2.4*intensity);
  c.fillStyle=pal.eye;
  c.beginPath();c.ellipse(0,0,r,r*.78,0,0,Math.PI*2);c.fill();
  c.fillStyle='#ffffff';
