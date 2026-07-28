@@ -1,0 +1,65 @@
+/* V27 SHOT TIMING — the bolt has to arrive with the kill, not long after it.
+
+   Reported as "the monster explodes first and only then the shot animation plays", and measuring
+   it confirmed the report exactly. Frame by frame, from the tap: the target was gone at 18ms and
+   the bolt did not land until 370ms. For more than a third of a second the player watched a
+   projectile fly toward a creature that had already blown up.
+
+   The cause is that damage is applied synchronously inside the tap while the projectile is purely
+   cosmetic and travels at a fixed pixels-per-second. Fixed speed also means the error grows with
+   distance, so the further away the target the more wrong the order looked.
+
+   Damage stays instant. That is deliberate and load-bearing: V15's whole firing model is that the
+   tap lands immediately and only the special effect waits on a cooldown, and V21's heat system
+   prices taps on that assumption. Delaying the hit to match the animation would make the game
+   feel spongy and would quietly change the difficulty everything since has been tuned against.
+
+   So the animation is brought to the damage instead. Shots now fly for a fixed short *duration*
+   rather than at a fixed speed, which both closes the gap and removes the distance dependence —
+   a far target and a near one now land in the same two or three frames. At that offset the eye
+   cannot resolve an order at all, so the muzzle flash, the tracer and the detonation read as one
+   event, which is what firing a weapon is supposed to look like. */
+
+const V27_FLIGHT={
+ quick:.04,
+ heavy:.065,   /* the mortar-class weapons keep a little more weight than the rest */
+ heavySpeed:1300
+};
+
+const v27FireBase=v15Fire;
+v15Fire=function(x,y){
+ const before=v15Shots.length;
+ v27FireBase(x,y);
+ for(let i=before;i<v15Shots.length;i++){
+  const shot=v15Shots[i];
+  /* Arc and tether shots are already driven by their own life timer rather than by travel, so
+     they have no speed to convert and are left exactly as they were. */
+  if(!shot.speed)continue;
+  const distance=Math.max(1,Math.hypot(shot.tx-shot.x0,shot.ty-shot.y0));
+  /* The slowest weapons stay the slowest — the relative feel is part of their identity, it was
+     only the absolute duration that was wrong. */
+  const flight=shot.speed<=V27_FLIGHT.heavySpeed?V27_FLIGHT.heavy:V27_FLIGHT.quick;
+  shot.speed=distance/flight;
+  shot.v27At=performance.now();
+  shot.v27Flight=flight*1000;
+ }
+};
+
+/* Shortening the flight was not enough on its own, and measuring showed why: the base advances a
+   shot by `dt`, and `dt` is scaled down to 28% during the hit-stop that a kill triggers. So the
+   very thing meant to punctuate the impact was also stretching the shot that caused it — the
+   flight measured 236ms even after the duration was cut to 40.
+
+   Hit-stop should hold the world still around an impact; it should not hold up the bolt that is
+   still on its way to make one. These shots are therefore driven from the wall clock instead, so
+   their flight is the same length whether the world is frozen, slowed, or running normally. */
+const v27UpdateBase=update;
+update=function(dt){
+ v27UpdateBase(dt);
+ if(typeof v15Shots==='undefined')return;
+ const now=performance.now();
+ for(const shot of v15Shots){
+  if(!shot.v27Flight)continue;
+  shot.t=Math.min(1,(now-shot.v27At)/shot.v27Flight);
+ }
+};
