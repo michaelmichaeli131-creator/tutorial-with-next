@@ -367,12 +367,12 @@ updateHud=function(){
  v14UpdateHudBase();
  const v=v14Campaign();
  if(!v)return;
- $('worldName').textContent=v.stage.name;
- $('waveLabel').textContent=v.stage.index;
+ setText('worldName',v.stage.name);
+ setText('waveLabel',v.stage.index);
  const label=v14ObjectiveLabels[v.kind]||'PURGE';
- $('directiveLabel').textContent=v.kind==='survive'
+ setText('directiveLabel',v.kind==='survive'
   ? `${label} • ${Math.ceil(v.timeLeft)}s`
-  : `${label} • ${Math.min(v.progress,v.target)}/${v.target}`;
+  : `${label} • ${Math.min(v.progress,v.target)}/${v.target}`);
  $('powersHud').classList.toggle('emp-offline',v14EmpActive());
 };
 

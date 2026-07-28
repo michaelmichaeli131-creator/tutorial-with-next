@@ -18,7 +18,12 @@ for (const [name, source] of [["game.js", game], ["net.js", net]] as const) {
 }
 
 const htmlIds = new Set([...html.matchAll(/\bid=["']([^"']+)["']/g)].map((match) => match[1]));
-const referencedIds = new Set([...game.matchAll(/\$\(["']([^"']+)["']\)/g)].map((match) => match[1]));
+/* setText/setWidth take an element id as their first argument just as $ does, so they have to be
+   recognised here too — otherwise moving a HUD write onto one of them silently drops that id out
+   of the check that its element still exists. */
+const referencedIds = new Set(
+  [...game.matchAll(/(?:\$|setText|setWidth)\(["']([^"']+)["']/g)].map((match) => match[1]),
+);
 const missing = [...referencedIds].filter((id) => !htmlIds.has(id)).sort();
 if (missing.length) throw new Error(`Missing HTML IDs referenced by game.js: ${missing.join(", ")}`);
 

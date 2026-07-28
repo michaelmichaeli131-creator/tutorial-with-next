@@ -87,6 +87,34 @@ function v26Puff(color){
  });
 }
 
+/* The four banks composited into one sprite.
+
+   Measured, not guessed: a spy on CanvasRenderingContext2D.drawImage counted 20.2 calls a frame
+   painting 1,680,000 destination pixels onto a 390x844 canvas — five times the canvas, every
+   frame, before a single creature is drawn. Four of those calls were this nebula, blown up from
+   256 square to between 354 and 625 square in `lighter` mode: 881,000 pixels, 52% of everything
+   the renderer painted, on haze nobody can point at.
+
+   Baking the four banks into one band-sized sprite makes it one blit. What is lost is the
+   independent drift of each bank past the others, and at 0.008 screen widths per second that
+   parallax took two minutes to travel far enough to notice. What replaces it is a bounded sway of
+   the whole field plus a slow breath on its alpha, which is what the eye was reading anyway.
+
+   The sprite is drawn a margin larger than the band so the sway never walks an edge into frame. */
+const V26_NEB_MARGIN=26;
+function v26Nebula(w,bandW,bandH){
+ return v26Layer(`neb|${w.accent}|${w.enemy}|${Math.round(bandW)}x${Math.round(bandH)}|${DPR}`,bandW,bandH,(c,cw,ch)=>{
+  const puffA=v26Puff(w.accent),puffB=v26Puff(w.enemy);
+  c.globalCompositeOperation='lighter';
+  /* The same layout the per-frame loop used, resolved once at t=0. */
+  for(let i=0;i<4;i++){
+   const size=Math.max(cw,ch/.62)*(.42+(i%3)*.16);
+   c.globalAlpha=i%2?.24:.36;
+   c.drawImage(i%2?puffB:puffA,(.1+i*.27)*cw-size/2,(.06+((i*3)%4)*.07)*ch-size/2,size,size);
+  }
+ });
+}
+
 /* ---------- Sky bodies ---------- */
 
 /* A body lit from one side gives the arena a light source, which is the single thing the old
@@ -544,6 +572,23 @@ function v26Skyline(worldIndex,near,w,h,pal,scene){
  });
 }
 
+/* A full-screen sprite scrolled sideways with wraparound.
+
+   The obvious way to write this is two full-width blits, one at the offset and one a screen to its
+   right, and that is what this was. It draws two screens' worth of pixels to show one: whichever
+   part of each blit falls outside the canvas is composited and discarded. Two skyline ranges cost
+   four such blits, 198,000 pixels a frame, for 99,000 pixels of visible skyline.
+
+   Cutting each blit to the slice that actually lands on screen is exact — the same pixels in the
+   same places — and halves the cost. The source rectangle is in the sprite's own device pixels,
+   which is why the shift is scaled by DPR on the way in. */
+function v26Scroll(sprite,shift,y,h){
+ const offset=((shift%W)+W)%W;
+ const first=W-offset;
+ if(first>0)ctx.drawImage(sprite,offset*DPR,0,first*DPR,sprite.height,0,y,first,h);
+ if(offset>0)ctx.drawImage(sprite,0,0,offset*DPR,sprite.height,first,y,offset,h);
+}
+
 /* ---------- Cached full-screen gradients ---------- */
 
 const v26Fills=new Map();
@@ -578,18 +623,18 @@ drawBackground=function(w){
  });
  ctx.fillRect(0,0,W,H);
 
- /* Nebula banks: four blits of one sprite instead of five gradients built every frame. Held in
-    the upper third so the fighting space underneath stays dark. */
+ /* Nebula: one blit of a pre-composited band, held in the upper two thirds so the fighting space
+    underneath stays dark. See v26Nebula for what this replaced and what it cost. */
  ctx.save();
  ctx.globalCompositeOperation='lighter';
- const puffA=v26Puff(w.accent),puffB=v26Puff(w.enemy);
- for(let i=0;i<4;i++){
-  const size=Math.max(W,H)*(.42+(i%3)*.16);
-  const x=((.1+i*.27+t*(.008+i*.004))%1.4-.2)*W-size/2;
-  const y=(.06+((i*3)%4)*.07)*H+Math.sin(t*.16+i)*14-size/2;
-  ctx.globalAlpha=(i%2?.24:.36)*(.72+.28*Math.sin(t*.22+i*1.7));
-  ctx.drawImage(i%2?puffB:puffA,x,y,size,size);
- }
+ const bandW=W+V26_NEB_MARGIN*2,bandH=Math.round(H*.62)+V26_NEB_MARGIN*2;
+ ctx.globalAlpha=.72+.28*Math.sin(t*.22);
+ ctx.drawImage(
+  v26Nebula(w,bandW,bandH),
+  -V26_NEB_MARGIN+Math.sin(t*.09)*V26_NEB_MARGIN*.7,
+  -V26_NEB_MARGIN+Math.sin(t*.16)*V26_NEB_MARGIN*.5,
+  bandW,bandH
+ );
  ctx.restore();
 
  ctx.save();
@@ -643,9 +688,7 @@ drawBackground=function(w){
  const nearSprite=v26Skyline(index,true,W,nearH,pal,scene);
  ctx.save();
  ctx.globalAlpha=.66;
- const farShift=-((t*3.2)%W);
- ctx.drawImage(farSprite,farShift,farBase-farH,W,farH);
- ctx.drawImage(farSprite,farShift+W,farBase-farH,W,farH);
+ v26Scroll(farSprite,(t*3.2)%W,farBase-farH,farH);
  ctx.restore();
 
  /* Aerial perspective between the ranges: the one cue that reliably says "that one is further". */
@@ -661,9 +704,7 @@ drawBackground=function(w){
  ctx.fillRect(0,farBase-farH,W,farH+6);
  ctx.restore();
 
- const nearShift=-((t*7.4)%W);
- ctx.drawImage(nearSprite,nearShift,horizon-nearH,W,nearH);
- ctx.drawImage(nearSprite,nearShift+W,horizon-nearH,W,nearH);
+ v26Scroll(nearSprite,(t*7.4)%W,horizon-nearH,nearH);
 
  /* Ground: the floor the creatures are descending toward, with the skyline's light lying on it. */
  ctx.save();
@@ -802,25 +843,25 @@ function v15RefreshCombatBar(){
   if(campaign.kind==='survive'){
    current=campaign.target-Math.ceil(campaign.timeLeft);
    target=campaign.target;
-   v15ObjectiveText.textContent=`${Math.ceil(campaign.timeLeft)}s LEFT`;
+   setText(v15ObjectiveText,`${Math.ceil(campaign.timeLeft)}s LEFT`);
   }else{
    current=Math.min(campaign.progress,campaign.target);
    target=campaign.target;
-   v15ObjectiveText.textContent=`${current} / ${target}`;
+   setText(v15ObjectiveText,`${current} / ${target}`);
   }
-  v15StageName.textContent=campaign.stage.name;
-  v15StageKind.textContent=`STAGE ${campaign.stage.index}`;
+  setText(v15StageName,campaign.stage.name);
+  setText(v15StageKind,`STAGE ${campaign.stage.index}`);
  }else{
   label=game.objective;
   current=Math.min(game.waveKills,game.waveTarget);
   target=game.waveTarget;
-  v15ObjectiveText.textContent=`${current} / ${target}`;
-  v15StageName.textContent=worlds[game.world%worlds.length].name;
-  v15StageKind.textContent=`WAVE ${game.wave}`;
+  setText(v15ObjectiveText,`${current} / ${target}`);
+  setText(v15StageName,worlds[game.world%worlds.length].name);
+  setText(v15StageKind,`WAVE ${game.wave}`);
  }
- v15ObjectiveFill.style.width=Math.max(0,Math.min(100,target?current/target*100:0)).toFixed(1)+'%';
- v15CombatBar.dataset.objective=label;
- $('cbScore').textContent=format(game.score);
+ setWidth(v15ObjectiveFill,target?current/target*100:0);
+ if(v15CombatBar.dataset.objective!==label)v15CombatBar.dataset.objective=label;
+ setText('cbScore',format(game.score));
 }
 
 const v15BarHudBase=updateHud;

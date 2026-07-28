@@ -10,9 +10,14 @@ let v17PortraitFor='';
 function v17DrawPortrait(force=false){
  if(!v17PortraitCtx)return;
  const id=v14Save.character;
+ /* The early-out has to come first. v14FitCanvas calls getBoundingClientRect, and this runs from
+    updateHud on every frame — so measuring before deciding forced the browser to flush layout
+    synchronously in the middle of the frame, sixty times a second, to answer a question whose
+    answer was thrown away. It was the single largest non-drawing cost in the profile and it made
+    the counters report 1.58 layouts per frame where a frame needs one. */
+ if(!force&&id===v17PortraitFor)return;
  const size=v14FitCanvas(v17Portrait,v17PortraitCtx);
  if(!size)return;
- if(!force&&id===v17PortraitFor)return;
  v17PortraitFor=id;
  v17PortraitCtx.clearRect(0,0,size.w,size.h);
  v14DrawCharacter(v17PortraitCtx,id,.8,{
@@ -39,23 +44,28 @@ updateHud=function(){
  v17UpdateHudBase();
 
  v17DrawPortrait();
- $('hudLevel').textContent=save.level;
- $('hudPilotName').textContent=v14Character().name.replace(/^(NOVA|EMBER|ORCHID|FROST|VOID|OMEGA)\s+/,'');
- $('hudCredits').textContent=format(v14Save.credits);
+ setText('hudLevel',save.level);
+ setText('hudPilotName',v14Character().name.replace(/^(NOVA|EMBER|ORCHID|FROST|VOID|OMEGA)\s+/,''));
+ setText('hudCredits',format(v14Save.credits));
 
  const combo=game.combo||0;
  const rank=V17_RANKS.find((r)=>combo>=r.at);
  v17Combo.classList.toggle('hidden',!rank);
  if(rank){
-  $('comboBig').textContent=combo;
-  $('comboRankBig').textContent=rank.label;
-  $('comboBonus').textContent='+'+Math.min(100,combo*2)+'%';
+  setText('comboBig',combo);
+  setText('comboRankBig',rank.label);
+  setText('comboBonus','+'+Math.min(100,combo*2)+'%');
   v17Combo.classList.toggle('peak',Boolean(rank.peak));
  }
 
  const boss=game.boss;
- if(boss)$('bossPct').textContent=Math.max(0,Math.round(boss.hp/boss.maxHp*100))+'%';
+ if(boss)setText('bossPct',Math.max(0,Math.round(boss.hp/boss.maxHp*100))+'%');
 };
+
+/* The portrait is only re-fitted when the pilot changes now, so a rotation or a window resize has
+   to say so explicitly — otherwise the canvas keeps the backing store it was given at the old
+   size and the bust renders soft or cropped for the rest of the session. */
+addEventListener('resize',()=>{v17PortraitFor='';},{passive:true});
 
 const v17ShowGameBase=showGame;
 showGame=function(){

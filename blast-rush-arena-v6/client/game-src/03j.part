@@ -632,15 +632,91 @@ function v15DrawTitan(b,w){
  }
 }
 
+/* ---------- Per-instance variation ----------
+
+   Every scout was the same drawing at the same size in the same colour, so four of them arriving
+   together read as one shape repeated four times — wallpaper, not a squad. It is the single
+   clearest tell that a crowd was generated rather than drawn, and no amount of detail on the
+   individual creature fixes it, because the eye is comparing neighbours, not inspecting one.
+
+   Each hostile therefore gets a signature the moment it is first drawn: a size, a resting tilt, a
+   bob rate, a facing, and a small shift of its palette. All of it is transform and colour, so a
+   varied crowd costs exactly what an identical one did — which matters, since this ships onto the
+   same frame budget the rest of this pass has been cutting. */
+let v33Seed=1;
+function v33Sig(o){
+ if(o.v33)return o.v33;
+ /* Hashed off the spawn's own randomness where there is any, so a replayed seed produces the same
+    crowd, with a counter behind it so two hostiles spawned on the same frame still differ. */
+ const base=((o.anim||0)*10007+(o.variant||0)*61+(v33Seed=(v33Seed*1664525+1013904223)>>>0)/4294967296*997);
+ const f=(n)=>{const x=Math.sin(base*n)*43758.5453;return x-Math.floor(x);};
+ o.v33={
+  size:.92+f(1.7)*.17,
+  tilt:(f(3.1)-.5)*.17,
+  rate:.86+f(5.3)*.32,
+  bob:.7+f(7.9)*.7,
+  /* Bosses and the rival warlord keep their intended facing: they are characters, not a crowd. */
+  flip:(o.type==='rival'||f(11.3)>.5)?1:-1,
+  hue:(f(13.7)-.5)*22,
+  lum:.93+f(17.1)*.15
+ };
+ return o.v33;
+}
+
+/* Hue and lightness on a hex colour, memoised: the shift is per creature but the answer only
+   depends on the colour and the bucket, and there are a handful of each. */
+const v33Tints=new Map();
+function v33Shift(hex,hue,lum){
+ const key=`${hex}|${hue}|${lum}`;
+ const hit=v33Tints.get(key);
+ if(hit)return hit;
+ const n=parseInt(hex.slice(1),16);
+ let r=(n>>16&255)/255,g=(n>>8&255)/255,b=(n&255)/255;
+ const max=Math.max(r,g,b),min=Math.min(r,g,b),d=max-min;
+ let h=0;
+ if(d){
+  if(max===r)h=((g-b)/d+(g<b?6:0));
+  else if(max===g)h=(b-r)/d+2;
+  else h=(r-g)/d+4;
+  h*=60;
+ }
+ const l0=(max+min)/2;
+ const denom=1-Math.abs(2*l0-1);
+ const s=d&&denom>1e-6?d/denom:0;
+ const l=Math.max(0,Math.min(1,l0*lum));
+ h=(h+hue+360)%360;
+ const c=(1-Math.abs(2*l-1))*s,x=c*(1-Math.abs((h/60)%2-1)),m=l-c/2;
+ const seg=Math.floor(h/60)%6;
+ const rgb=[[c,x,0],[x,c,0],[0,c,x],[0,x,c],[x,0,c],[c,0,x]][seg];
+ const out='#'+rgb.map((v)=>Math.round((v+m)*255).toString(16).padStart(2,'0')).join('');
+ if(v33Tints.size>256)v33Tints.clear();
+ v33Tints.set(key,out);
+ return out;
+}
+
+function v33Palette(pal,sig){
+ if(!sig.hue&&sig.lum===1)return pal;
+ if(sig.pal)return sig.pal;
+ sig.pal={
+  body:v33Shift(pal.body,sig.hue,sig.lum),
+  trim:v33Shift(pal.trim,sig.hue,sig.lum),
+  glow:v33Shift(pal.glow,sig.hue,sig.lum),
+  eye:pal.eye
+ };
+ return sig.pal;
+}
+
 drawOrb=function(o,w){
- const pal=v15Skin(o);
+ const sig=v33Sig(o);
+ /* The rival wears the player's own skin, which is a readout — it does not get recoloured. */
+ const pal=o.type==='rival'?v15Skin(o):v33Palette(v15Skin(o),sig);
  const life=o.v11Age||0;
  const attack=o.v11Attack||0;
  /* Art runs slightly larger than the collision radius for presence; the tap ellipse in 03d is
     already wider than r, so the generous silhouette still matches what the player can hit. */
- const scale=o.r/30*1.15;
- const bob=Math.sin(life*4.2+(o.anim||0))*3;
- const lean=Math.sin(o.phase*.6+(o.variant||0))*.07+attack*.1;
+ const scale=o.r/30*1.15*sig.size;
+ const bob=Math.sin(life*4.2*sig.rate+(o.anim||0))*3*sig.bob;
+ const lean=Math.sin(o.phase*.6+(o.variant||0))*.07+attack*.1+sig.tilt;
  const flash=Math.max(0,o.v11Hit||0);
 
  ctx.save();
@@ -672,7 +748,9 @@ drawOrb=function(o,w){
  }
 
  ctx.rotate(lean);
- ctx.scale(scale*(1-attack*.08),scale*(1+attack*.14));
+ /* Facing is mirrored on the body only. The health bar and the gameplay overlays are drawn in
+    world coordinates after this transform is restored, so they are never flipped with it. */
+ ctx.scale(sig.flip*scale*(1-attack*.08),scale*(1+attack*.14));
  /* A creature is built from dozens of fills and strokes, and Canvas 2D re-runs the shadow blur
     for every one of them — so setting shadowBlur once around the whole body cost dozens of blurs
     per creature per frame, with ten of them on screen at once. The same mistake was profiled on

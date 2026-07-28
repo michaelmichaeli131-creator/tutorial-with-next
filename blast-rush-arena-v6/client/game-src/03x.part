@@ -102,7 +102,7 @@ updateHud=function(){
  if(!v19Tray.classList.contains('hidden'))v19RefreshTray();
  /* The card reports the cheapest thing currently affordable, so the pool reads as spendable. */
  const affordable=V19_ATTACKS.filter((a)=>game.pressure>=a.cost).length;
- $('pressureText').textContent=affordable?`${affordable} READY`:`${Math.floor(game.pressure)}`;
+ setText('pressureText',affordable?`${affordable} READY`:`${Math.floor(game.pressure)}`);
  v19PressureBtn.classList.toggle('ready',affordable>0);
 };
 

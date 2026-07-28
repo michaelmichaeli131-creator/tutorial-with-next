@@ -560,13 +560,13 @@ updateHud=function(){
  const streak=game.v24.streak;
  const detail=dir.short?dir.short(dir):'';
  const text=$('cbObjectiveText');
- if(text&&detail)text.textContent=`${Math.min(game.waveKills,game.waveTarget)}/${game.waveTarget} · ${detail}`;
+ if(text&&detail)setText(text,`${Math.min(game.waveKills,game.waveTarget)}/${game.waveTarget} · ${detail}`);
  const label=$('directiveLabel');
- if(label)label.textContent=`${dir.name}${detail?' • '+detail:''}${streak?` • x${(1+streak*V24_STREAK.step).toFixed(2)}`:''}`;
+ if(label)setText(label,`${dir.name}${detail?' • '+detail:''}${streak?` • x${(1+streak*V24_STREAK.step).toFixed(2)}`:''}`);
  const bar=$('combatBar');
  if(bar){
-  bar.dataset.objective=dir.name;
-  bar.dataset.streak=streak;
+  if(bar.dataset.objective!==dir.name)bar.dataset.objective=dir.name;
+  if(bar.dataset.streak!==String(streak))bar.dataset.streak=streak;
  }
 };
 

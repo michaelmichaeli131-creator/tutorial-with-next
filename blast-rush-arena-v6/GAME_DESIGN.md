@@ -1,5 +1,74 @@
 # Blast Rush Arena V6 — Game and Social Design
 
+## V33 — measuring the slowness instead of reasoning about it
+
+Three separate reports of "still very slow" had been answered by reading the rendering code and
+optimising whatever looked expensive. This round asked the engine instead: a V8 sample profile of a
+live run, and a spy on `CanvasRenderingContext2D.drawImage` counting calls, callers and destination
+sizes. Both said something the code review had not.
+
+**The renderer was painting five canvases per frame to show one.**
+
+| | before | after |
+| --- | --- | --- |
+| `drawImage` calls per frame | 20.2 | 14.0 |
+| destination pixels per frame | 1,680,000 | 707,000 |
+| canvas size for comparison | 329,000 (390×844) | 329,000 |
+| `drawImage` self time, 25s at 4× throttle | 3,615 ms | 2,053 ms |
+
+Three call sites accounted for almost all of it, and none of them was a creature or an explosion:
+
+- **The nebula, 881,000 px/frame — 52% of everything painted.** Four blits of one 256-square puff
+  sprite, blown up to between 354 and 625 square in `lighter` mode. They drifted at 0.008 screen
+  widths per second, so the parallax between them took two minutes to travel far enough to see.
+  Now composited into one band-sized sprite and blitted once, with a bounded sway and a slow breath
+  on its alpha in place of the drift.
+- **The pilot, 411,000 px/frame — 24%.** The offscreen compositing buffer that gives the pilot its
+  rim light was rebuilt every frame: ~30 vector fills, a shadow blur across a 360-square surface,
+  and three more full-buffer blits, all to produce a 140-pixel-tall figure. The pilot's walk is two
+  sine waves at 2.1 and 4 rad/s. Rebuilding at 20 Hz is indistinguishable from 60 and skips two
+  frames in three.
+- **The skylines, 198,000 px/frame.** Scrolled by drawing each range twice at full width, so half
+  of every blit landed off-canvas. Cutting each to its visible slice draws the same pixels in the
+  same places for half the cost.
+
+The sample profile also showed the browser flushing layout **1.58 times per frame** where a frame
+needs one. `v17DrawPortrait` runs from `updateHud`, which runs at the end of every `update`, and it
+called `getBoundingClientRect` *before* the early-out that decides the portrait has not changed — a
+forced synchronous reflow, sixty times a second, to answer a question whose answer was discarded.
+Moving the early-out first took layout from 2.37 to 1.13 ms per frame and the count to 0.99.
+
+The rest of the HUD had the same shape of problem: `updateHud` wrote twenty DOM nodes every frame,
+and Blink does not compare before it assigns — writing the same string still dirties the node and
+buys another style recalculation. `setText`/`setWidth` remember what they last wrote. Most of this
+HUD changes on a kill or a wave, not on a frame.
+
+None of this changes what the game looks like. Every screen renders identically; the before and
+after captures differ only in which hostiles happened to spawn.
+
+## V33 — a crowd of individuals
+
+The other half of the same pass, and the one thing the graphics work had explicitly left undone.
+
+Every scout was the same drawing at the same size in the same colour, so four arriving together
+read as one shape stamped four times. It is the clearest single tell that a crowd was generated
+rather than drawn, and detail on the individual creature cannot fix it, because the eye is
+comparing neighbours rather than inspecting one of them.
+
+Each hostile now gets a signature the first time it is drawn — size (±8%), resting tilt, bob rate
+and depth, facing, and a shift of its palette in hue and lightness. It is hashed off the spawn's
+own randomness, so a replayed seed produces the same crowd.
+
+Two constraints shaped it:
+
+- **It has to be free.** All of it is transform and colour, so a varied crowd costs exactly what an
+  identical one did. That matters in a pass whose other half is cutting the frame budget in half.
+- **It must not touch a readout.** The rival warlord wears the player's own skin and keeps it
+  unrecoloured and unflipped. The health bar and the gameplay overlays are drawn in world
+  coordinates after the body transform is restored, so nothing that tells the player something is
+  ever mirrored or resized. Art already ran at 1.15× the collision radius against a tap ellipse of
+  roughly 1.6×, so ±8% on the drawing never approaches the edge of what is hittable.
+
 ## V23 — two buttons become two decisions
 
 This one began by overturning an assumption behind V21 and V22. Both were tuned against bots that

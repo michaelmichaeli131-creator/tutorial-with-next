@@ -204,7 +204,7 @@ updateHud=function(){
  v23HudBase();
  const charge=Math.min(V23_BLAST.max,game.blast);
  const over=charge>V23_BLAST.min;
- $('blastText').textContent=Math.floor(charge)+'%';
+ setText('blastText',Math.floor(charge)+'%');
  const button=$('blastBtn');
  button.classList.toggle('v23-over',over);
  /* The ring stays full once the ability is usable and the bank is carried by the percentage and

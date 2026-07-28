@@ -55,44 +55,62 @@ function v15Grad(c,key,build){
  return gradient;
 }
 
+/* What is in v15Out right now, so a frame that would rebuild the identical image can skip it.
+   Empty means the buffer holds nothing a caller can reuse. */
+let v15OutKey='';
+/* The pilot's walk is two sine waves at 2.1 and 4 rad/s — a slow sway, not a fast action. Rebuilt
+   at 20 Hz it is indistinguishable from rebuilt at 60, and film has run at 24 for a century.
+
+   This matters because the rebuild is not cheap. Composing the buffer is ~30 vector fills, a
+   shadow blur across a 360-square surface, and three more full-buffer blits — 411,000 destination
+   pixels a frame, 24% of everything the renderer painted, to produce a 140-pixel-tall pilot. Two
+   frames in three now skip all of it and go straight to the final blit. */
+const V15_COMPOSE_HZ=20;
+
 v14DrawCharacter=function(c,characterId,time,options={}){
  const ch=v14Character(characterId);
  const scale=options.scale||1;
  const frame=v14Frames[ch.frame]||v14Frames.knight;
  const glow=options.glow??18;
 
- /* The pilot is built from roughly thirty fills and strokes. Canvas 2D re-runs the shadow blur
-    for every one of them, so setting shadowBlur once around the whole frame routine cost thirty
-    blurs per frame — profiling put the reactor at 6.2ms of a 7.2ms frame almost entirely on this.
-    The silhouette is blurred once instead, in the rim pass below. */
- v15PrepareBuffer(v15ShapeCtx,v15Shape);
- frame(v15ShapeCtx,ch,time);
+ /* Quantising the animation phase is what makes the key repeat across frames; without it every
+    frame asks for a slightly different pose and the buffer is rebuilt every time regardless. */
+ const key=`${ch.id}|${glow}|${Math.round(time*V15_COMPOSE_HZ)}`;
+ if(key!==v15OutKey){
+  v15OutKey=key;
+  /* The pilot is built from roughly thirty fills and strokes. Canvas 2D re-runs the shadow blur
+     for every one of them, so setting shadowBlur once around the whole frame routine cost thirty
+     blurs per frame — profiling put the reactor at 6.2ms of a 7.2ms frame almost entirely on this.
+     The silhouette is blurred once instead, in the rim pass below. */
+  v15PrepareBuffer(v15ShapeCtx,v15Shape);
+  frame(v15ShapeCtx,ch,time);
 
- v15PrepareBuffer(v15OutCtx,v15Out);
- /* Rim and glow in one pass: the silhouette blown up slightly, with a single blurred copy of
-    itself behind it, both flooded with the accent. The art is painted opaque on top afterwards,
-    so only the part of the blur that falls outside the pilot survives. */
- v15OutCtx.save();
- v15OutCtx.setTransform(1,0,0,1,0,0);
- v15OutCtx.globalAlpha=.52;
- /* One blur, on the silhouette, instead of one per fill. This is the whole saving: the cost is
-    paid once for the shape rather than thirty times for the parts that make it up, and the glow
-    the pilot is supposed to have survives. */
- v15OutCtx.shadowBlur=glow;
- v15OutCtx.shadowColor='#ffffff';
- const spread=2;
- v15OutCtx.drawImage(v15Shape,-spread,-spread,v15Shape.width+spread*2,v15Shape.height+spread*2);
- v15OutCtx.shadowBlur=0;
- v15OutCtx.globalCompositeOperation='source-in';
- v15OutCtx.fillStyle=ch.c1;
- v15OutCtx.fillRect(0,0,v15Out.width,v15Out.height);
- v15OutCtx.globalCompositeOperation='source-over';
- v15OutCtx.globalAlpha=1;
- v15OutCtx.drawImage(v15Shape,0,0);
- /* Volumetric light: bright along the top, shaded toward the feet, plus the specular. */
- v15OutCtx.globalCompositeOperation='source-atop';
- v15OutCtx.drawImage(v15Light,0,0);
- v15OutCtx.restore();
+  v15PrepareBuffer(v15OutCtx,v15Out);
+  /* Rim and glow in one pass: the silhouette blown up slightly, with a single blurred copy of
+     itself behind it, both flooded with the accent. The art is painted opaque on top afterwards,
+     so only the part of the blur that falls outside the pilot survives. */
+  v15OutCtx.save();
+  v15OutCtx.setTransform(1,0,0,1,0,0);
+  v15OutCtx.globalAlpha=.52;
+  /* One blur, on the silhouette, instead of one per fill. This is the whole saving: the cost is
+     paid once for the shape rather than thirty times for the parts that make it up, and the glow
+     the pilot is supposed to have survives. */
+  v15OutCtx.shadowBlur=glow;
+  v15OutCtx.shadowColor='#ffffff';
+  const spread=2;
+  v15OutCtx.drawImage(v15Shape,-spread,-spread,v15Shape.width+spread*2,v15Shape.height+spread*2);
+  v15OutCtx.shadowBlur=0;
+  v15OutCtx.globalCompositeOperation='source-in';
+  v15OutCtx.fillStyle=ch.c1;
+  v15OutCtx.fillRect(0,0,v15Out.width,v15Out.height);
+  v15OutCtx.globalCompositeOperation='source-over';
+  v15OutCtx.globalAlpha=1;
+  v15OutCtx.drawImage(v15Shape,0,0);
+  /* Volumetric light: bright along the top, shaded toward the feet, plus the specular. */
+  v15OutCtx.globalCompositeOperation='source-atop';
+  v15OutCtx.drawImage(v15Light,0,0);
+  v15OutCtx.restore();
+ }
 
  c.save();
  c.translate(options.x||0,options.y||0);
