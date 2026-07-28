@@ -3,7 +3,10 @@
    art direction and nothing depends on a third-party CDN at runtime. */
 const v15Palette={
  normal:{body:'#7b5cff',trim:'#c9b8ff',glow:'#a98bff',eye:'#8affe8'},
- armored:{body:'#3f7fd8',trim:'#bfe2ff',glow:'#61a5ff',eye:'#ffd98a'},
+ /* The sentinel and the warlord were both saturated blue and the player has to tell them apart in
+    a crowd. Iron gets pushed to gunmetal and keeps the amber eye — the warlord keeps the neon,
+    because the neon is the rival pilot's own colour and that is the point of it. */
+ armored:{body:'#5f80a4',trim:'#bccfe1',glow:'#9dc0de',eye:'#ffbe4d'},
  bomb:{body:'#d8324f',trim:'#ffb2a0',glow:'#ff3f61',eye:'#ffe066'},
  shard:{body:'#25c88a',trim:'#c6ffe6',glow:'#69ffb5',eye:'#eafff6'},
  splitter:{body:'#d8a72c',trim:'#ffeaa8',glow:'#ffe05f',eye:'#fff3c4'},
@@ -56,6 +59,24 @@ function v15Halo(c,color,radius){
  c.restore();
 }
 
+/* Wings, thruster flames, fuse cores and crystal hearts each built a gradient every frame for
+   every creature that had one — thirty-odd allocations a frame on a full field, for gradients
+   whose stops never change. They go through v15Grad, the per-context cache the pilot renderer in
+   03m already uses; the geometry is fixed in creature-local space and a gradient is resolved in
+   whatever user space the caller has set up, so one per shape covers every creature of that type. */
+
+/* A hot point of light without a shadow blur: one cached halo plus a small hard core. The blur
+   version of this ran once per bomb and once per rival every frame. */
+function v15Spark(c,x,y,color,radius,intensity=1){
+ c.save();
+ c.translate(x,y);
+ c.globalCompositeOperation='lighter';
+ v15Halo(c,color,radius*intensity);
+ c.fillStyle='#fff8dc';
+ c.beginPath();c.arc(0,0,radius*.24*intensity,0,Math.PI*2);c.fill();
+ c.restore();
+}
+
 /* Eyes are drawn once or twice per creature, so with a full field this ran twenty to forty
    blurred fills a frame on its own — the largest per-frame blur cost left after the body fix.
    The glow is the creature's signature, so it is kept, just as one cached halo instead of a blur
@@ -71,119 +92,160 @@ function v15Eye(c,x,y,r,pal,intensity=1){
  c.restore();
 }
 
+/* Six species were being built out of one rounded heptagon at six different widths. Stood side by
+   side in one screenshot they were the same drawing recoloured, which is the whole of the "looks
+   generated" complaint: a family resemblance that turned into sameness. The shared carapace helper
+   stays — it is what makes them belong together, and V19's seams and specular hang off it — but
+   the outlines now diverge hard. Silhouette is what a player reads first, at thumbnail size, in
+   the corner of their eye, while something else is trying to kill them.
+
+   Every archetype answers one question differently: the scout is a dart, the sentinel is a wide
+   flat slab, the raider is a sphere, the wraith is a spike, the twin is bottom-heavy, the warlord
+   is shouldered. None of them can be mistaken for another at a glance, in monochrome. */
+
+/* Ten sides, so the shell reads as a sphere while still going through the same plating pass every
+   other creature does. */
+const V26_SHELL=[[0,-27],[16,-21],[25,-7],[24,11],[14,24],[0,28],[-14,24],[-24,11],[-25,-7],[-16,-21]];
+
 const v15Creatures={
- /* VOID SCOUT — light insectile drone. Fast, fragile, reads instantly as "the basic one". */
+ /* VOID SCOUT — a dart with wings. Narrow body, long swept planes, everything about it says fast. */
  normal(c,o,pal,t){
   const flap=Math.sin(t*7+(o.anim||0))*.5;
   for(const side of [-1,1]){
    c.save();
-   c.translate(side*13,-6);
-   c.rotate(side*(.35+flap));
+   c.translate(side*10,-6);
+   c.rotate(side*(.3+flap));
    c.globalAlpha=.85;
-   const wing=c.createLinearGradient(0,0,side*32,-14);
-   wing.addColorStop(0,pal.glow+'cc');
-   wing.addColorStop(1,'transparent');
-   c.fillStyle=wing;
-   v14Art.poly(c,[[0,-4],[side*34,-20],[side*30,4],[side*6,8]]);
+   c.fillStyle=v15Grad(c,'scout-wing'+side,()=>{
+    const g=c.createLinearGradient(0,0,side*34,-16);
+    g.addColorStop(0,pal.glow+'cc');
+    g.addColorStop(.55,pal.body+'55');
+    g.addColorStop(1,'transparent');
+    return g;
+   });
+   v14Art.poly(c,[[0,-6],[side*40,-24],[side*33,2],[side*5,9]]);
    c.fill();
    c.strokeStyle=pal.trim+'66';c.lineWidth=1.2;c.stroke();
+   /* Spars: a translucent plane with nothing in it reads as a smear. */
+   c.strokeStyle=pal.trim+'44';c.lineWidth=.9;
+   c.beginPath();c.moveTo(side*3,-3);c.lineTo(side*36,-19);c.stroke();
+   c.beginPath();c.moveTo(side*3,2);c.lineTo(side*31,0);c.stroke();
    c.restore();
   }
-  v14Art.limb(c,-9,20,-14,33,4,pal.body);
-  v14Art.limb(c,9,20,14,33,4,pal.body);
-  v15Carapace(c,pal,[[0,-30],[15,-18],[17,8],[9,24],[-9,24],[-17,8],[-15,-18]],-16,-28,16,22);
+  v14Art.limb(c,-7,20,-11,32,3.5,pal.body);
+  v14Art.limb(c,7,20,11,32,3.5,pal.body);
+  v15Carapace(c,pal,[[0,-32],[9,-17],[12,5],[6,24],[-6,24],[-12,5],[-9,-17]],-12,-30,12,22);
   c.fillStyle='#060a18';
-  v14Art.poly(c,[[0,-26],[11,-16],[9,-2],[-9,-2],[-11,-16]]);c.fill();
-  v15Eye(c,0,-14,7,pal);
+  v14Art.poly(c,[[0,-28],[8,-17],[7,-3],[-7,-3],[-8,-17]]);c.fill();
+  v15Eye(c,0,-15,5.6,pal);
   c.fillStyle=pal.trim;
   c.globalAlpha=.75;
-  v14Art.poly(c,[[-4,4],[4,4],[2,16],[-2,16]]);c.fill();
+  v14Art.poly(c,[[-3,5],[3,5],[1.5,17],[-1.5,17]]);c.fill();
   c.globalAlpha=1;
   const jet=8+Math.sin(t*14)*3;
-  const flame=c.createLinearGradient(0,24,0,24+jet);
-  flame.addColorStop(0,'#ffffff');
-  flame.addColorStop(.4,pal.glow);
-  flame.addColorStop(1,'transparent');
-  c.fillStyle=flame;
-  v14Art.poly(c,[[-5,23],[5,23],[0,24+jet]]);c.fill();
+  c.fillStyle=v15Grad(c,'scout-flame',()=>{
+   const g=c.createLinearGradient(0,23,0,40);
+   g.addColorStop(0,'#ffffff');
+   g.addColorStop(.35,pal.glow);
+   g.addColorStop(1,'transparent');
+   return g;
+  });
+  v14Art.poly(c,[[-4.5,23],[4.5,23],[0,24+jet]]);c.fill();
  },
- /* IRON SENTINEL — heavy plated walker with shoulder pods. Wide, slow, obviously armoured. */
+ /* IRON SENTINEL — a wide flat slab on two pistons. Squat where the scout is tall, and the only
+    creature whose outline is wider than it is high. */
  armored(c,o,pal,t){
   const stomp=Math.sin(t*2.6+(o.anim||0))*2.5;
-  v14Art.limb(c,-13,22,-18,38+stomp,9,pal.body);
-  v14Art.limb(c,13,22,18,38-stomp,9,pal.body);
+  v14Art.limb(c,-14,20,-18,36+stomp,11,pal.body);
+  v14Art.limb(c,14,20,18,36-stomp,11,pal.body);
+  /* Feet, because a walker with no feet is furniture. */
+  c.fillStyle='#0a1220';
+  for(const side of [-1,1]){
+   v14Art.round(c,side*18-9,36+stomp*side-3,18,7,3);c.fill();
+  }
+  /* Shoulder armour: angled plates hung off the body, not free-floating boxes beside it. The
+     rounded pods read as brackets — a pauldron has to slope away from the shoulder. */
   for(const side of [-1,1]){
    c.save();
-   c.translate(side*24,-10);
+   c.translate(side*20,-14);
+   c.rotate(side*.34);
    c.fillStyle='#0d1730';
-   v14Art.round(c,-9,-11,18,22,6);c.fill();
-   c.strokeStyle=pal.glow;c.lineWidth=2;c.stroke();
+   v14Art.poly(c,[[0,-9],[side*17,-4],[side*15,14],[0,12]]);c.fill();
+   c.strokeStyle=pal.glow+'cc';c.lineWidth=2;c.stroke();
    c.fillStyle=pal.trim;
-   c.globalAlpha=.8;
-   v14Art.round(c,-4,-6,8,5,2);c.fill();
+   c.globalAlpha=.7;
+   v14Art.poly(c,[[side*3,-6],[side*14,-2],[side*13,2],[side*3,-1]]);c.fill();
    c.globalAlpha=1;
    c.restore();
   }
-  v15Carapace(c,pal,[[0,-26],[20,-16],[22,10],[13,26],[-13,26],[-22,10],[-20,-16]],-22,-26,22,26);
+  v15Carapace(c,pal,[[-13,-24],[13,-24],[27,-6],[24,12],[13,27],[-13,27],[-24,12],[-27,-6]],-27,-24,27,27);
+  /* Rivets along the shoulder line. Plate armour is fasteners more than it is panels. */
   c.save();
-  c.globalAlpha=.55;
-  c.strokeStyle=pal.trim;
-  c.lineWidth=1.3;
-  for(let i=-1;i<=1;i++){
-   c.beginPath();c.moveTo(-16,i*8+4);c.lineTo(16,i*8+4);c.stroke();
+  c.globalAlpha=.5;
+  c.fillStyle=pal.trim;
+  for(let i=-2;i<=2;i++){
+   c.beginPath();c.arc(i*9,-19,1.5,0,Math.PI*2);c.fill();
+   c.beginPath();c.arc(i*9,23,1.5,0,Math.PI*2);c.fill();
   }
   c.restore();
   c.fillStyle='#050b1a';
-  v14Art.poly(c,[[-15,-24],[15,-24],[12,-8],[-12,-8]]);c.fill();
+  v14Art.poly(c,[[-19,-22],[19,-22],[15,-6],[-15,-6]]);c.fill();
+  /* The sentinel's face is one wide bar rather than eyes — it is a machine, not an animal. */
   c.save();
-  c.translate(0,-16);
-  c.shadowBlur=16;c.shadowColor=pal.eye;
+  c.translate(0,-14);
+  v15Halo(c,pal.eye,17);
   c.fillStyle=pal.eye;
-  v14Art.round(c,-10,-2.5,20,5,2.5);c.fill();
+  v14Art.round(c,-13,-2.5,26,5,2.5);c.fill();
   c.restore();
+  /* A brow ridge, not a crest. Spanning the full width put a pale wedge on top of the silhouette
+     that read as a hat rather than as armour. */
   c.fillStyle=pal.trim;
-  v14Art.poly(c,[[-22,-24],[0,-34],[22,-24],[0,-27]]);c.fill();
+  c.globalAlpha=.85;
+  v14Art.poly(c,[[-15,-23],[0,-31],[15,-23],[0,-25]]);c.fill();
+  c.globalAlpha=1;
  },
- /* NOVA RAIDER — a walking detonation. Cracked shell, molten seams, live fuse. */
+ /* NOVA RAIDER — a sphere with a fuse. Round is the one shape nothing else here has, and it is
+    also the shape everybody already reads as "bomb". */
  bomb(c,o,pal,t){
   const beat=.5+.5*Math.sin(t*9+(o.anim||0));
   c.save();
   c.globalCompositeOperation='lighter';
   c.globalAlpha=.35+beat*.35;
-  const core=c.createRadialGradient(0,2,2,0,2,26);
-  core.addColorStop(0,'#fff3b0');
-  core.addColorStop(.4,pal.glow);
-  core.addColorStop(1,'transparent');
-  c.fillStyle=core;
+  c.fillStyle=v15Grad(c,'bomb-core',()=>{
+   const g=c.createRadialGradient(0,2,2,0,2,26);
+   g.addColorStop(0,'#fff3b0');
+   g.addColorStop(.4,pal.glow);
+   g.addColorStop(1,'transparent');
+   return g;
+  });
   c.beginPath();c.arc(0,2,26,0,Math.PI*2);c.fill();
   c.restore();
+  /* Stubby arms clamped to the shell, so it is a creature carrying a bomb rather than a prop. */
   for(const side of [-1,1]){
-   c.fillStyle='#2a0713';
-   v14Art.poly(c,[[side*16,-6],[side*30,-18],[side*27,8],[side*14,14]]);c.fill();
-   c.strokeStyle=pal.glow+'99';c.lineWidth=1.4;c.stroke();
+   v14Art.limb(c,side*20,4,side*29,16,5,pal.body);
+   v14Art.limb(c,side*11,25,side*14,35,5,pal.body);
   }
-  v15Carapace(c,pal,[[0,-28],[19,-14],[21,10],[11,26],[-11,26],[-21,10],[-19,-14]],-20,-26,20,24);
+  v15Carapace(c,pal,V26_SHELL,-24,-24,24,24);
+  /* The shell is cracked and something inside it is lit. */
   c.save();
   c.globalCompositeOperation='lighter';
   c.strokeStyle=`rgba(255,196,90,${.45+beat*.5})`;
   c.lineWidth=2.4;
-  c.beginPath();c.moveTo(-13,-6);c.lineTo(-3,2);c.lineTo(-8,12);c.stroke();
-  c.beginPath();c.moveTo(13,-2);c.lineTo(5,7);c.lineTo(10,17);c.stroke();
+  c.lineJoin='round';
+  c.beginPath();c.moveTo(-22,-4);c.lineTo(-9,3);c.lineTo(-14,15);c.lineTo(-4,22);c.stroke();
+  c.beginPath();c.moveTo(20,-6);c.lineTo(9,4);c.lineTo(15,16);c.stroke();
+  c.beginPath();c.moveTo(-2,-26);c.lineTo(3,-14);c.lineTo(-3,-6);c.stroke();
   c.restore();
   c.fillStyle='#12020a';
-  v14Art.poly(c,[[-12,-22],[12,-22],[10,-8],[-10,-8]]);c.fill();
-  v15Eye(c,-5,-15,4.5,pal,1+beat);
-  v15Eye(c,5,-15,4.5,pal,1+beat);
+  v14Art.round(c,-14,-21,28,15,6);c.fill();
+  v15Eye(c,-6,-14,4.5,pal,1+beat);
+  v15Eye(c,6,-14,4.5,pal,1+beat);
   c.strokeStyle=pal.trim;c.lineWidth=2.4;c.lineCap='round';
-  c.beginPath();c.moveTo(2,-28);c.quadraticCurveTo(11,-40,19,-35);c.stroke();
-  c.save();
-  c.globalCompositeOperation='lighter';
-  c.shadowBlur=20*beat+8;c.shadowColor='#ffd166';
-  c.fillStyle='#fff6c8';
-  c.beginPath();c.arc(19,-35,2.6+beat*2.4,0,Math.PI*2);c.fill();
-  c.restore();
+  c.beginPath();c.moveTo(3,-27);c.quadraticCurveTo(13,-40,21,-35);c.stroke();
+  v15Spark(c,21,-35,'#ffd166',13,.7+beat*.6);
  },
- /* CRYSTAL WRAITH — faceted spirit orbiting its own shards. */
+ /* CRYSTAL WRAITH — a spike. No limbs, no head, no plating seams to speak of: the whole point is
+    that it is a mineral and the others are machines. */
  shard(c,o,pal,t){
   const spin=t*1.5+(o.anim||0);
   c.save();
@@ -196,188 +258,346 @@ const v15Creatures={
    c.rotate(a*1.6);
    c.globalAlpha=.5+.4*Math.sin(spin*2+i);
    c.fillStyle=pal.glow;
-   v14Art.poly(c,[[0,-6],[3,0],[0,7],[-3,0]]);
+   v14Art.poly(c,[[0,-7],[3,0],[0,8],[-3,0]]);
    c.fill();
    c.restore();
   }
   c.restore();
-  v15Carapace(c,pal,[[0,-32],[14,-14],[18,6],[0,30],[-18,6],[-14,-14]],-16,-30,16,26);
+  v15Carapace(c,pal,[[0,-40],[12,-12],[8,14],[0,34],[-8,14],[-12,-12]],-12,-38,12,30);
+  /* Facets: straight lines from the apex, which is how a cut stone catches light. */
   c.save();
-  c.globalAlpha=.4;
-  c.strokeStyle=pal.trim;c.lineWidth=1.2;
-  c.beginPath();c.moveTo(0,-32);c.lineTo(0,30);c.stroke();
-  c.beginPath();c.moveTo(-18,6);c.lineTo(18,6);c.stroke();
-  c.beginPath();c.moveTo(-14,-14);c.lineTo(14,-14);c.stroke();
+  c.globalAlpha=.42;
+  c.strokeStyle=pal.trim;c.lineWidth=1.1;
+  c.beginPath();c.moveTo(0,-40);c.lineTo(-8,14);c.stroke();
+  c.beginPath();c.moveTo(0,-40);c.lineTo(8,14);c.stroke();
+  c.beginPath();c.moveTo(-12,-12);c.lineTo(8,14);c.stroke();
+  c.beginPath();c.moveTo(12,-12);c.lineTo(-8,14);c.stroke();
   c.restore();
   c.save();
   c.globalCompositeOperation='lighter';
-  const heart=c.createRadialGradient(0,-4,1,0,-4,14);
-  heart.addColorStop(0,'#ffffff');
-  heart.addColorStop(.35,pal.glow);
-  heart.addColorStop(1,'transparent');
-  c.fillStyle=heart;
-  c.beginPath();c.arc(0,-4,14,0,Math.PI*2);c.fill();
+  c.fillStyle=v15Grad(c,'shard-heart',()=>{
+   const g=c.createRadialGradient(0,-4,1,0,-4,15);
+   g.addColorStop(0,'#ffffff');
+   g.addColorStop(.35,pal.glow);
+   g.addColorStop(1,'transparent');
+   return g;
+  });
+  c.beginPath();c.arc(0,-4,15,0,Math.PI*2);c.fill();
   c.restore();
-  v15Eye(c,0,-10,5,pal);
+  v15Eye(c,0,-8,5,pal);
  },
- /* TWIN BEAST — one body, two heads, a visible seam where it will split. */
+ /* TWIN BEAST — bottom-heavy and many-legged, with two heads craning off a body that is already
+    splitting. The only creature here built around a horizontal seam. */
  splitter(c,o,pal,t){
   const sway=Math.sin(t*3+(o.anim||0))*3;
-  v14Art.limb(c,-16,16,-27,30+sway,5,pal.body);
-  v14Art.limb(c,16,16,27,30-sway,5,pal.body);
-  v14Art.limb(c,-10,24,-14,38,6,pal.body);
-  v14Art.limb(c,10,24,14,38,6,pal.body);
-  v15Carapace(c,pal,[[0,-8],[19,-2],[21,14],[11,28],[-11,28],[-21,14],[-19,-2]],-20,-10,20,26);
+  v14Art.limb(c,-17,14,-30,30+sway,5,pal.body);
+  v14Art.limb(c,17,14,30,30-sway,5,pal.body);
+  v14Art.limb(c,-11,24,-16,40,6,pal.body);
+  v14Art.limb(c,11,24,16,40,6,pal.body);
+  v14Art.limb(c,-4,26,-5,42,5,pal.body);
+  v14Art.limb(c,4,26,5,42,5,pal.body);
+  v15Carapace(c,pal,[[-15,-9],[15,-9],[26,7],[17,29],[-17,29],[-26,7]],-26,-10,26,28);
   c.save();
   c.globalAlpha=.6;
   c.strokeStyle='#0a0d1c';c.lineWidth=2.4;
   c.setLineDash([4,4]);
-  c.beginPath();c.moveTo(0,-8);c.lineTo(0,28);c.stroke();
+  c.beginPath();c.moveTo(0,-9);c.lineTo(0,29);c.stroke();
   c.restore();
   for(const side of [-1,1]){
    c.save();
+   /* Necks, so the heads are craning off the body rather than sitting on it. */
+   v14Art.limb(c,side*6,-6,side*10,-16,5,pal.body);
    c.translate(side*10,-20+sway*side*.2);
-   c.rotate(side*.14);
-   v15Carapace(c,pal,[[0,-14],[10,-6],[9,8],[-9,8],[-10,-6]],-10,-14,10,8);
+   c.rotate(side*.24);
+   v15Carapace(c,pal,[[0,-15],[11,-7],[8,7],[-8,7],[-11,-7]],-11,-15,11,7);
    c.fillStyle='#0a0710';
-   v14Art.poly(c,[[-7,-9],[7,-9],[6,1],[-6,1]]);c.fill();
-   v15Eye(c,0,-4,4,pal);
+   v14Art.poly(c,[[-7,-10],[7,-10],[6,1],[-6,1]]);c.fill();
+   v15Eye(c,0,-5,4,pal);
    c.restore();
   }
  },
- /* RIVAL WARLORD — a rival pilot's core, armoured and caped in their own colours. */
+ /* RIVAL WARLORD — the only humanoid. Broad shoulders tapering to a waist, and a cape: read as a
+    person where everything else reads as a thing. */
  rival(c,o,pal,t){
   const cape=Math.sin(t*2.2+(o.anim||0))*5;
   c.save();
   c.globalAlpha=.6;
   c.fillStyle=pal.body;
-  v14Art.poly(c,[[-14,-10],[-34,-24-cape],[-28,18],[-12,30]]);c.fill();
-  v14Art.poly(c,[[14,-10],[34,-24+cape],[28,18],[12,30]]);c.fill();
+  v14Art.poly(c,[[-14,-14],[-36,-26-cape],[-30,18],[-12,32]]);c.fill();
+  v14Art.poly(c,[[14,-14],[36,-26+cape],[30,18],[12,32]]);c.fill();
   c.restore();
-  v14Art.limb(c,-17,0,-28,18,7,pal.glow);
-  v14Art.limb(c,17,0,28,18,7,pal.glow);
-  v15Carapace(c,pal,[[0,-30],[21,-16],[19,16],[9,32],[-9,32],[-19,16],[-21,-16]],-21,-30,21,30);
+  v14Art.limb(c,-19,-4,-29,18,7,pal.glow);
+  v14Art.limb(c,19,-4,29,18,7,pal.glow);
+  /* Wide at the shoulder, pinched at the waist, flared at the hip. */
+  v15Carapace(c,pal,[[0,-32],[24,-19],[14,4],[16,20],[8,33],[-8,33],[-16,20],[-14,4],[-24,-19]],-24,-32,24,32);
   c.fillStyle=pal.trim;
   c.globalAlpha=.85;
-  v14Art.poly(c,[[0,-12],[7,0],[0,12],[-7,0]]);c.fill();
+  v14Art.poly(c,[[0,-13],[7,-1],[0,11],[-7,-1]]);c.fill();
   c.globalAlpha=1;
   c.fillStyle='#04060f';
-  v14Art.round(c,-14,-27,28,16,6);c.fill();
+  v14Art.round(c,-13,-29,26,16,6);c.fill();
   c.save();
-  c.translate(0,-19);
-  c.shadowBlur=20;c.shadowColor=pal.glow;
+  c.translate(0,-21);
+  v15Halo(c,pal.glow,19);
   c.fillStyle=pal.glow;
   v14Art.round(c,-9,-2.5,18,5,2.5);c.fill();
   c.restore();
   c.fillStyle=pal.trim;
   for(const side of [-1,1]){
-   v14Art.poly(c,[[side*12,-28],[side*20,-42],[side*15,-26]]);c.fill();
+   v14Art.poly(c,[[side*11,-30],[side*19,-45],[side*14,-28]]);c.fill();
   }
  }
 };
 
-/* Titans get a bespoke pass: layered armour, a live core and phase-driven silhouette changes. */
+/* Titans get a bespoke pass: layered armour, a live core and phase-driven silhouette changes.
+
+   The old titan photographed as a bright disc. Three things were doing it: the body gradient
+   opened on pure white so half the armour was blown out, a core bloom of r*.32 sat on top of that
+   in lighter, and three dashed rings orbited the lot. Everything was the same value, so there was
+   no silhouette to read — a boss you cannot see the shape of is not a boss, it is a light.
+
+   The mass is dark now and the light is rationed: a rim along the lit edge, a contained core, a
+   visor. And each world's titan wears its own crown, so the six of them are not one monster in
+   six hues the way the six arenas were one arena in six hues. */
+
+const V26_CROWNS=[
+ /* NEBULA FORGE — exhaust stacks. */
+ (r,w)=>{
+  /* Clear of the head, which spans ±r*.28, and edged: near-black on a near-black sky is a shape
+     nobody can see, whatever its outline. */
+  ctx.fillStyle='#0a1024';
+  ctx.strokeStyle=w.accent+'99';
+  ctx.lineWidth=Math.max(1.5,r*.018);
+  for(const side of [-1,1]){
+   v14Art.round(ctx,side*r*.44-r*.07,-r*1.24,r*.14,r*.46,r*.04);ctx.fill();ctx.stroke();
+   v14Art.round(ctx,side*r*.44-r*.12,-r*1.28,r*.24,r*.07,r*.03);ctx.fill();ctx.stroke();
+  }
+  ctx.save();
+  ctx.globalCompositeOperation='lighter';
+  ctx.fillStyle=w.accent+'77';
+  for(const side of [-1,1])ctx.fillRect(side*r*.44-r*.09,-r*1.29,r*.18,r*.03);
+  ctx.restore();
+ },
+ /* CRYSTAL RIFT — a cluster of shards, none of them the same length. */
+ (r,w)=>{
+  ctx.fillStyle=w.enemy;
+  for(const [x,h] of [[-.34,.9],[-.14,1.16],[.1,1.02],[.32,.82]]){
+   v14Art.poly(ctx,[[r*x-r*.07,-r*.7],[r*x,-r*h],[r*x+r*.07,-r*.7]]);ctx.fill();
+  }
+ },
+ /* SOLAR TEMPLE — a corona of blades. */
+ (r,w)=>{
+  ctx.fillStyle=w.enemy;
+  for(let i=0;i<7;i++){
+   const a=-Math.PI*.92+i*Math.PI*.14;
+   ctx.save();
+   ctx.rotate(a+Math.PI/2);
+   v14Art.poly(ctx,[[-r*.05,-r*.62],[0,-r*(1.0+(i%2)*.16)],[r*.05,-r*.62]]);ctx.fill();
+   ctx.restore();
+  }
+ },
+ /* VOID CATHEDRAL — a mitre and a broken halo. */
+ (r,w)=>{
+  ctx.fillStyle='#0a0418';
+  v14Art.poly(ctx,[[-r*.24,-r*.66],[0,-r*1.18],[r*.24,-r*.66]]);ctx.fill();
+  ctx.strokeStyle=w.accent+'cc';ctx.lineWidth=Math.max(2,r*.02);
+  ctx.stroke();
+  ctx.save();
+  ctx.globalCompositeOperation='lighter';
+  ctx.strokeStyle=w.accent+'88';
+  ctx.lineWidth=Math.max(2,r*.024);
+  for(let i=0;i<5;i++){
+   const a=Math.PI*(1.1+i*.19);
+   ctx.beginPath();ctx.arc(0,-r*.86,r*.36,a,a+.42);ctx.stroke();
+  }
+  ctx.restore();
+ },
+ /* TEMPEST GARDEN — swept fins. */
+ (r,w)=>{
+  ctx.fillStyle=w.enemy;
+  for(const side of [-1,1]){
+   v14Art.poly(ctx,[[side*r*.16,-r*.7],[side*r*.62,-r*1.1],[side*r*.5,-r*.62]]);ctx.fill();
+   v14Art.poly(ctx,[[side*r*.1,-r*.72],[side*r*.3,-r*1.14],[side*r*.26,-r*.66]]);ctx.fill();
+  }
+ },
+ /* CELESTIAL ENGINE — a toothed halo. */
+ (r,w)=>{
+  ctx.save();
+  ctx.translate(0,-r*.86);
+  ctx.strokeStyle=w.accent+'aa';
+  ctx.lineWidth=Math.max(2,r*.026);
+  ctx.beginPath();ctx.arc(0,0,r*.4,Math.PI*1.06,Math.PI*1.94);ctx.stroke();
+  ctx.lineWidth=Math.max(1.5,r*.036);
+  for(let i=0;i<7;i++){
+   const a=Math.PI*1.08+i*Math.PI*.14;
+   ctx.beginPath();
+   ctx.moveTo(Math.cos(a)*r*.4,Math.sin(a)*r*.4);
+   ctx.lineTo(Math.cos(a)*r*.5,Math.sin(a)*r*.5);
+   ctx.stroke();
+  }
+  ctx.restore();
+ }
+];
+
 function v15DrawTitan(b,w){
  const r=b.r,t=b.t,phase=b.phase||1;
  const rage=phase===3;
  const arm=Math.sin(t*1.6)*r*.08;
+ const hot=rage?'#ff4d6d':w.accent;
  ctx.save();
  ctx.translate(b.x,b.y);
 
+ /* Two orbit rings instead of three, thin and dim. They are meant to sit behind the titan, not
+    compete with it for the eye. */
  ctx.save();
  ctx.globalCompositeOperation='lighter';
- for(let i=0;i<3;i++){
+ for(let i=0;i<2;i++){
   ctx.save();
-  ctx.rotate(t*(i%2?-.13:.1)+i*1.4);
-  ctx.strokeStyle=(i===1?w.enemy:w.accent)+(rage?'aa':'77');
-  ctx.lineWidth=4-i;
-  ctx.setLineDash([r*.22,r*.1]);
-  ctx.beginPath();ctx.arc(0,0,r*(1.22-i*.16),0,Math.PI*2);ctx.stroke();
+  ctx.rotate(t*(i?-.13:.1)+i*1.4);
+  ctx.strokeStyle=(i?w.enemy:w.accent)+(rage?'66':'40');
+  ctx.lineWidth=i?1.5:2.5;
+  ctx.setLineDash([r*.22,r*.14]);
+  ctx.beginPath();ctx.arc(0,0,r*(1.26-i*.14),0,Math.PI*2);ctx.stroke();
   ctx.restore();
  }
  ctx.restore();
 
+ /* Shoulder pods, angled outward and away. */
  for(const side of [-1,1]){
   ctx.save();
-  ctx.translate(side*r*.72,-r*.1+arm*side);
-  ctx.rotate(side*.2);
-  const pod=ctx.createLinearGradient(0,-r*.3,0,r*.3);
-  pod.addColorStop(0,w.accent);
-  pod.addColorStop(.5,'#0d1330');
-  pod.addColorStop(1,'#04060f');
-  ctx.fillStyle=pod;
-  v14Art.poly(ctx,[[0,-r*.34],[r*.24,-r*.16],[r*.2,r*.24],[-r*.2,r*.24],[-r*.24,-r*.16]]);
+  ctx.translate(side*r*.66,-r*.12+arm*side);
+  ctx.rotate(side*.28);
+  ctx.fillStyle=v15Grad(ctx,`titan-pod|${Math.round(r)}|${w.accent}`,()=>{
+   const g=ctx.createLinearGradient(0,-r*.34,0,r*.3);
+   g.addColorStop(0,w.accent+'88');
+   g.addColorStop(.3,'#131a3a');
+   g.addColorStop(1,'#03040c');
+   return g;
+  });
+  v14Art.poly(ctx,[[0,-r*.36],[r*.26,-r*.14],[r*.2,r*.26],[-r*.2,r*.26],[-r*.26,-r*.14]]);
   ctx.fill();
-  ctx.strokeStyle=w.accent+'aa';ctx.lineWidth=2;ctx.stroke();
+  ctx.strokeStyle=w.accent+'99';ctx.lineWidth=2;ctx.stroke();
+  v15Spark(ctx,0,r*.04,hot,r*.16);
+  ctx.restore();
+ }
+
+ /* Struts out to the pods. Floating pentagons beside the body read as separate objects. */
+ v14Art.limb(ctx,-r*.34,-r*.16,-r*.62,-r*.12,r*.1,'#243060');
+ v14Art.limb(ctx,r*.34,-r*.16,r*.62,-r*.12,r*.1,'#243060');
+ v14Art.limb(ctx,-r*.3,r*.4,-r*.42,r*.86,r*.16,'#2b3563');
+ v14Art.limb(ctx,r*.3,r*.4,r*.42,r*.86,r*.16,'#2b3563');
+
+ /* The mass. Dark through the middle with the world's two colours only at the two edges — the old
+    version opened on white at the top-left corner, which is a third of the armour gone. */
+ const bodyShape=[[0,-r*.8],[r*.52,-r*.44],[r*.4,r*.16],[r*.46,r*.44],[r*.2,r*.72],[-r*.2,r*.72],[-r*.46,r*.44],[-r*.4,r*.16],[-r*.52,-r*.44]];
+ ctx.fillStyle=v15Grad(ctx,`titan-body|${Math.round(r)}|${w.accent}|${w.enemy}|${rage}`,()=>{
+  const g=ctx.createLinearGradient(-r*.5,-r*.7,r*.5,r*.7);
+  g.addColorStop(0,w.accent);
+  g.addColorStop(.14,'#1c2550');
+  g.addColorStop(.5,'#0b1230');
+  g.addColorStop(.82,rage?'#54101f':'#1b2650');
+  g.addColorStop(1,'#050718');
+  return g;
+ });
+ v14Art.poly(ctx,bodyShape);
+ ctx.fill();
+
+ /* Rim light along the lit edge only. A stroke all the way round outlines the shape; a rim tells
+    you where the light is. */
+ ctx.save();
+ ctx.globalCompositeOperation='lighter';
+ ctx.strokeStyle=w.accent+'aa';
+ ctx.lineWidth=Math.max(2,r*.022);
+ ctx.beginPath();
+ ctx.moveTo(-r*.52,-r*.44);ctx.lineTo(0,-r*.8);ctx.lineTo(r*.52,-r*.44);
+ ctx.stroke();
+ ctx.restore();
+
+ /* Plating: heavy dark seams with a lit under-edge, the same trick V19 uses on the creatures. */
+ ctx.save();
+ v14Art.poly(ctx,bodyShape);
+ ctx.clip();
+ for(let i=0;i<4;i++){
+  const y=-r*.34+i*r*.26;
+  ctx.strokeStyle='rgba(2,4,12,.7)';
+  ctx.lineWidth=Math.max(2,r*.022);
+  ctx.beginPath();ctx.moveTo(-r*.6,y);ctx.lineTo(r*.6,y);ctx.stroke();
+  ctx.strokeStyle=w.accent+'26';
+  ctx.lineWidth=1.4;
+  ctx.beginPath();ctx.moveTo(-r*.6,y+r*.018);ctx.lineTo(r*.6,y+r*.018);ctx.stroke();
+ }
+ /* In the last phase the plates have split and the furnace inside is showing. */
+ if(rage){
   ctx.save();
   ctx.globalCompositeOperation='lighter';
-  ctx.shadowBlur=20;ctx.shadowColor=rage?'#ff5470':w.accent;
-  ctx.fillStyle=rage?'#ff8098':w.accent;
-  ctx.beginPath();ctx.arc(0,r*.04,r*.07,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle='#ff5470';
+  ctx.lineWidth=Math.max(2,r*.024);
+  ctx.lineJoin='round';
+  for(const sx of [-1,1]){
+   ctx.beginPath();
+   ctx.moveTo(sx*r*.08,-r*.5);
+   ctx.lineTo(sx*r*.26,-r*.16);
+   ctx.lineTo(sx*r*.12,r*.1);
+   ctx.lineTo(sx*r*.34,r*.5);
+   ctx.stroke();
+  }
   ctx.restore();
-  ctx.restore();
- }
-
- v14Art.limb(ctx,-r*.3,r*.4,-r*.42,r*.86,r*.16,w.accent);
- v14Art.limb(ctx,r*.3,r*.4,r*.42,r*.86,r*.16,w.accent);
-
- const body=ctx.createLinearGradient(-r*.5,-r*.7,r*.5,r*.7);
- body.addColorStop(0,'#ffffff');
- body.addColorStop(.1,w.accent);
- body.addColorStop(.46,'#0c1030');
- body.addColorStop(.8,rage?'#5a0f24':w.enemy);
- body.addColorStop(1,'#03040c');
- ctx.fillStyle=body;
- v14Art.poly(ctx,[[0,-r*.78],[r*.5,-r*.42],[r*.44,r*.4],[r*.2,r*.7],[-r*.2,r*.7],[-r*.44,r*.4],[-r*.5,-r*.42]]);
- ctx.fill();
- ctx.strokeStyle='#ffffff55';ctx.lineWidth=2;ctx.stroke();
-
- ctx.save();
- ctx.globalAlpha=.5;
- ctx.strokeStyle=w.accent;
- ctx.lineWidth=1.6;
- for(let i=0;i<3;i++){
-  const y=-r*.24+i*r*.24;
-  ctx.beginPath();ctx.moveTo(-r*.36,y);ctx.lineTo(r*.36,y);ctx.stroke();
  }
  ctx.restore();
 
+ /* Core: a socket with an iris in it, contained inside a housing so the light has an edge. A bare
+    bloom at r*.32 was what washed the whole titan out. */
+ ctx.fillStyle='#02030a';
+ ctx.beginPath();ctx.arc(0,r*.06,r*.19,0,Math.PI*2);ctx.fill();
+ ctx.strokeStyle=w.accent+'77';ctx.lineWidth=Math.max(2,r*.02);ctx.stroke();
  ctx.save();
  ctx.globalCompositeOperation='lighter';
- const coreGlow=ctx.createRadialGradient(0,r*.04,2,0,r*.04,r*.32);
- coreGlow.addColorStop(0,'#ffffff');
- coreGlow.addColorStop(.3,rage?'#ff5470':w.accent);
- coreGlow.addColorStop(1,'transparent');
- ctx.fillStyle=coreGlow;
- ctx.beginPath();ctx.arc(0,r*.04,r*.32,0,Math.PI*2);ctx.fill();
+ ctx.globalAlpha=.7+.3*Math.sin(t*(rage?6:2.4));
+ ctx.translate(0,r*.06);
+ v15Halo(ctx,hot,r*.3);
+ ctx.fillStyle=hot;
+ ctx.beginPath();ctx.arc(0,0,r*.1,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle='#ffffff';
+ ctx.beginPath();ctx.arc(0,0,r*.04,0,Math.PI*2);ctx.fill();
  ctx.restore();
 
- ctx.fillStyle='#03050e';
- v14Art.round(ctx,-r*.3,-r*.7,r*.6,r*.28,r*.09);ctx.fill();
+ /* Head: its own shape sitting proud of the shoulders, with a visor and a jaw. Without it the
+    titan had no face and nothing for the player to aim their attention at. */
+ ctx.fillStyle='#05070f';
+ v14Art.poly(ctx,[[-r*.28,-r*.56],[-r*.22,-r*.78],[r*.22,-r*.78],[r*.28,-r*.56],[r*.16,-r*.44],[-r*.16,-r*.44]]);
+ ctx.fill();
+ ctx.strokeStyle=w.accent+'55';ctx.lineWidth=Math.max(1.5,r*.016);ctx.stroke();
  ctx.save();
- ctx.translate(0,-r*.56);
- ctx.shadowBlur=26;ctx.shadowColor=rage?'#ff4d6d':w.accent;
- ctx.fillStyle=rage?'#ff6b85':w.accent;
- v14Art.round(ctx,-r*.22,-r*.045,r*.44,r*.09,r*.045);ctx.fill();
+ ctx.translate(0,-r*.62);
+ v15Halo(ctx,hot,r*.26);
+ ctx.fillStyle=hot;
+ v14Art.round(ctx,-r*.17,-r*.04,r*.34,r*.08,r*.04);ctx.fill();
+ ctx.fillStyle='#ffffff';
+ v14Art.round(ctx,-r*.15,-r*.028,r*.3,r*.03,r*.015);ctx.fill();
+ ctx.restore();
+ /* Jaw slats. */
+ ctx.save();
+ ctx.globalAlpha=.6;
+ ctx.strokeStyle=w.accent;
+ ctx.lineWidth=Math.max(1,r*.012);
+ for(let i=-1;i<=1;i++){
+  ctx.beginPath();ctx.moveTo(i*r*.06,-r*.53);ctx.lineTo(i*r*.06,-r*.45);ctx.stroke();
+ }
  ctx.restore();
 
- ctx.fillStyle=w.enemy;
- for(const side of [-1,1]){
-  v14Art.poly(ctx,[[side*r*.24,-r*.74],[side*r*.4,-r*1.02-(rage?r*.12:0)],[side*r*.16,-r*.72]]);
-  ctx.fill();
- }
+ (V26_CROWNS[game.world%V26_CROWNS.length]||V26_CROWNS[0])(r,w);
 
  if(rage){
   ctx.save();
   ctx.globalCompositeOperation='lighter';
-  ctx.strokeStyle='#ff5470aa';
+  ctx.strokeStyle='#ff547088';
   ctx.lineWidth=3;
   for(let i=0;i<8;i++){
    const a=t*.9+i*Math.PI/4;
-   const rr=r*(1.28+.07*Math.sin(t*3+i));
+   const rr=r*(1.3+.07*Math.sin(t*3+i));
    ctx.beginPath();
    ctx.moveTo(Math.cos(a)*rr,Math.sin(a)*rr);
-   ctx.lineTo(Math.cos(a)*rr*1.3,Math.sin(a)*rr*1.3);
+   ctx.lineTo(Math.cos(a)*rr*1.28,Math.sin(a)*rr*1.28);
    ctx.stroke();
   }
   ctx.restore();
@@ -391,14 +611,11 @@ function v15DrawTitan(b,w){
   const pulse=.7+.3*Math.sin(t*5+weak.a);
   ctx.save();
   ctx.translate(x,y);
+  v15Halo(ctx,'#ffd85c',26*pulse);
   ctx.rotate(t*.9+weak.a);
-  ctx.save();
-  ctx.globalCompositeOperation='lighter';
-  ctx.shadowBlur=26;ctx.shadowColor='#ffd85c';
   ctx.fillStyle=`rgba(255,226,120,${pulse})`;
   v14Art.poly(ctx,[[0,-16],[13,-5],[9,13],[-9,13],[-13,-5]]);
   ctx.fill();
-  ctx.restore();
   ctx.strokeStyle='#ffe98a';
   ctx.lineWidth=2.4;
   v14Art.poly(ctx,[[0,-16],[13,-5],[9,13],[-9,13],[-13,-5]]);

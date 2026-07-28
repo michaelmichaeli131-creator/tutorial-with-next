@@ -1,0 +1,561 @@
+/* V29 DUEL PRESENCE — make the rival a person rather than a number.
+
+   The mode worked. Two clients replayed one server-authoritative spawn schedule, charge bought
+   threats at server-enforced prices, and after 120 seconds somebody had more points. What it did
+   not do was feel like playing against someone you know, and reading the wire explains why: the
+   server was already sending far more about the other player than the client ever showed.
+
+   Measured against the running V23 build, on every duel:
+
+   - `opponent_attack` carries `from` — the sender's name. The client called
+     `applyHazard(kind, durationMs)` and dropped it, so being attacked by a friend printed
+     "GRAVITY ATTACK INCOMING", word for word the same line a solo hazard prints. The one moment
+     in the mode where another human reaches across and does something to you was rendered as
+     weather.
+   - `arena_flash` and `arena_launch` are broadcast to both players. Neither had a listener, so
+     nothing you sent was ever confirmed as having arrived. You spent 90 charge on a War Titan and
+     the only feedback was a toast that said you had spent it.
+   - `opponent_left` had no listener either. A friend who quit mid-duel left you fighting a rival
+     card that still said CONNECTED.
+   - `rematch_state` had no listener. Tapping REMATCH threw you to a lobby screen reading
+     "REMATCH REQUESTED" over six dots, identical whether your friend had already agreed, was
+     still reading the result, or had closed the tab.
+   - `match_state` carries combo, pressure, ammo, sentCores and defusedCores every 400ms. The
+     rival card displayed name and score.
+
+   So this file mostly stops throwing information away, and adds the one fact that genuinely was
+   not on the wire — lives, which only a player's own client knows. Three things follow:
+
+   1. A rival read-out. Their reactor integrity, their combo, and a charge bar that shows the
+      biggest thing they can currently afford to send. You can watch a War Titan being saved for.
+   2. An attack that has an author. Their name, in their skin colour, and their name stays on
+      screen with a counting-out bar for as long as you are living with what they sent.
+   3. An ending worth staying for. The head-to-head record, an honest word about forfeits, and a
+      rematch handshake that names who is still deciding.
+
+   The spawn schedule is untouched. Nothing here changes what enemies either arena contains. */
+
+const V29_TONE = '#ff5c8a';
+
+/* Injected rather than linked: index.html is owned elsewhere, and a stylesheet only a duel uses
+   has no business in the critical path of the menu. */
+(() => {
+ /* Guarded so that wiring the same file into index.html later does not load it twice. */
+ if (document.querySelector('link[href^="/v20-duel.css"]')) return;
+ const link = document.createElement('link');
+ link.rel = 'stylesheet';
+ link.href = '/v20-duel.css';
+ document.head.append(link);
+})();
+
+function v29Skin(id){ return currentSkin(id) || skins[0]; }
+function v29Tone(skinId){ return v29Skin(skinId).c1 || V29_TONE; }
+
+/* Everything known about the other side of the duel, rebuilt from the messages already arriving. */
+const v29Rival = { id:'', name:'', skin:'nova', score:0, lives:3, combo:0, pressure:0, connected:true, awayUntil:0, left:false };
+
+/* ---------- The rival read-out ---------------------------------------------------------------
+   Built here rather than in index.html so the markup stays owned by one team. The existing
+   children of #rivalCard — the tag, name, score and state — keep being written by the lobby code;
+   this only adds a second row underneath them. */
+
+const v29Card = $('rivalCard');
+const v29Row = document.createElement('div');
+v29Row.className = 'v29-rv';
+const v29Orb = document.createElement('span');
+v29Orb.className = 'v29-orb';
+const v29Lives = document.createElement('span');
+v29Lives.className = 'v29-lives';
+for (let i = 0; i < 3; i++) v29Lives.append(document.createElement('i'));
+const v29Combo = document.createElement('span');
+v29Combo.className = 'v29-combo idle';
+v29Combo.textContent = 'x0';
+const v29Charge = document.createElement('span');
+v29Charge.className = 'v29-charge';
+const v29ChargeFill = document.createElement('i');
+const v29ChargeText = document.createElement('b');
+v29Charge.append(v29ChargeFill, v29ChargeText);
+const v29Delta = document.createElement('b');
+v29Delta.className = 'v29-delta';
+/* The delta lives inside the row, not on the card: .v17-rival pins itself with position:static
+   !important, so anything absolutely positioned against the card would escape to the viewport. */
+v29Row.append(v29Orb, v29Lives, v29Combo, v29Charge, v29Delta);
+v29Card.append(v29Row);
+
+/* The most expensive thing a given charge pool can buy. This is the whole point of showing the
+   rival's charge: 90 on their bar and a WAR TITAN label is a warning you can act on, whereas the
+   raw number means nothing unless you have memorised the price list. */
+function v29Affords(pressure){
+ let best = null;
+ for (const attack of V19_ATTACKS) if (pressure >= attack.cost && (!best || attack.cost > best.cost)) best = attack;
+ return best;
+}
+
+let v29DeltaTimer = 0;
+function v29ShowDelta(gain){
+ v29Delta.textContent = '+' + format(gain);
+ v29Delta.classList.add('on');
+ clearTimeout(v29DeltaTimer);
+ v29DeltaTimer = setTimeout(() => v29Delta.classList.remove('on'), 1100);
+}
+
+function v29PaintRival(){
+ if (game.mode !== 'duel') return;
+ const pips = v29Lives.children;
+ for (let i = 0; i < pips.length; i++) pips[i].classList.toggle('out', i >= v29Rival.lives);
+ v29Lives.classList.toggle('critical', v29Rival.lives === 1 && !v29Rival.left);
+ v29Combo.textContent = 'x' + v29Rival.combo;
+ v29Combo.classList.toggle('idle', v29Rival.combo < 3);
+ const charge = Math.max(0, Math.min(100, v29Rival.pressure));
+ v29ChargeFill.style.width = charge + '%';
+ const armed = v29Affords(charge);
+ v29ChargeText.textContent = armed ? armed.label : Math.floor(charge) + ' CHARGE';
+ v29Charge.classList.toggle('armed', Boolean(armed) && armed.cost >= 55);
+}
+
+/* ---------- Being attacked -------------------------------------------------------------------
+   One banner for every kind of incoming threat, because they are all the same event: your friend
+   just did something to you. */
+
+const v29Strike = document.createElement('div');
+v29Strike.className = 'v29-strike';
+const v29StrikeOrb = document.createElement('span');
+v29StrikeOrb.className = 'v29-orb';
+const v29StrikeCopy = document.createElement('div');
+v29StrikeCopy.className = 'v29-strike-copy';
+const v29StrikeWho = document.createElement('span');
+v29StrikeWho.className = 'v29-strike-who';
+const v29StrikeWhat = document.createElement('span');
+v29StrikeWhat.className = 'v29-strike-what';
+v29StrikeCopy.append(v29StrikeWho, v29StrikeWhat);
+v29Strike.append(v29StrikeOrb, v29StrikeCopy);
+
+const v29Siege = document.createElement('div');
+v29Siege.className = 'v29-siege';
+const v29SiegeText = document.createElement('span');
+const v29SiegeTrack = document.createElement('i');
+const v29SiegeFill = document.createElement('b');
+v29SiegeTrack.append(v29SiegeFill);
+v29Siege.append(v29SiegeText, v29SiegeTrack);
+document.body.append(v29Strike, v29Siege);
+
+let v29StrikeTimer = 0;
+function v29Announce(who, what, tone){
+ document.documentElement.style.setProperty('--v29-strike', tone);
+ v29StrikeWho.textContent = (who || 'RIVAL').toUpperCase();
+ v29StrikeWhat.textContent = what;
+ paintSkinElement(v29StrikeOrb, v29Rival.skin);
+ v29Strike.classList.add('on');
+ /* The wrapped call has already printed its own unattributed toast at the bottom of the screen.
+    Two captions for one event, one of which is the weaker one, is worse than either alone. */
+ $('toast').classList.remove('on');
+ clearTimeout(v29StrikeTimer);
+ v29StrikeTimer = setTimeout(() => v29Strike.classList.remove('on'), 1900);
+}
+
+/* The siege strip outlives the banner. A hazard lasts four to five and a half seconds, which is
+   long enough to forget who caused it, and forgetting is exactly what turns it back into weather. */
+let v29SiegeUntil = 0, v29SiegeSpan = 1, v29SiegeTick = 0;
+function v29BeginSiege(who, label, durationMs){
+ if (!(durationMs > 0)) return;
+ v29SiegeUntil = performance.now() + durationMs;
+ v29SiegeSpan = durationMs;
+ v29SiegeText.textContent = `${(who || 'RIVAL').toUpperCase()}'S ${label}`;
+ v29Siege.classList.add('on');
+ document.body.classList.add('v29-under');
+ clearInterval(v29SiegeTick);
+ v29SiegeTick = setInterval(v29StepSiege, 80);
+}
+function v29StepSiege(){
+ const left = v29SiegeUntil - performance.now();
+ if (left <= 0 || game.mode !== 'duel') return v29EndSiege();
+ v29SiegeFill.style.width = Math.max(0, Math.min(100, left / v29SiegeSpan * 100)) + '%';
+}
+function v29EndSiege(){
+ clearInterval(v29SiegeTick);
+ v29SiegeTick = 0;
+ v29SiegeUntil = 0;
+ v29Siege.classList.remove('on');
+ document.body.classList.remove('v29-under');
+}
+
+const V29_HAZARD_LABEL = { swarm:'SWARM', gravity:'GRAVITY WELL', emp:'EMP VEIL', fracture:'FRACTURE' };
+
+/* `from` never reached applyHazard, because 04.part calls it with the kind and duration only.
+   Rather than change a call site owned elsewhere, the sender is stashed by the listener that runs
+   first and read back here. */
+let v29Incoming = null;
+BlastNetwork.addEventListener('opponent_attack', (event) => { v29Incoming = event.detail || null; });
+
+const v29HazardBase = applyHazard;
+applyHazard = function(kind, duration){
+ v29HazardBase(kind, duration);
+ if (game.mode !== 'duel') return;
+ const from = v29Incoming?.from || v29Rival.name;
+ const label = V29_HAZARD_LABEL[kind] || String(kind || '').toUpperCase();
+ const tone = v29Tone(v29Rival.skin);
+ v29Announce(from, `SENT A ${label}`, tone);
+ v29BeginSiege(from, label, duration);
+ v29Incoming = null;
+};
+
+/* A core is the same event with a different shape, so it gets the same announcement. 03x.part
+   already runs a cinematic for a titan; this adds the author to the ones that are not titans. */
+const v29RivalCoreBase = spawnRival;
+spawnRival = function(core){
+ v29RivalCoreBase(core);
+ if (game.mode !== 'duel') return;
+ const tone = v29Tone(core.skin || v29Rival.skin);
+ v29Announce(core.from, core.titan ? 'SENT A WAR TITAN' : `SENT A TIER ${core.tier} CORE`, tone);
+};
+
+/* ---------- Sending, confirmed ---------------------------------------------------------------
+   arena_flash and arena_launch are broadcast to the whole room, so the same message tells the
+   sender their threat left and the receiver it arrived. Only the sender's copy is used here; the
+   receiver already has the banner above. */
+
+function v29Landed(text, tone){
+ document.documentElement.style.setProperty('--v29-strike', tone);
+ v29Card.classList.remove('v29-hit');
+ void v29Card.offsetWidth;
+ v29Card.classList.add('v29-hit');
+ toast(text);
+ haptic([10, 30, 14]);
+}
+
+BlastNetwork.addEventListener('arena_flash', (event) => {
+ const detail = event.detail || {};
+ if (detail.playerId !== BlastNetwork.playerId || game.mode !== 'duel') return;
+ const label = V29_HAZARD_LABEL[detail.kind] || String(detail.kind || '').toUpperCase();
+ v29Landed(`${label} HIT ${(v29Rival.name || 'RIVAL').toUpperCase()}`, v29Tone(save.skin));
+});
+
+BlastNetwork.addEventListener('arena_launch', (event) => {
+ const detail = event.detail || {};
+ if (detail.playerId !== BlastNetwork.playerId || game.mode !== 'duel') return;
+ v29Landed(`CORE INBOUND ON ${(v29Rival.name || 'RIVAL').toUpperCase()}`, v29Tone(save.skin));
+});
+
+/* ---------- Mirroring your own run ----------------------------------------------------------
+   Lives are the one thing about a duellist's situation that only their own client knows, and they
+   are the thing that makes a score gap readable: 40,000 behind with three reactors is a different
+   match from 40,000 behind on your last one. BlastNetwork.vitals deduplicates, so this runs on the
+   HUD tick without putting a message on the wire per frame. */
+
+const v29HudBase = updateHud;
+updateHud = function(){
+ v29HudBase();
+ if (game.mode !== 'duel') return;
+ BlastNetwork.vitals(Math.max(0, Math.min(9, Math.floor(game.lives))), Math.floor(game.combo), Math.floor(game.wave));
+};
+
+/* ---------- Rival state from the wire -------------------------------------------------------- */
+
+function v29AdoptRival(player){
+ if (!player) return;
+ const gain = player.score - v29Rival.score;
+ v29Rival.id = player.id;
+ v29Rival.name = player.name || v29Rival.name;
+ if (player.skin && player.skin !== v29Rival.skin) {
+  v29Rival.skin = player.skin;
+  paintSkinElement(v29Orb, v29Rival.skin);
+  document.documentElement.style.setProperty('--v29-rival', v29Tone(v29Rival.skin));
+ }
+ v29Rival.score = player.score;
+ if (Number.isFinite(player.lives)) v29Rival.lives = player.lives;
+ if (Number.isFinite(player.combo)) v29Rival.combo = player.combo;
+ if (Number.isFinite(player.pressure)) v29Rival.pressure = player.pressure;
+ if (gain > 0 && game.mode === 'duel') v29ShowDelta(gain);
+ v29PaintRival();
+}
+
+function v29RivalOf(players){
+ return players?.find((player) => player.id !== BlastNetwork.playerId) || null;
+}
+
+BlastNetwork.addEventListener('match_found', (event) => {
+ const rival = v29RivalOf(event.detail?.players);
+ Object.assign(v29Rival, { score:0, lives:3, combo:0, pressure:0, connected:true, awayUntil:0, left:false });
+ v29Card.classList.remove('v29-away', 'v29-gone');
+ v29AdoptRival(rival);
+ /* A fresh duel must always report the opening state, even if the previous one ended identically. */
+ BlastNetwork.lastVitals = '';
+});
+BlastNetwork.addEventListener('match_state', (event) => v29AdoptRival(v29RivalOf(event.detail?.players)));
+
+/* ---------- Somebody is not there ------------------------------------------------------------
+   The old rival card said RECONNECTING with no idea how long that could last, and said nothing at
+   all when a rival had gone for good. Both now count, and both say who. */
+
+let v29AwayTick = 0;
+function v29StepAway(){
+ if (!v29Rival.awayUntil) return;
+ const left = Math.ceil((v29Rival.awayUntil - Date.now()) / 1000);
+ if (left <= 0) {
+  clearInterval(v29AwayTick);
+  v29AwayTick = 0;
+  $('rivalState').textContent = 'GONE';
+  v29LobbyNote(`${(v29Rival.name || 'YOUR RIVAL').toUpperCase()} DID NOT COME BACK`, false);
+  return;
+ }
+ $('rivalState').textContent = `BACK IN ${left}s`;
+ $('opponentStatus').textContent = `RECONNECTING • ${left}s`;
+}
+
+BlastNetwork.addEventListener('player_connection', (event) => {
+ const detail = event.detail || {};
+ if (detail.playerId === BlastNetwork.playerId) return;
+ const who = (detail.name || v29Rival.name || 'YOUR RIVAL').toUpperCase();
+ clearInterval(v29AwayTick);
+ v29AwayTick = 0;
+ if (detail.connected) {
+  v29Rival.connected = true;
+  v29Rival.awayUntil = 0;
+  v29Card.classList.remove('v29-away');
+  $('rivalState').textContent = 'CONNECTED';
+  v29LobbyNote(`${who} IS BACK`, true);
+  if (game.mode === 'duel') toast(`${who} IS BACK`);
+  return;
+ }
+ v29Rival.connected = false;
+ v29Rival.awayUntil = Number(detail.reconnectDeadline) || Date.now() + 12_000;
+ v29Card.classList.add('v29-away');
+ v29LobbyNote(`${who} LOST CONNECTION — HOLDING THE ROOM FOR THEM`, false);
+ if (game.mode === 'duel') toast(`${who} DROPPED OUT`);
+ v29StepAway();
+ v29AwayTick = setInterval(v29StepAway, 500);
+});
+
+BlastNetwork.addEventListener('opponent_left', (event) => {
+ const who = ((event.detail || {}).name || v29Rival.name || 'YOUR RIVAL').toUpperCase();
+ clearInterval(v29AwayTick);
+ v29AwayTick = 0;
+ v29Rival.left = true;
+ v29Rival.connected = false;
+ v29Card.classList.remove('v29-away');
+ v29Card.classList.add('v29-gone');
+ $('rivalState').textContent = 'LEFT';
+ v29LobbyNote(`${who} LEFT THE ARENA`, false);
+ v29Rematch(`${who} HAS LEFT — NOBODY TO REMATCH`, 'gone');
+ if (game.mode === 'duel') toast(`${who} LEFT THE ARENA`);
+});
+
+/* ---------- The lobby tells the truth ---------------------------------------------------------
+   showLobby reported a rival as CONNECTED on the strength of their being listed at all, which
+   after the server change is no longer the same thing: a room now survives its host stepping away
+   to send the invite, so the friend who arrives first can genuinely be waiting for someone. */
+
+const v29LobbyNoteEl = document.createElement('p');
+v29LobbyNoteEl.className = 'v29-lobby-note hidden';
+$('lobbyHint').after(v29LobbyNoteEl);
+
+function v29LobbyNote(text, good){
+ v29LobbyNoteEl.textContent = text || '';
+ v29LobbyNoteEl.classList.toggle('hidden', !text);
+ v29LobbyNoteEl.classList.toggle('good', Boolean(good));
+}
+
+const v29LobbyBase = showLobby;
+showLobby = function(m){
+ v29LobbyBase(m);
+ const rival = v29RivalOf(m.players);
+ if (!rival) return v29LobbyNote('', false);
+ v29Rival.name = rival.name || v29Rival.name;
+ if (rival.connected === false) {
+  $('opponentStatus').textContent = 'RECONNECTING';
+  v29LobbyNote(`${(rival.name || 'YOUR RIVAL').toUpperCase()} IS RECONNECTING — THE MATCH STARTS WHEN THEY ARE BACK`, false);
+ } else {
+  v29LobbyNote(`${(rival.name || 'YOUR RIVAL').toUpperCase()} IS IN`, true);
+ }
+};
+
+/* ---------- Arriving on an invite -------------------------------------------------------------
+   handleUrl() joins the room behind the launch overlay, so a friend who taps "join my arena" is
+   shown the BLAST RUSH splash and a PLAY button with nothing on it about the person waiting for
+   them. Tapping through does work — v13EnterArena only hides the overlay, and the lobby is already
+   underneath it — but for however long they hesitate the host is watching a slot that says
+   WAITING. Auto-entering was the other option and was rejected: v13EnterArena starts the music,
+   which browsers only permit from a real gesture. So the splash is labelled instead. */
+
+(() => {
+ const code = new URLSearchParams(location.search).get('room');
+ const launch = $('launchScreen');
+ if (!code || !launch) return;
+ const ribbon = document.createElement('div');
+ ribbon.className = 'v29-invite';
+ ribbon.textContent = `JOINING A FRIEND'S ARENA • ${code.toUpperCase().replace(/[^A-Z0-9]/g, '')}`;
+ launch.prepend(ribbon);
+ const named = (event) => {
+  const host = v29RivalOf(event.detail?.players);
+  if (host) ribbon.textContent = `${host.name.toUpperCase()} IS WAITING FOR YOU — TAP PLAY`;
+ };
+ BlastNetwork.addEventListener('room_joined', named);
+ BlastNetwork.addEventListener('match_found', named);
+ BlastNetwork.addEventListener('error', () => { ribbon.textContent = 'THAT ARENA IS NO LONGER OPEN'; ribbon.classList.add('dead'); });
+})();
+
+/* ---------- The end --------------------------------------------------------------------------
+   match_end now carries the running head-to-head record and an honest reason. Both are rendered
+   into #duelResult after the shared finish() has written its own summary there. */
+
+/**
+ * A duellist who runs out of reactors before the clock does used to lose the duel entirely.
+ *
+ * `damage()` calls `finish(false)` with no duel data, which clears `game.running`. The real result
+ * arrives up to two minutes later and calls `finish()` again — and `finish()` opens with
+ * `if(!game.running)return`. So the player who died at 0:40 sat on a solo-shaped RUN COMPLETE
+ * screen showing their own score, no rival, no rematch button, and was never told who won the
+ * match they were playing against their friend. Losing is fine. Not being told is not.
+ */
+let v29LastEnd = null, v29AwaitingEnd = false;
+
+BlastNetwork.addEventListener('match_end', (event) => {
+ v29LastEnd = event.detail || null;
+ if (!v29AwaitingEnd) return;
+ v29AwaitingEnd = false;
+ v29PaintEnd(v29LastEnd);
+});
+
+function v29PaintEnd(end){
+ if (!end) return;
+ const mine = end.standings?.find((entry) => entry.id === BlastNetwork.playerId);
+ const theirs = end.standings?.find((entry) => entry.id !== BlastNetwork.playerId);
+ const won = end.winnerId === BlastNetwork.playerId;
+ const gap = Math.abs((mine?.score || 0) - (theirs?.score || 0));
+ $('finalScore').textContent = format(mine?.score ?? game.score);
+ $('resultTitle').textContent = end.reason === 'disconnect'
+  ? 'RIVAL LEFT'
+  : end.winnerId === null ? 'DRAW SIGNAL' : won ? 'VICTORY SIGNAL' : 'RUN COMPLETE';
+ $('duelResult').classList.remove('hidden');
+ $('duelResult').textContent = end.reason === 'disconnect'
+  ? `${(v29Rival.name || 'YOUR RIVAL').toUpperCase()} ENDED THE MATCH EARLY`
+  : end.winnerId === null ? 'DRAW SIGNAL' : won ? `VICTORY • ${format(gap)} POINT LEAD` : `DEFEAT • ${format(gap)} POINT GAP`;
+ $('rematchBtn').classList.toggle('hidden', v29Rival.left);
+ v29RenderSeries(end);
+ v29Rematch(v29Rival.left ? `${(v29Rival.name || 'YOUR RIVAL').toUpperCase()} HAS LEFT — NOBODY TO REMATCH` : 'BOTH OF YOU HAVE TO TAP REMATCH', v29Rival.left ? 'gone' : '');
+}
+
+const v29Result = document.createElement('div');
+const v29RematchNote = document.createElement('p');
+v29RematchNote.className = 'v29-rematch';
+$('duelResult').after(v29Result, v29RematchNote);
+
+function v29Rematch(text, tone){
+ v29RematchNote.textContent = text || '';
+ v29RematchNote.className = 'v29-rematch' + (tone ? ' ' + tone : '');
+}
+
+function v29RenderSeries(end){
+ v29Result.innerHTML = '';
+ if (!end) return;
+ const series = end.series;
+ const mine = series?.standings?.find((entry) => entry.id === BlastNetwork.playerId);
+ const theirs = series?.standings?.find((entry) => entry.id !== BlastNetwork.playerId);
+ if (!series || !mine || !theirs) {
+  /* A forfeit carries no record, so say why rather than showing an empty scoreboard. */
+  if (end.reason === 'disconnect') {
+   const note = document.createElement('div');
+   note.className = 'v29-series';
+   note.innerHTML = `<div class="v29-series-head">MATCH ABANDONED</div><div class="v29-series-note warn">${escapeHtml((v29Rival.name || 'YOUR RIVAL').toUpperCase())} LEFT BEFORE THE CLOCK RAN OUT — THIS ONE IS NOT ON THE RECORD</div>`;
+   v29Result.append(note);
+  }
+  return;
+ }
+ const block = document.createElement('div');
+ block.className = 'v29-series';
+ const decided = series.games - series.draws;
+ const line = mine.wins > theirs.wins
+  ? `YOU LEAD THIS RIVALRY ${mine.wins}–${theirs.wins}`
+  : mine.wins < theirs.wins
+   ? `${escapeHtml(theirs.name.toUpperCase())} LEADS ${theirs.wins}–${mine.wins}`
+   : decided ? 'DEAD LEVEL' : 'FIRST BLOOD STILL UP FOR GRABS';
+ block.innerHTML = `<div class="v29-series-head">HEAD TO HEAD • ${series.games} GAME${series.games === 1 ? '' : 'S'}${series.draws ? ` • ${series.draws} DRAWN` : ''}</div>
+<div class="v29-series-row"><div class="${mine.wins > theirs.wins ? 'lead' : ''}"><b>YOU</b><em>${mine.wins}</em></div><span class="v29-series-dash">–</span><div class="right ${theirs.wins > mine.wins ? 'lead' : ''}"><b>${escapeHtml(theirs.name.toUpperCase())}</b><em>${theirs.wins}</em></div></div>
+<div class="v29-series-note">${line}</div>`;
+ v29Result.append(block);
+}
+
+const v29FinishBase = finish;
+finish = function(victory = false, duelData = null){
+ const dying = game.running && game.mode === 'duel' && !duelData;
+ const result = v29FinishBase(victory, duelData);
+ if (!duelData) {
+  v29Result.innerHTML = '';
+  if (!dying) {
+   v29AwaitingEnd = false;
+   v29LastEnd = null;
+   v29Rematch('', '');
+   return result;
+  }
+  /* The clock is still running for the other player. Hold the screen, then finish it properly
+     when the server says how the match actually ended. */
+  v29AwaitingEnd = true;
+  $('duelResult').classList.remove('hidden');
+  $('duelResult').textContent = 'REACTOR LOST — WAITING FOR THE FINAL WHISTLE';
+  v29Rematch(`${(v29Rival.name || 'YOUR RIVAL').toUpperCase()} IS STILL PLAYING`, 'waiting');
+  return result;
+ }
+ /* A forfeit is not a win, whatever the standings say — the survivor's whole score shows up as
+    their "lead" because the player who left was spliced out before the standings were built. */
+ if (v29LastEnd?.reason === 'disconnect') {
+  $('resultTitle').textContent = 'RIVAL LEFT';
+  $('duelResult').textContent = `${(v29Rival.name || 'YOUR RIVAL').toUpperCase()} ENDED THE MATCH EARLY`;
+ }
+ v29RenderSeries(v29LastEnd);
+ v29Rematch(v29Rival.left ? `${(v29Rival.name || 'YOUR RIVAL').toUpperCase()} HAS LEFT — NOBODY TO REMATCH` : 'BOTH OF YOU HAVE TO TAP REMATCH', v29Rival.left ? 'gone' : '');
+ v29EndSiege();
+ return result;
+};
+
+/* ---------- The rematch handshake ------------------------------------------------------------
+   The shared binding sends the request and then jumps to a lobby screen showing six placeholder
+   dots, which is the least informative thing it could do: it throws away the result you were both
+   looking at and says nothing about whether your friend agreed. Capturing the click first keeps
+   you on the result, where the record is. */
+
+$('rematchBtn').addEventListener('click', (event) => {
+ event.stopImmediatePropagation();
+ if (v29Rival.left) return toast('YOUR RIVAL HAS LEFT');
+ BlastNetwork.rematch();
+ v29Rematch(`WAITING FOR ${(v29Rival.name || 'YOUR RIVAL').toUpperCase()} TO TAP REMATCH`, 'waiting');
+}, true);
+
+BlastNetwork.addEventListener('rematch_state', (event) => {
+ const players = (event.detail || {}).players || [];
+ const mine = players.find((entry) => entry.id === BlastNetwork.playerId);
+ const theirs = players.find((entry) => entry.id !== BlastNetwork.playerId);
+ const who = (theirs?.name || v29Rival.name || 'YOUR RIVAL').toUpperCase();
+ if (mine?.rematch && theirs?.rematch) return v29Rematch('BOTH IN — STARTING', '');
+ if (theirs?.rematch && !mine?.rematch) {
+  v29Rematch(`${who} WANTS ANOTHER — TAP REMATCH`, 'waiting');
+  toast(`${who} WANTS A REMATCH`);
+  audio.sfx('perfect');
+  haptic([12, 40, 12]);
+  return;
+ }
+ if (mine?.rematch) v29Rematch(`WAITING FOR ${who} TO TAP REMATCH`, 'waiting');
+});
+
+/* ---------- Housekeeping --------------------------------------------------------------------- */
+
+const v29BeginBase = begin;
+begin = function(mode = 'solo', seed){
+ v29BeginBase(mode, seed);
+ v29AwaitingEnd = false;
+ v29LastEnd = null;
+ v29EndSiege();
+ v29Strike.classList.remove('on');
+ v29Delta.classList.remove('on');
+ v29Card.classList.remove('v29-hit');
+ if (mode !== 'duel') return;
+ paintSkinElement(v29Orb, v29Rival.skin);
+ document.documentElement.style.setProperty('--v29-rival', v29Tone(v29Rival.skin));
+ v29PaintRival();
+};
+
+const v29HideBase = hideGame;
+hideGame = function(){
+ v29HideBase();
+ v29EndSiege();
+ v29Strike.classList.remove('on');
+};

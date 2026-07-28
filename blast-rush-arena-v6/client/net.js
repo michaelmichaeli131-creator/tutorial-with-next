@@ -18,6 +18,8 @@
       this.reconnectTimer = null;
       this.intentionalClose = false;
       this.pendingAction = null;
+      this.lastVitals = '';
+      this.lastVitalsAt = 0;
     }
 
     setName(name) {
@@ -129,6 +131,30 @@
     score(delta, event, combo, wave) {
       if (!this.ready) return false;
       return this.send({ type: 'score', seq: ++this.seq, delta: Math.floor(delta), event, combo, wave });
+    }
+
+    /**
+     * Mirror how the run is actually going, so the rival panel can show a person rather than a
+     * number. Lives are the part only this client knows — score, combo and wave already travel
+     * with `score`, so this only has to keep them honest between scoring events.
+     *
+     * Deliberately not sequenced like `score` and the sends. Those are commands, and a replayed one
+     * would grant something, so the server drops anything out of order. This grants nothing, so
+     * paying the same ordering cost would only mean a burst of scoring could swallow the update
+     * that says the player is down to their last reactor.
+     *
+     * Called from the HUD tick, so the gating matters: losing a reactor goes out at once, and
+     * everything else settles on a one-second heartbeat rather than a message per frame.
+     */
+    vitals(lives, combo, wave) {
+      if (!this.ready) return false;
+      const now = Date.now();
+      const urgent = String(lives) !== this.lastVitals;
+      if (!urgent && now - this.lastVitalsAt < 1000) return false;
+      if (urgent && now - this.lastVitalsAt < 220) return false;
+      this.lastVitals = String(lives);
+      this.lastVitalsAt = now;
+      return this.send({ type: 'vitals', lives, combo, wave });
     }
 
     pressure() {

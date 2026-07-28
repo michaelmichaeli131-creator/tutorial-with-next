@@ -6,6 +6,7 @@ export type ClientMessage =
   | { type: "create_room"; visibility?: RoomVisibility; tableName?: string }
   | { type: "join_room"; code: string }
   | { type: "score"; seq: number; delta: number; event: ScoreEvent; combo?: number; wave?: number }
+  | { type: "vitals"; lives: number; combo?: number; wave?: number }
   | { type: "pressure"; seq: number }
   | { type: "send_attack"; seq: number; kind: AttackKind }
   | { type: "launch_core"; seq: number }
@@ -61,6 +62,36 @@ export interface PublicPlayer {
   ammo: number;
   sentCores: number;
   defusedCores: number;
+  /**
+   * Reactor integrity, mirrored so a duellist can see their rival is one hit from ending their run.
+   * Everything else in this record is derived from messages the server already needed for scoring;
+   * lives is the one fact about a rival's situation that only their own client knows, and without
+   * it a duel is two people watching a number climb.
+   */
+  lives: number;
+}
+
+/**
+ * The running record between two specific pilots, sent with every result.
+ *
+ * A duel used to end at 120 seconds with a score and a REMATCH button, which makes every game the
+ * first game. Carrying the tally means the third one is being played for something.
+ */
+export interface SeriesStanding {
+  id: string;
+  name: string;
+  wins: number;
+}
+
+export interface SeriesRecord {
+  games: number;
+  draws: number;
+  standings: SeriesStanding[];
+}
+
+/** Sorted so the same two pilots hash to the same rivalry whichever of them opened the room. */
+export function rivalryKey(a: string, b: string): string {
+  return a < b ? `${a}|${b}` : `${b}|${a}`;
 }
 
 export interface PublicTable {

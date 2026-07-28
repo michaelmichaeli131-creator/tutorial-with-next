@@ -1,0 +1,150 @@
+/* V29 — duel presence.
+
+   Everything here exists to answer one question the duel could not answer: what is the person on
+   the other side doing right now? The stylesheet is injected by client/game-src/03zh.part rather
+   than linked from index.html, because it is only ever needed once a duel starts.
+
+   --v29-rival is set from the rival's chosen skin whenever a duel begins, so their colour is the
+   colour of everything they do to you. */
+
+:root{--v29-rival:#ff5c8a;--v29-strike:#ff5c8a}
+
+/* ---------- Rival read-out ------------------------------------------------------------------
+   The rival card was one line: a name and a number. A second row carries the things that make a
+   score mean something — how close they are to dying, whether they are mid-combo, and how big the
+   next thing they can afford to send is. */
+
+/* Rules here are scoped to #rivalCard and carry !important where v17-hud.css does. That file
+   styles the card's children by element — `.v17-rival b` and `.v17-rival span:last-child` — so an
+   unscoped class name loses to it, and the charge bar would come out rendered as a 7px caption. */
+
+#rivalCard{flex-wrap:wrap!important;row-gap:4px}
+#rivalCard .v29-rv{position:relative;display:flex;align-items:center;gap:8px;width:100%;min-width:0;padding:1px 0 0}
+#rivalCard #rivalState{flex:0 0 auto;font:900 7px/1 system-ui!important;letter-spacing:.1em;color:#ff9db0;display:block}
+#rivalCard.v29-away{--f-plate:linear-gradient(168deg,#3a2b12 0%,#241a0b 44%,#120c05 100%)}
+#rivalCard.v29-away #rivalState{color:#ffce6b}
+#rivalCard.v29-gone{--f-plate:linear-gradient(168deg,#241a1a 0%,#170f0f 44%,#0c0707 100%)}
+
+.v29-orb{flex:0 0 auto;width:17px;height:17px;border-radius:50%;box-shadow:0 0 10px var(--v29-rival)}
+
+#rivalCard .v29-lives{flex:0 0 auto;display:flex;gap:3px}
+#rivalCard .v29-lives i{width:6px;height:6px;border-radius:50%;background:#ff4d6d;box-shadow:0 0 6px #ff4d6d}
+#rivalCard .v29-lives i.out{background:rgba(255,255,255,.16);box-shadow:none}
+#rivalCard .v29-lives.critical i{animation:v29Pulse .7s ease-in-out infinite}
+@keyframes v29Pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.74)}}
+
+#rivalCard .v29-combo{flex:0 0 auto;min-width:26px;display:block;
+ font:1000 9px/1 system-ui!important;letter-spacing:.06em;color:#ffd166}
+#rivalCard .v29-combo.idle{color:rgba(255,255,255,.28)}
+
+/* The charge bar is the tell. A rival sitting on 90 can drop a War Titan on you at any moment,
+   and until now the only warning was the titan itself. */
+#rivalCard .v29-charge{flex:1 1 auto!important;min-width:54px;height:13px;position:relative;
+ border-radius:7px;overflow:hidden;display:block;font:0/0 system-ui!important;
+ background:rgba(0,0,0,.42);box-shadow:inset 0 0 0 1px rgba(255,255,255,.09)}
+#rivalCard .v29-charge i{position:absolute;inset:0 auto 0 0;width:0;border-radius:7px;
+ background:linear-gradient(90deg,#5f7dff,#b985ff 60%,#ff4d6d);transition:width .28s ease-out}
+#rivalCard .v29-charge b{position:absolute;inset:0;display:grid;place-items:center;
+ font:1000 7px/1 system-ui!important;letter-spacing:.09em;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.95)}
+#rivalCard .v29-charge.armed{box-shadow:inset 0 0 0 1px rgba(255,77,109,.85),0 0 12px rgba(255,77,109,.5)}
+#rivalCard .v29-charge.armed b{animation:v29Blink 1s steps(2,end) infinite}
+@keyframes v29Blink{50%{opacity:.4}}
+
+/* A rival's score is only interesting when it moves. */
+/* Sized to zero when idle so an inline pill can sit in the row without reserving a hole in it. */
+#rivalCard .v29-delta{flex:0 0 auto;max-width:0;overflow:hidden;padding:0;border-radius:5px;
+ background:#12f5a0;color:#00170e;font:1000 9px/13px system-ui!important;letter-spacing:.04em;
+ white-space:nowrap;opacity:0;transition:opacity .18s,max-width .18s,padding .18s;pointer-events:none}
+#rivalCard .v29-delta.on{opacity:1;max-width:84px;padding:0 6px}
+
+#rivalCard.v29-hit{animation:v29Hit .5s ease-out}
+@keyframes v29Hit{0%{box-shadow:0 0 0 0 var(--v29-strike)}35%{box-shadow:0 0 22px 5px var(--v29-strike)}100%{box-shadow:0 0 0 0 var(--v29-strike)}}
+
+/* The rival row makes the combat bar 22px taller. Both offsets below are the V17 duel numbers plus
+   that, measured rather than guessed: the bar now ends at 168px on a 390 and a 360 wide phone
+   alike, and these keep the 16px and 70px gaps V17 chose. */
+body.duel-active .boss-hud:not(.hidden){top:calc(max(4px,env(safe-area-inset-top)) + 180px)!important}
+body.duel-active .v17-combo{top:calc(max(4px,env(safe-area-inset-top)) + 234px)}
+
+/* ---------- Being attacked ------------------------------------------------------------------
+   An incoming threat used to be a 1.25s toast reading "GRAVITY ATTACK INCOMING" — the same
+   sentence a solo hazard would print. The server always sent the sender's name; nothing displayed
+   it. It now arrives with their name, in their colour, and their name stays on screen for as long
+   as you are living with it. */
+
+.v29-strike{position:fixed;left:50%;top:calc(max(6px,env(safe-area-inset-top)) + 180px);
+ transform:translate(-50%,-14px);z-index:96;display:flex;align-items:center;gap:11px;
+ padding:10px 16px 10px 12px;border-radius:13px;pointer-events:none;
+ background:linear-gradient(115deg,color-mix(in srgb,var(--v29-strike) 62%,#14050e),#150510 78%);
+ box-shadow:0 0 0 1px color-mix(in srgb,var(--v29-strike) 75%,transparent),
+  0 0 26px color-mix(in srgb,var(--v29-strike) 30%,transparent),0 12px 34px rgba(0,0,0,.62);
+ opacity:0;transition:opacity .16s ease-out,transform .16s ease-out;max-width:min(94vw,430px)}
+.v29-strike.on{opacity:1;transform:translate(-50%,0)}
+.v29-strike .v29-orb{width:30px;height:30px}
+.v29-strike-copy{min-width:0}
+.v29-strike-who{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+ font:1000 17px/1.05 system-ui;letter-spacing:.05em;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.9)}
+.v29-strike-what{display:block;margin-top:3px;white-space:nowrap;
+ font:900 9px/1.1 system-ui;letter-spacing:.13em;color:#ffe7ef}
+
+/* While the hazard runs, their name sits on the edge of the arena with a bar counting it out.
+   This is the difference between a game event and a person doing something to you. */
+.v29-siege{position:fixed;left:50%;transform:translateX(-50%);
+ top:calc(max(6px,env(safe-area-inset-top)) + 182px);z-index:95;
+ display:none;align-items:center;gap:8px;padding:5px 11px;border-radius:9px;pointer-events:none;
+ background:rgba(8,3,10,.86);box-shadow:0 0 0 1px color-mix(in srgb,var(--v29-strike) 60%,transparent)}
+.v29-siege.on{display:flex}
+/* One caption at a time: the banner says the same thing louder while it is up. */
+.v29-strike.on ~ .v29-siege.on{display:none}
+.v29-siege span{font:1000 8px/1 system-ui;letter-spacing:.13em;color:#fff;white-space:nowrap}
+.v29-siege i{display:block;width:56px;height:4px;border-radius:3px;background:rgba(255,255,255,.16);overflow:hidden}
+.v29-siege i b{display:block;height:100%;width:100%;background:var(--v29-strike)}
+
+body.v29-under:before{content:'';position:fixed;inset:0;z-index:3;pointer-events:none;
+ box-shadow:inset 0 0 110px 26px color-mix(in srgb,var(--v29-strike) 62%,transparent);
+ animation:v29Breathe 1.4s ease-in-out infinite}
+@keyframes v29Breathe{0%,100%{opacity:.5}50%{opacity:1}}
+
+/* ---------- The end -------------------------------------------------------------------------
+   A result used to be a score and a REMATCH button, which makes every duel the first duel. */
+
+.v29-series{margin:10px 0 2px;padding:11px 12px;border-radius:12px;
+ background:rgba(255,255,255,.045);box-shadow:inset 0 0 0 1px rgba(255,255,255,.09)}
+.v29-series-head{font:900 8px/1 system-ui;letter-spacing:.18em;color:#8fb4d8;text-align:center}
+.v29-series-row{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:10px;margin-top:9px}
+.v29-series-row b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+ font:900 10px/1.2 system-ui;letter-spacing:.07em;color:#cfe4f7}
+.v29-series-row em{display:block;margin-top:3px;font:1000 27px/1 system-ui;font-style:normal;color:#fff}
+.v29-series-row .lead em{color:#ffd166;text-shadow:0 0 18px rgba(255,209,102,.5)}
+.v29-series-row .right{text-align:right}
+.v29-series-dash{font:1000 15px/1 system-ui;color:rgba(255,255,255,.3)}
+.v29-series-note{margin-top:8px;text-align:center;font:900 8px/1.4 system-ui;letter-spacing:.1em;color:#9fd8ff}
+.v29-series-note.warn{color:#ffce6b}
+
+.v29-rematch{margin-top:8px;text-align:center;font:900 9px/1.4 system-ui;letter-spacing:.1em;color:#9fd8ff}
+.v29-rematch.waiting{color:#ffd166}
+.v29-rematch.gone{color:#ff9db0}
+
+/* ---------- Arriving on an invite ------------------------------------------------------------
+   Pinned to the top of the launch overlay, because that is the first thing a friend who tapped the
+   link actually sees and it otherwise says nothing about why they are here. */
+
+.v29-invite{position:absolute;left:50%;top:calc(max(10px,env(safe-area-inset-top)) + 8px);
+ transform:translateX(-50%);z-index:20;max-width:92vw;padding:8px 14px;border-radius:999px;
+ text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+ font:1000 10px/1.2 system-ui;letter-spacing:.13em;color:#04140c;
+ background:linear-gradient(120deg,#12f5a0,#6ee7ff);box-shadow:0 8px 26px rgba(0,0,0,.45)}
+.v29-invite.dead{background:linear-gradient(120deg,#ff7a9c,#ff4d6d);color:#1a0209}
+
+/* ---------- Lobby -------------------------------------------------------------------------- */
+
+.v29-lobby-note{margin-top:9px;padding:8px 10px;border-radius:9px;text-align:center;
+ font:900 9px/1.45 system-ui;letter-spacing:.06em;color:#ffce6b;
+ background:rgba(255,190,80,.09);box-shadow:inset 0 0 0 1px rgba(255,190,80,.22)}
+.v29-lobby-note.hidden{display:none}
+.v29-lobby-note.good{color:#9fe8c0;background:rgba(80,255,180,.08);box-shadow:inset 0 0 0 1px rgba(80,255,180,.2)}
+
+@media (prefers-reduced-motion:reduce){
+ .v29-lives.critical i,.v29-charge.armed b,body.v29-under:before{animation:none}
+ #rivalCard.v29-hit{animation:none}
+}

@@ -345,3 +345,83 @@ Reactor skins affect the player's reactor, trails, lobby identity and sent Rival
 ## Ethical retention
 
 The design uses mastery, variety, expression, friendship and fair competition. It avoids loot boxes, paid power, energy timers, deceptive notifications, forced streak loss and intentionally frustrating matchmaking.
+
+## V29 — friend-vs-friend: presence, attribution and a record
+
+The duel mode worked and did not feel like playing someone you know. Reading the wire against the
+running V23 build explained most of why: the server was already sending far more about the other
+player than the client ever showed.
+
+- `opponent_attack` carries `from`, the sender's name. `applyHazard(kind, durationMs)` was called
+  without it, so a friend attacking you printed "GRAVITY ATTACK INCOMING" — word for word the
+  sentence a solo hazard prints. The one moment in the mode where another person reaches across and
+  does something to you was rendered as weather.
+- `arena_flash` and `arena_launch` are broadcast to both players, and neither had a listener. You
+  could spend 90 charge on a War Titan and the only feedback was a toast saying you had spent it.
+- `opponent_left` had no listener. A friend who quit left you fighting a card that said CONNECTED.
+- `rematch_state` had no listener. Tapping REMATCH threw you to a lobby reading "REMATCH REQUESTED"
+  over six placeholder dots, identical whether your friend had already agreed or had closed the tab.
+- `match_state` carries combo, charge, ammo and defused cores every 400ms. The rival card showed a
+  name and a number.
+
+### The rival read-out
+
+The rival card gains a second row: reactor integrity as pips, their combo, and a charge bar
+labelled with the most expensive thing that charge can currently buy. A rival sitting on 90 with
+WAR TITAN on their bar is a warning you can act on; the raw number was only meaningful to someone
+who had memorised the price list. `lives` is the one fact that was genuinely not on the wire — only
+a player's own client knows it — so a `vitals` message was added. It is rate limited and clamped
+server-side, and deliberately sits outside the `seq` ordering that guards `score` and the sends: it
+grants nothing, so paying that ordering cost would only mean a burst of scoring could swallow the
+update that says a player is down to their last reactor.
+
+### Being attacked by a person
+
+Every incoming threat — hazard, core or titan — now announces its author: their name, in their skin
+colour, with their reactor orb. While a hazard runs, a strip carries their name and counts it out,
+and the arena edges take their colour. A hazard lasts four to five and a half seconds, which is long
+enough to forget who caused it, and forgetting is what turns it back into weather. Anything you send
+is confirmed as having landed on them.
+
+### Rooms that survive a phone
+
+The most common way friend-vs-friend broke was silent. Creating a private room and sharing the link
+is not one continuous act on a phone: you leave the browser for a messaging app, and mobile browsers
+freeze or drop the socket of a backgrounded tab. `disconnect()` granted a grace period only to a
+countdown or a live match, so a *waiting* room was destroyed the instant its host switched apps. The
+friend who tapped the link that had just arrived got "Room not found or already started", and the
+host's client — which reconnects on its own after 1.2 seconds — went on showing a lobby with a code
+that addressed nothing. Neither player was told anything true.
+
+Waiting rooms now hold for three minutes. A countdown will not open against an empty seat, so a
+friend who arrives first waits in a lobby that says who they are waiting for, and the host coming
+back starts the match. A host opening their own invite link used to splice themselves out of their
+own room and orphan it; joining a room you are already in is now idempotent.
+
+A friend tapping the link also lands on the generic launch splash, because `handleUrl` joins behind
+the overlay. The splash now names the person waiting. Auto-entering was considered and rejected:
+entering starts the music, and browsers only permit that from a real gesture.
+
+### An ending worth staying for
+
+`match_end` carries the running head-to-head record between the two pilots. It is kept in the
+matchmaker rather than in the room, keyed on the pilot id pair, because rooms die — five minutes
+after a result, and a fresh invite link makes a new one — and "we're 3–2" should still be true
+afterwards. A forfeit is deliberately not recorded: counting it would let someone farm a record by
+killing the tab whenever they fell behind, and would tell the survivor they beat a friend they never
+actually finished a match against. The record lives in memory with a six-hour idle expiry; moving it
+to the KV store in `server/store.ts` would let it survive a deploy, and was left out rather than put
+async I/O in the socket path.
+
+The rematch handshake now names who has agreed and keeps both players on the result screen, where
+the record is.
+
+One ending was missing entirely. `damage()` calls `finish(false)` with no duel data when the last
+reactor goes, which clears `game.running` — and `finish()` opens with `if(!game.running)return`. So
+a duellist who died at 0:40 sat on a solo-shaped RUN COMPLETE screen showing their own score, with
+no rival, no rematch button, and was never told who won the match they were playing against their
+friend. Losing is fine; not being told is not. That screen now says the clock is still running and
+resolves into the real result when it stops.
+
+Nothing here changes the spawn schedule. Both arenas still replay one server-authoritative list of
+enemies, and the score gap still reflects play.

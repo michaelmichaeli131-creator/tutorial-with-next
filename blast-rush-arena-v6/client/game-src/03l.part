@@ -1,118 +1,685 @@
 /* V15 PRESENTATION — depth in the arena, readable state on the HUD.
    The mobile HUD had been trimmed so far back that lives and objective progress were not on screen
    at all; this rebuilds them into a single bar the player can actually read mid-fight. */
-const v15Clouds=Array.from({length:5},(_,i)=>({
- seed:i,
- x:.14+i*.19,
- y:.16+((i*37)%5)*.11,
- r:.34+((i*53)%4)*.12,
- speed:.014+i*.006
-}));
 
-const v15Ridge=(()=>{
- const points=[];
- for(let i=0;i<=26;i++)points.push({k:i/26,h:.3+((i*79)%11)/11*.7});
- return points;
-})();
+/* V26 ARENA — six worlds that are six places.
+
+   Judged from six screenshots stood side by side, and the verdict was ugly: the arena was one
+   composition recoloured six times. Same soft wash, same dot stars, same black sawtooth ridge at
+   the same height, same planet arc in the same corner. A hue rotation is not a location, and a
+   template with the colour slider dragged along it is precisely what people mean when they say
+   something looks generated rather than made.
+
+   So each world now gets its own horizon architecture and its own thing in the sky, and both are
+   painted once into an offscreen canvas and blitted from then on. Pre-rendering is not a
+   concession to the frame budget here, it is what pays for the detail: the old ridge was a
+   27-point path filled and stroked every frame, which is why it could never afford windows, depth
+   or a second range behind it. A sprite costs one drawImage however much is painted into it. */
+
+const V26_SCENERY=[
+ {sky:'forge',    skyline:'forge',     sun:'#ffb46b', haze:'#3ba9d8', horizon:'#0a1a33', sx:.78,sy:.24,ss:.62},
+ {sky:'shatter',  skyline:'crystal',   sun:'#ffd8f6', haze:'#b03ad0', horizon:'#1a0b3a', sx:.24,sy:.21,ss:.58},
+ /* The one sky body big enough to be a background in its own right, so it is pushed off the
+    centre line: creatures fall down the middle and a bright disc there costs the player reads. */
+ {sky:'sun',      skyline:'temple',    sun:'#ffd98a', haze:'#ff7a2e', horizon:'#3d1004', sx:.74,sy:.26,ss:.72},
+ {sky:'eclipse',  skyline:'cathedral', sun:'#e6c8ff', haze:'#7a3bd8', horizon:'#180638', sx:.5, sy:.25,ss:.66},
+ {sky:'giant',    skyline:'garden',    sun:'#d8fff0', haze:'#1f8f8a', horizon:'#03302f', sx:.76,sy:.22,ss:.86},
+ /* The engine world's palette bottoms out olive, which on a phone reads as dirt rather than gold.
+    Its own sky colour keeps the gold where gold belongs — the star and the horizon — over steel. */
+ {sky:'engine',   skyline:'machine',   sun:'#ffe98a', haze:'#c8a838', horizon:'#3a3208', sx:.5, sy:.22,ss:.72, mid:'#232744'}
+];
+
+/* One store for every pre-rendered arena layer. The key carries the size it was painted at, so a
+   rotation or a browser resize repaints instead of stretching a stale sprite.
+
+   The backing store is device pixels while the painter works in CSS pixels. Painting at CSS size
+   and letting drawImage scale up is how pre-rendered layers end up looking softer than the paths
+   they replaced on any phone with a DPR above 1 — which is every phone this ships to. Callers must
+   therefore pass an explicit destination size to drawImage; the two-argument form would draw the
+   sprite at its device-pixel size. */
+const v26Layers=new Map();
+function v26Layer(key,width,height,paint){
+ const cached=v26Layers.get(key);
+ if(cached)return cached;
+ const w=Math.max(1,Math.round(width)),h=Math.max(1,Math.round(height));
+ const sprite=document.createElement('canvas');
+ sprite.width=Math.round(w*DPR);
+ sprite.height=Math.round(h*DPR);
+ const c=sprite.getContext('2d');
+ c.setTransform(DPR,0,0,DPR,0,0);
+ paint(c,w,h);
+ /* Six worlds times a handful of layers, and one extra set if the device is rotated. Anything
+    beyond that is stale and would otherwise sit in memory for the rest of the session. */
+ if(v26Layers.size>40)v26Layers.clear();
+ v26Layers.set(key,sprite);
+ return sprite;
+}
+
+/* Seeded so a repaint after a resize produces the same skyline the player was just looking at. */
+function v26Rand(seed){
+ let s=(seed*2654435761)>>>0;
+ return()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296;};
+}
+
+function v26Poly(c,points){
+ c.beginPath();
+ c.moveTo(points[0][0],points[0][1]);
+ for(let i=1;i<points.length;i++)c.lineTo(points[i][0],points[i][1]);
+ c.closePath();
+}
+
+/* ---------- Nebula ---------- */
+
+/* Three lobes rather than one circle: a perfect radial gradient reads as a spotlight, and five
+   spotlights drifting across the sky is what made the old middle distance look like a smudge. */
+function v26Puff(color){
+ return v26Layer(`puff|${color}|${DPR}`,256,256,(c,s)=>{
+  const half=s/2;
+  for(const [ox,oy,rr,peak] of [[0,0,.98,'3c'],[-.3,-.2,.6,'2a'],[.28,.22,.52,'22'],[.12,-.34,.4,'1e']]){
+   const x=half+ox*half,y=half+oy*half,r=rr*half;
+   const g=c.createRadialGradient(x,y,0,x,y,r);
+   g.addColorStop(0,color+peak);
+   g.addColorStop(.45,color+'14');
+   g.addColorStop(1,color+'00');
+   c.fillStyle=g;
+   c.beginPath();c.arc(x,y,r,0,Math.PI*2);c.fill();
+  }
+ });
+}
+
+/* ---------- Sky bodies ---------- */
+
+/* A body lit from one side gives the arena a light source, which is the single thing the old
+   sky lacked: everything in it glowed on its own, so nothing looked like it was anywhere. */
+function v26SkyBody(kind,size,w,scene){
+ return v26Layer(`sky|${kind}|${Math.round(size)}|${w.accent}|${w.enemy}|${DPR}`,size,size,(c,S)=>{
+  const cx=S/2,cy=S/2,R=S*.34;
+  const glow=c.createRadialGradient(cx,cy,R*.9,cx,cy,S*.5);
+  glow.addColorStop(0,scene.haze+'44');
+  glow.addColorStop(.5,scene.haze+'12');
+  glow.addColorStop(1,scene.haze+'00');
+  c.fillStyle=glow;c.fillRect(0,0,S,S);
+
+  const lit=(radius,base,edge)=>{
+   const g=c.createRadialGradient(cx-radius*.5,cy-radius*.55,radius*.04,cx,cy,radius);
+   g.addColorStop(0,edge);
+   g.addColorStop(.3,base);
+   g.addColorStop(1,'#03040c');
+   c.fillStyle=g;
+   c.beginPath();c.arc(cx,cy,radius,0,Math.PI*2);c.fill();
+  };
+
+  if(kind==='forge'){
+   lit(R,'#131c33','#3d5580');
+   /* One continuous molten belt across the shadowed limb, tapering at both ends, with the crust
+      cracking away from it. Scattered fissures read as scratches on a ball; a single band that
+      goes somewhere reads as a planet with a seam of heat running through it. */
+   c.save();
+   c.beginPath();c.arc(cx,cy,R,0,Math.PI*2);c.clip();
+   c.globalCompositeOperation='lighter';
+   const belt=[];
+   for(let i=0;i<=10;i++){
+    const k=i/10;
+    belt.push([cx-R*1.1+R*2.2*k,cy+R*(.52-k*.9)+Math.sin(k*7)*R*.09]);
+   }
+   for(const [width,color] of [[.19,scene.sun+'26'],[.075,scene.sun+'88'],[.026,'#fff4de']]){
+    c.strokeStyle=color;
+    c.lineWidth=R*width;
+    c.lineJoin='round';c.lineCap='round';
+    c.beginPath();
+    c.moveTo(belt[0][0],belt[0][1]);
+    for(let i=1;i<belt.length;i++)c.lineTo(belt[i][0],belt[i][1]);
+    c.stroke();
+   }
+   const rnd=v26Rand(7);
+   c.strokeStyle=scene.sun+'99';
+   for(let i=2;i<9;i++){
+    const [bx,by]=belt[i];
+    const len=R*(.1+rnd()*.22),dir=(rnd()<.5?1:-1)*(1.1+rnd()*.8);
+    c.lineWidth=R*.014;
+    c.beginPath();
+    c.moveTo(bx,by);
+    c.lineTo(bx+Math.cos(dir)*len,by+Math.sin(dir)*len);
+    c.stroke();
+   }
+   c.restore();
+   c.save();
+   c.globalCompositeOperation='lighter';
+   c.strokeStyle=w.accent+'aa';
+   c.lineWidth=Math.max(1.5,R*.035);
+   c.beginPath();c.arc(cx,cy,R*1.005,Math.PI*.86,Math.PI*1.72);c.stroke();
+   /* Ring seen near edge-on, clipped so it passes behind the body. */
+   c.strokeStyle=w.accent+'55';
+   c.lineWidth=Math.max(1,R*.05);
+   c.beginPath();c.ellipse(cx,cy,R*1.5,R*.34,-.32,0,Math.PI*2);c.stroke();
+   c.restore();
+  }else if(kind==='shatter'){
+   /* A moon that came apart: three chunks, drifting off the same broken sphere. */
+   const chunks=[[0,0,1,0],[R*.85,-R*.28,.42,.5],[-R*.7,R*.5,.3,-.7]];
+   for(const [ox,oy,scale,rot] of chunks){
+    c.save();
+    c.translate(cx+ox,cy+oy);
+    c.rotate(rot);
+    const r=R*scale;
+    const g=c.createLinearGradient(-r,-r,r*.6,r);
+    g.addColorStop(0,'#cfd8f0');
+    g.addColorStop(.3,'#6d7bab');
+    g.addColorStop(.7,'#1b2140');
+    g.addColorStop(1,'#05070f');
+    c.fillStyle=g;
+    if(scale===1){
+     /* The parent body keeps a bite out of it so the chunks obviously came from here. */
+     c.beginPath();
+     c.arc(0,0,r,Math.PI*.62,Math.PI*2.34);
+     c.lineTo(r*.1,-r*.2);
+     c.lineTo(r*.42,r*.12);
+     c.closePath();
+    }else{
+     v26Poly(c,[[-r,-r*.4],[-r*.2,-r],[r*.8,-r*.5],[r,r*.4],[r*.1,r]]);
+    }
+    c.fill();
+    c.strokeStyle=w.accent+'77';
+    c.lineWidth=Math.max(1,r*.05);
+    c.stroke();
+    c.restore();
+   }
+  }else if(kind==='sun'){
+   /* The one world where the sky body is the subject rather than a landmark. */
+   c.save();
+   c.globalCompositeOperation='lighter';
+   const corona=c.createRadialGradient(cx,cy,R*.6,cx,cy,S*.5);
+   corona.addColorStop(0,scene.haze+'55');
+   corona.addColorStop(.35,scene.haze+'1c');
+   corona.addColorStop(1,scene.haze+'00');
+   c.fillStyle=corona;c.fillRect(0,0,S,S);
+   const disc=c.createRadialGradient(cx,cy-R*.2,R*.1,cx,cy,R);
+   disc.addColorStop(0,'#ffeec4');
+   disc.addColorStop(.45,scene.sun);
+   disc.addColorStop(.86,'#e0561a');
+   disc.addColorStop(1,'#8e2408');
+   c.fillStyle=disc;
+   c.beginPath();c.arc(cx,cy,R,0,Math.PI*2);c.fill();
+   c.restore();
+   /* Dark bands across the disc: without them a bright circle has no scale to it. */
+   c.save();
+   c.beginPath();c.arc(cx,cy,R,0,Math.PI*2);c.clip();
+   c.fillStyle='rgba(120,26,4,.34)';
+   for(let i=0;i<4;i++)c.fillRect(cx-R,cy-R+R*(.42+i*.36),R*2,R*.07);
+   c.restore();
+  }else if(kind==='eclipse'){
+   c.save();
+   c.globalCompositeOperation='lighter';
+   const halo=c.createRadialGradient(cx,cy,R*.92,cx,cy,S*.48);
+   halo.addColorStop(0,'#ffffffcc');
+   halo.addColorStop(.06,w.accent+'aa');
+   halo.addColorStop(.4,w.enemy+'22');
+   halo.addColorStop(1,'transparent');
+   c.fillStyle=halo;c.fillRect(0,0,S,S);
+   /* Rays: a cathedral needs light coming through something. */
+   c.strokeStyle=w.accent+'33';
+   for(let i=0;i<16;i++){
+    const a=i/16*Math.PI*2+.2;
+    c.lineWidth=(i%2?1:2.4)*(S/300);
+    c.beginPath();
+    c.moveTo(cx+Math.cos(a)*R*1.02,cy+Math.sin(a)*R*1.02);
+    c.lineTo(cx+Math.cos(a)*S*(i%2?.36:.46),cy+Math.sin(a)*S*(i%2?.36:.46));
+    c.stroke();
+   }
+   c.restore();
+   c.fillStyle='#02030a';
+   c.beginPath();c.arc(cx,cy,R,0,Math.PI*2);c.fill();
+   c.strokeStyle=w.accent;
+   c.lineWidth=Math.max(1.5,R*.028);
+   c.beginPath();c.arc(cx,cy,R,0,Math.PI*2);c.stroke();
+  }else if(kind==='giant'){
+   lit(R,'#0d3a44','#4fd6c0');
+   c.save();
+   c.beginPath();c.arc(cx,cy,R,0,Math.PI*2);c.clip();
+   /* Storm bands, squashed toward the poles so the sphere reads as a sphere. */
+   const bands=[[-.62,.1,'#7ff0d8'],[-.3,.16,'#1a6b74'],[.02,.2,'#8affe0'],[.34,.15,'#155f6b'],[.62,.1,'#63e0cc']];
+   for(const [y,h,col] of bands){
+    c.globalAlpha=.32;
+    c.fillStyle=col;
+    c.beginPath();c.ellipse(cx,cy+R*y,R*1.05,R*h,0,0,Math.PI*2);c.fill();
+   }
+   c.globalAlpha=.5;
+   c.fillStyle='#ffdca8';
+   c.beginPath();c.ellipse(cx+R*.3,cy+R*.14,R*.2,R*.1,0,0,Math.PI*2);c.fill();
+   c.restore();
+   c.save();
+   c.globalCompositeOperation='lighter';
+   c.strokeStyle=w.accent+'99';
+   c.lineWidth=Math.max(1.5,R*.03);
+   c.beginPath();c.arc(cx,cy,R*1.005,Math.PI*.9,Math.PI*1.8);c.stroke();
+   c.restore();
+  }else{
+   /* CELESTIAL ENGINE: not a planet at all. A machine wrapped around a star. */
+   c.save();
+   c.globalCompositeOperation='lighter';
+   const core=c.createRadialGradient(cx,cy,0,cx,cy,R*.55);
+   core.addColorStop(0,'#fff8dc');
+   core.addColorStop(.26,scene.sun+'cc');
+   core.addColorStop(1,'transparent');
+   c.fillStyle=core;
+   c.beginPath();c.arc(cx,cy,R*.55,0,Math.PI*2);c.fill();
+   c.restore();
+   for(let ring=0;ring<3;ring++){
+    const rr=R*(.72+ring*.24);
+    const segments=8+ring*4;
+    for(let i=0;i<segments;i++){
+     const a0=i/segments*Math.PI*2+ring*.3;
+     const a1=a0+Math.PI*2/segments*.72;
+     c.strokeStyle=ring===1?w.enemy+'cc':'#39415e';
+     c.lineWidth=Math.max(2,R*(.1-ring*.02));
+     c.beginPath();c.arc(cx,cy,rr,a0,a1);c.stroke();
+    }
+   }
+   c.save();
+   c.globalCompositeOperation='lighter';
+   c.strokeStyle=w.accent+'66';
+   c.lineWidth=Math.max(1,R*.02);
+   for(let i=0;i<10;i++){
+    const a=i/10*Math.PI*2;
+    c.beginPath();
+    c.moveTo(cx+Math.cos(a)*R*.6,cy+Math.sin(a)*R*.6);
+    c.lineTo(cx+Math.cos(a)*R*1.22,cy+Math.sin(a)*R*1.22);
+    c.stroke();
+   }
+   c.restore();
+  }
+ });
+}
+
+/* ---------- Skylines ---------- */
+
+/* Each world builds its horizon out of its own vocabulary. The silhouette is what a player reads
+   first and from furthest away, so the shapes have to differ before the colours do. */
+const V26_SKYLINES={
+ forge(c,w,h,pal,rnd,near){
+  let x=-20;
+  while(x<w+20){
+   const bw=h*(near?.18:.13)*(.6+rnd()*1.1);
+   const bh=h*(near?.5:.34)*(.35+rnd()*1.3);
+   const chimney=rnd()<.3;
+   c.fillStyle=near?'#04070f':'#080d1c';
+   if(chimney){
+    const cw=bw*.36;
+    c.fillRect(x+bw/2-cw/2,h-bh*1.5,cw,bh*1.5);
+    c.fillRect(x+bw/2-cw*.9,h-bh*1.5,cw*1.8,bh*.09);
+    c.save();c.globalCompositeOperation='lighter';
+    c.fillStyle=pal.accent+'33';
+    c.fillRect(x+bw/2-cw*.6,h-bh*1.56,cw*1.2,bh*.07);
+    c.restore();
+   }else{
+    c.fillRect(x,h-bh,bw,bh);
+    /* A stepped shoulder stops every tower being the same extruded rectangle. */
+    if(rnd()<.45)c.fillRect(x+bw*.18,h-bh*1.22,bw*.64,bh*.24);
+    c.save();
+    c.globalCompositeOperation='lighter';
+    c.fillStyle=pal.accent+(near?'26':'18');
+    for(let wy=h-bh+bh*.12;wy<h-bh*.06;wy+=Math.max(5,bh*.13)){
+     for(let wx=x+bw*.16;wx<x+bw*.84;wx+=Math.max(4,bw*.22)){
+      if(rnd()<.55)c.fillRect(wx,wy,Math.max(1.5,bw*.09),Math.max(1.5,bh*.045));
+     }
+    }
+    c.restore();
+   }
+   x+=bw*(chimney?.55:1)+h*.012;
+  }
+  /* Vent light pooling along the base ties the towers to the ground. */
+  c.save();
+  c.globalCompositeOperation='lighter';
+  const vent=c.createLinearGradient(0,h-h*.12,0,h);
+  vent.addColorStop(0,'transparent');
+  vent.addColorStop(1,pal.accent+'2e');
+  c.fillStyle=vent;c.fillRect(0,h-h*.12,w,h*.12);
+  c.restore();
+ },
+ crystal(c,w,h,pal,rnd,near){
+  let x=-30;
+  while(x<w+30){
+   const bw=h*(near?.3:.22)*(.5+rnd());
+   const bh=h*(near?.8:.55)*(.4+rnd()*1.1);
+   const tilt=(rnd()-.5)*.5;
+   c.save();
+   c.translate(x+bw/2,h);
+   c.rotate(tilt);
+   const g=c.createLinearGradient(-bw/2,-bh,bw/2,0);
+   g.addColorStop(0,near?'#170a34':'#241250');
+   g.addColorStop(.55,'#0a0418');
+   g.addColorStop(1,'#04020c');
+   c.fillStyle=g;
+   v26Poly(c,[[-bw/2,10],[-bw*.3,-bh*.72],[0,-bh],[bw*.34,-bh*.66],[bw/2,10]]);
+   c.fill();
+   /* Lit facet edges: a shard with no highlight is just a dark triangle. */
+   c.save();
+   c.globalCompositeOperation='lighter';
+   c.strokeStyle=pal.accent+(near?'55':'33');
+   c.lineWidth=Math.max(1,h*.008);
+   c.beginPath();c.moveTo(-bw*.3,-bh*.72);c.lineTo(0,-bh);c.lineTo(bw*.34,-bh*.66);c.stroke();
+   c.strokeStyle=pal.enemy+'2a';
+   c.beginPath();c.moveTo(0,-bh);c.lineTo(0,10);c.stroke();
+   c.restore();
+   c.restore();
+   x+=bw*.72;
+  }
+ },
+ temple(c,w,h,pal,rnd,near){
+  let x=-20;
+  while(x<w+20){
+   if(rnd()<.34){
+    /* Obelisk. */
+    const bw=h*.06*(.7+rnd()*.6),bh=h*(near?.9:.65)*(.5+rnd()*.7);
+    c.fillStyle=near?'#160603':'#25100a';
+    v26Poly(c,[[x,h],[x,h-bh],[x+bw/2,h-bh*1.14],[x+bw,h-bh],[x+bw,h]]);
+    c.fill();
+    c.save();c.globalCompositeOperation='lighter';
+    c.fillStyle=pal.accent+'40';
+    c.fillRect(x+bw*.34,h-bh*1.02,bw*.32,bh*.06);
+    c.restore();
+    x+=bw*2.4;
+   }else{
+    /* Stepped ziggurat. */
+    const bw=h*(near?.5:.38)*(.7+rnd()*.7),bh=h*(near?.52:.36)*(.6+rnd()*.6);
+    const steps=3+Math.floor(rnd()*2);
+    c.fillStyle=near?'#160603':'#25100a';
+    for(let i=0;i<steps;i++){
+     const k=i/steps;
+     c.fillRect(x+bw*k*.32,h-bh*(i+1)/steps,bw*(1-k*.64),bh/steps+1);
+    }
+    c.save();c.globalCompositeOperation='lighter';
+    c.fillStyle=pal.accent+(near?'30':'20');
+    for(let i=0;i<steps;i++)c.fillRect(x+bw*(i/steps)*.32,h-bh*(i+1)/steps,bw*(1-(i/steps)*.64),Math.max(1,h*.006));
+    c.restore();
+    x+=bw*.94;
+   }
+  }
+  /* Colonnade running the width, close to the eye. */
+  if(near){
+   const ch=h*.2;
+   c.fillStyle='#100402';
+   c.fillRect(0,h-ch*.16,w,ch*.16);
+   for(let cx=0;cx<w;cx+=h*.075)c.fillRect(cx,h-ch,Math.max(2,h*.022),ch);
+  }
+ },
+ cathedral(c,w,h,pal,rnd,near){
+  let x=-24;
+  while(x<w+24){
+   const bw=h*(near?.22:.16)*(.6+rnd()*.8);
+   const bh=h*(near?.86:.62)*(.45+rnd()*.9);
+   c.fillStyle=near?'#05010f':'#0c0522';
+   /* Tower with a spire: the pointed cap is the whole silhouette. */
+   v26Poly(c,[[x,h],[x,h-bh*.72],[x+bw*.5,h-bh*1.32],[x+bw,h-bh*.72],[x+bw,h]]);
+   c.fill();
+   /* Lancet window — arch on top of a slot, glowing from inside. */
+   c.save();
+   c.globalCompositeOperation='lighter';
+   c.fillStyle=pal.accent+(near?'44':'28');
+   const ww=bw*.2,wx=x+bw*.5-ww/2;
+   for(let i=0;i<(near?3:2);i++){
+    const wy=h-bh*(.24+i*.19);
+    c.beginPath();
+    c.moveTo(wx,wy);
+    c.lineTo(wx,wy-bh*.09);
+    c.quadraticCurveTo(wx+ww/2,wy-bh*.17,wx+ww,wy-bh*.09);
+    c.lineTo(wx+ww,wy);
+    c.closePath();c.fill();
+   }
+   c.restore();
+   /* Flying buttress to the next tower — cathedral shorthand nobody misreads. */
+   if(near&&rnd()<.6){
+    c.strokeStyle='#05010f';
+    c.lineWidth=Math.max(2,h*.018);
+    c.beginPath();
+    c.moveTo(x+bw,h-bh*.5);
+    c.quadraticCurveTo(x+bw*1.4,h-bh*.34,x+bw*1.7,h);
+    c.stroke();
+   }
+   x+=bw*(1+rnd()*.5);
+  }
+ },
+ garden(c,w,h,pal,rnd,near){
+  let x=-30;
+  while(x<w+30){
+   const th=h*(near?.82:.58)*(.5+rnd()*.9);
+   const tw=Math.max(2,h*(near?.026:.018)*(.7+rnd()));
+   const lean=(rnd()-.5)*h*.09;
+   c.save();
+   c.translate(x,h);
+   c.fillStyle=near?'#02120f':'#05201d';
+   /* Trunk as a tapering curve, not a rectangle — nothing that grew is straight. */
+   c.beginPath();
+   c.moveTo(-tw,0);
+   c.quadraticCurveTo(-tw*.5+lean*.5,-th*.5,lean-tw*.3,-th);
+   c.lineTo(lean+tw*.3,-th);
+   c.quadraticCurveTo(tw*.5+lean*.5,-th*.5,tw,0);
+   c.closePath();c.fill();
+   /* Canopy: overlapping fronds drooping off the crown. */
+   const crownX=lean,crownY=-th;
+   for(let i=0;i<5;i++){
+    const a=Math.PI+ (i/4)*Math.PI;
+    const len=th*(.2+rnd()*.22);
+    c.beginPath();
+    c.moveTo(crownX,crownY);
+    c.quadraticCurveTo(crownX+Math.cos(a)*len,crownY+Math.sin(a)*len,crownX+Math.cos(a)*len*1.3,crownY+len*.5);
+    c.lineTo(crownX,crownY+len*.1);
+    c.closePath();c.fill();
+   }
+   c.save();
+   c.globalCompositeOperation='lighter';
+   c.fillStyle=pal.accent+(near?'55':'33');
+   /* Seed pods: the only light out here, so they carry the whole colour of the world. */
+   for(let i=0;i<3;i++){
+    const px=crownX+(rnd()-.5)*th*.4,py=crownY+rnd()*th*.28;
+    c.beginPath();c.arc(px,py,Math.max(1.2,h*(near?.012:.008)),0,Math.PI*2);c.fill();
+   }
+   c.restore();
+   c.restore();
+   x+=h*(near?.16:.11)*(.6+rnd());
+  }
+ },
+ machine(c,w,h,pal,rnd,near){
+  let x=-20;
+  while(x<w+20){
+   const bw=h*(near?.26:.19)*(.6+rnd()*.9);
+   const bh=h*(near?.6:.42)*(.4+rnd()*1.2);
+   c.fillStyle=near?'#0a0a04':'#131208';
+   c.fillRect(x,h-bh,bw,bh);
+   /* A flywheel set into the face of the block. The teeth stay just proud of the rim — spokes
+      radiating well past it read as a sunburst, which is the last thing a foundry needs. */
+   if(rnd()<.55){
+    const gr=Math.min(bw*.34,bh*.26);
+    const gx=x+bw*.5,gy=h-bh+gr*1.5;
+    c.save();
+    c.globalCompositeOperation='lighter';
+    c.strokeStyle=pal.accent+(near?'4a':'2a');
+    c.lineWidth=Math.max(1.2,gr*.14);
+    c.beginPath();c.arc(gx,gy,gr,0,Math.PI*2);c.stroke();
+    c.lineWidth=Math.max(1,gr*.2);
+    for(let i=0;i<10;i++){
+     const a=i/10*Math.PI*2;
+     c.beginPath();
+     c.moveTo(gx+Math.cos(a)*gr,gy+Math.sin(a)*gr);
+     c.lineTo(gx+Math.cos(a)*gr*1.16,gy+Math.sin(a)*gr*1.16);
+     c.stroke();
+    }
+    c.lineWidth=Math.max(1,gr*.1);
+    for(let i=0;i<3;i++){
+     const a=i/3*Math.PI*2+.4;
+     c.beginPath();
+     c.moveTo(gx-Math.cos(a)*gr*.8,gy-Math.sin(a)*gr*.8);
+     c.lineTo(gx+Math.cos(a)*gr*.8,gy+Math.sin(a)*gr*.8);
+     c.stroke();
+    }
+    c.restore();
+   }else{
+    /* Stack with a lit collar, so the range is not all the same block twice over. */
+    const sw=bw*.26,sh=bh*(.5+rnd()*.7);
+    c.fillRect(x+bw*.5-sw/2,h-bh-sh,sw,sh);
+    c.save();
+    c.globalCompositeOperation='lighter';
+    c.fillStyle=pal.enemy+(near?'40':'26');
+    c.fillRect(x+bw*.5-sw*.7,h-bh-sh,sw*1.4,Math.max(1.5,h*.007));
+    c.restore();
+   }
+   c.strokeStyle=near?'#0a0a04':'#131208';
+   c.lineWidth=Math.max(2,h*.02);
+   c.beginPath();
+   c.moveTo(x+bw*.7,h-bh*.7);
+   c.quadraticCurveTo(x+bw*1.2,h-bh*1.05,x+bw*1.7,h-bh*.5);
+   c.stroke();
+   c.save();
+   c.globalCompositeOperation='lighter';
+   c.fillStyle=pal.enemy+(near?'33':'20');
+   c.fillRect(x+bw*.1,h-bh*.14,bw*.8,Math.max(1.5,h*.008));
+   c.restore();
+   x+=bw*(.9+rnd()*.4);
+  }
+ }
+};
+
+function v26Skyline(worldIndex,near,w,h,pal,scene){
+ return v26Layer(`sky-line|${worldIndex}|${near?1:0}|${Math.round(w)}x${Math.round(h)}|${DPR}`,w,h,(c,cw,ch)=>{
+  V26_SKYLINES[scene.skyline](c,cw,ch,pal,v26Rand(worldIndex*17+(near?3:11)),near);
+ });
+}
+
+/* ---------- Cached full-screen gradients ---------- */
+
+const v26Fills=new Map();
+function v26Fill(key,build){
+ let fill=v26Fills.get(key);
+ if(!fill){fill=build();if(v26Fills.size>24)v26Fills.clear();v26Fills.set(key,fill);}
+ return fill;
+}
+
+const v26Stars=Array.from({length:64},(_,i)=>{
+ const r=v26Rand(i*13+5);
+ return{x:r(),y:r(),layer:i%3,tw:r()*6.28,tint:r()<.14};
+});
 
 drawBackground=function(w){
  const t=game.elapsed;
+ const index=game.world%worlds.length;
+ const scene=V26_SCENERY[index]||V26_SCENERY[0];
+ const horizon=Math.round(H*(isMobile?.8:.82));
 
- const sky=ctx.createLinearGradient(0,0,0,H);
- sky.addColorStop(0,'#02030b');
- sky.addColorStop(.34,w.bg[0]);
- sky.addColorStop(.72,w.bg[1]);
- sky.addColorStop(1,'#010208');
- ctx.fillStyle=sky;
+ /* The light belongs at the horizon, not in the middle of the screen. The old sky put its
+    brightest stop two thirds of the way down, which is exactly where the creatures fight — neon
+    on a lit field has nothing to separate it, and the arena read as a wash. */
+ ctx.fillStyle=v26Fill(`sky|${index}|${H}`,()=>{
+  const g=ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'#01020a');
+  g.addColorStop(.18,w.bg[0]);
+  g.addColorStop(.58,w.bg[0]);
+  g.addColorStop(.87,scene.mid||w.bg[1]);
+  g.addColorStop(1,scene.horizon);
+  return g;
+ });
  ctx.fillRect(0,0,W,H);
 
- /* Far nebula banks give the empty middle of the screen something to read as distance. */
+ /* Nebula banks: four blits of one sprite instead of five gradients built every frame. Held in
+    the upper third so the fighting space underneath stays dark. */
  ctx.save();
  ctx.globalCompositeOperation='lighter';
- for(const cloud of v15Clouds){
-  const cx=((cloud.x+t*cloud.speed)%1.3-.15)*W;
-  const cy=cloud.y*H+Math.sin(t*.18+cloud.seed)*14;
-  const radius=cloud.r*Math.max(W,H)*.52;
-  const g=ctx.createRadialGradient(cx,cy,0,cx,cy,radius);
-  g.addColorStop(0,(cloud.seed%2?w.accent:w.enemy)+'22');
-  g.addColorStop(.55,(cloud.seed%2?w.enemy:w.accent)+'0e');
+ const puffA=v26Puff(w.accent),puffB=v26Puff(w.enemy);
+ for(let i=0;i<4;i++){
+  const size=Math.max(W,H)*(.42+(i%3)*.16);
+  const x=((.1+i*.27+t*(.008+i*.004))%1.4-.2)*W-size/2;
+  const y=(.06+((i*3)%4)*.07)*H+Math.sin(t*.16+i)*14-size/2;
+  ctx.globalAlpha=(i%2?.24:.36)*(.72+.28*Math.sin(t*.22+i*1.7));
+  ctx.drawImage(i%2?puffB:puffA,x,y,size,size);
+ }
+ ctx.restore();
+
+ ctx.save();
+ ctx.globalCompositeOperation='lighter';
+ const boost=game.overdriveTime>0;
+ for(const star of v26Stars){
+  const speed=(3+star.layer*9)*(boost?4:1);
+  const x=star.x*W;
+  const y=(star.y*H+t*speed)%H;
+  const size=.6+star.layer*.7;
+  ctx.globalAlpha=(.2+star.layer*.16)*(.5+.5*Math.sin(t*(.7+star.layer*.4)+star.tw));
+  ctx.fillStyle=star.tint?w.accent:'#ffffff';
+  ctx.fillRect(x,y,size*(boost?3.4:1),size);
+ }
+ ctx.restore();
+
+ /* The sky body is the arena's light source and its landmark — one blit, drifting a few pixels so
+    it is not nailed to the glass. */
+ const bodySize=Math.round(Math.min(W,H)*scene.ss*(isMobile?1.15:1));
+ ctx.drawImage(
+  v26SkyBody(scene.sky,bodySize,w,scene),
+  W*scene.sx-bodySize/2+Math.sin(t*.06)*6,
+  H*scene.sy-bodySize/2+Math.cos(t*.05)*4,
+  bodySize,bodySize
+ );
+
+ /* Two skyline ranges, drifting at different rates. The parallax is what turns a cut-out into a
+    place with distance in it, and it costs two blits because the detail is already baked. */
+ const farH=Math.round(H*(isMobile?.125:.15));
+ const nearH=Math.round(H*(isMobile?.175:.2));
+ /* The far range stands on a higher line than the near one. Sharing a baseline is what made the
+    first attempt look like one skyline: the near towers simply ate the far ones. */
+ const farBase=horizon-Math.round(nearH*.42);
+
+ /* Backlight at the horizon. Without it both ranges are dark shapes on a dark sky and the
+    architecture — which is the entire point of the pass — is invisible. */
+ ctx.save();
+ ctx.globalCompositeOperation='lighter';
+ ctx.fillStyle=v26Fill(`glow|${index}|${horizon}`,()=>{
+  const g=ctx.createLinearGradient(0,farBase-nearH*.6,0,horizon+2);
+  g.addColorStop(0,'transparent');
+  g.addColorStop(.6,scene.haze+'1c');
+  g.addColorStop(1,scene.haze+'52');
+  return g;
+ });
+ ctx.fillRect(0,farBase-nearH*.6,W,horizon-farBase+nearH*.6+2);
+ ctx.restore();
+
+ const pal={accent:w.accent,enemy:w.enemy};
+ const farSprite=v26Skyline(index,false,W,farH,pal,scene);
+ const nearSprite=v26Skyline(index,true,W,nearH,pal,scene);
+ ctx.save();
+ ctx.globalAlpha=.66;
+ const farShift=-((t*3.2)%W);
+ ctx.drawImage(farSprite,farShift,farBase-farH,W,farH);
+ ctx.drawImage(farSprite,farShift+W,farBase-farH,W,farH);
+ ctx.restore();
+
+ /* Aerial perspective between the ranges: the one cue that reliably says "that one is further". */
+ ctx.save();
+ ctx.globalCompositeOperation='lighter';
+ ctx.fillStyle=v26Fill(`haze|${index}|${farBase}`,()=>{
+  const g=ctx.createLinearGradient(0,farBase-farH,0,farBase+6);
+  g.addColorStop(0,'transparent');
+  g.addColorStop(.55,scene.haze+'10');
+  g.addColorStop(1,scene.haze+'2a');
+  return g;
+ });
+ ctx.fillRect(0,farBase-farH,W,farH+6);
+ ctx.restore();
+
+ const nearShift=-((t*7.4)%W);
+ ctx.drawImage(nearSprite,nearShift,horizon-nearH,W,nearH);
+ ctx.drawImage(nearSprite,nearShift+W,horizon-nearH,W,nearH);
+
+ /* Ground: the floor the creatures are descending toward, with the skyline's light lying on it. */
+ ctx.save();
+ ctx.fillStyle='#02030a';
+ ctx.fillRect(0,horizon,W,H-horizon);
+ ctx.globalCompositeOperation='lighter';
+ ctx.fillStyle=v26Fill(`floor|${index}|${horizon}|${H}`,()=>{
+  const g=ctx.createLinearGradient(0,horizon,0,H);
+  g.addColorStop(0,scene.haze+'2c');
+  g.addColorStop(.3,scene.haze+'0a');
   g.addColorStop(1,'transparent');
-  ctx.fillStyle=g;
-  ctx.beginPath();ctx.arc(cx,cy,radius,0,Math.PI*2);ctx.fill();
- }
+  return g;
+ });
+ ctx.fillRect(0,horizon,W,H-horizon);
  ctx.restore();
 
- /* Three parallax star layers instead of one flat field. */
- ctx.save();
- ctx.globalCompositeOperation='lighter';
- const layers=quality.mobile?3:3;
- for(let layer=0;layer<layers;layer++){
-  const count=quality.mobile?[26,20,12][layer]:[46,32,20][layer];
-  const speed=(3+layer*9)*(game.overdriveTime>0?4:1);
-  const size=.6+layer*.7;
-  for(let i=0;i<count;i++){
-   const seed=i*131+layer*617;
-   const x=((seed*37)%1000)/1000*W;
-   const y=((((seed*53)%1000)/1000*H)+t*speed)%H;
-   ctx.globalAlpha=(.18+layer*.14)*(.55+.45*Math.sin(t*(.7+layer*.4)+i));
-   ctx.fillStyle=i%13===0?w.accent:'#ffffff';
-   ctx.fillRect(x,y,size*(game.overdriveTime>0?3.4:1),size);
-  }
- }
- ctx.restore();
-
- /* A rim-lit planet anchors the horizon and gives the world a light source. */
- const planetX=W*.8,planetY=H*.2,planetR=isMobile?76:118;
- ctx.save();
- const planet=ctx.createRadialGradient(planetX-planetR*.34,planetY-planetR*.4,planetR*.06,planetX,planetY,planetR);
- planet.addColorStop(0,'#ffffffdd');
- planet.addColorStop(.14,w.accent+'cc');
- planet.addColorStop(.5,w.enemy+'55');
- planet.addColorStop(1,'#04060f00');
- ctx.fillStyle=planet;
- ctx.beginPath();ctx.arc(planetX,planetY,planetR,0,Math.PI*2);ctx.fill();
- ctx.globalCompositeOperation='lighter';
- ctx.strokeStyle=w.accent+'66';
- ctx.lineWidth=2;
- ctx.beginPath();ctx.arc(planetX,planetY,planetR*1.28,Math.PI*.1,Math.PI*.92);ctx.stroke();
- ctx.restore();
-
- /* Ground plane: the arena finally has a floor for creatures to descend toward. */
- const horizon=H*(isMobile?.82:.84);
- ctx.save();
- ctx.globalCompositeOperation='lighter';
- const band=ctx.createLinearGradient(0,horizon-90,0,horizon+30);
- band.addColorStop(0,'transparent');
- band.addColorStop(1,w.accent+'2a');
- ctx.fillStyle=band;
- ctx.fillRect(0,horizon-90,W,120);
- ctx.restore();
-
- ctx.save();
- ctx.fillStyle='#03060f';
- ctx.beginPath();
- ctx.moveTo(0,H);
- for(const point of v15Ridge){
-  const x=point.k*W;
-  const y=horizon-point.h*(isMobile?52:74)-Math.sin(point.k*9+t*.2)*4;
-  ctx.lineTo(x,y);
- }
- ctx.lineTo(W,H);
- ctx.closePath();
- ctx.fill();
- ctx.strokeStyle=w.accent+'55';
- ctx.lineWidth=1.6;
- ctx.beginPath();
- for(let i=0;i<v15Ridge.length;i++){
-  const point=v15Ridge[i];
-  const x=point.k*W;
-  const y=horizon-point.h*(isMobile?52:74)-Math.sin(point.k*9+t*.2)*4;
-  if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
- }
- ctx.stroke();
- ctx.restore();
-
- /* Foreground motes drifting upward sell parallax against the descending creatures. */
  if(!quality.mobile||!save.comfort){
   ctx.save();
   ctx.globalCompositeOperation='lighter';
@@ -136,11 +703,14 @@ draw=function(){
  v15PostDrawBase();
  const w=worlds[game.world%worlds.length];
  ctx.save();
- const vignette=ctx.createRadialGradient(W*.5,H*.48,Math.min(W,H)*.32,W*.5,H*.52,Math.max(W,H)*.78);
- vignette.addColorStop(0,'transparent');
- vignette.addColorStop(.62,'rgba(2,4,12,.22)');
- vignette.addColorStop(1,'rgba(1,2,8,.78)');
- ctx.fillStyle=vignette;
+ /* Rebuilt every frame until now, for a gradient whose only inputs are the two screen dimensions. */
+ ctx.fillStyle=v26Fill(`vignette|${W}x${H}`,()=>{
+  const g=ctx.createRadialGradient(W*.5,H*.46,Math.min(W,H)*.3,W*.5,H*.52,Math.max(W,H)*.78);
+  g.addColorStop(0,'transparent');
+  g.addColorStop(.58,'rgba(2,4,12,.26)');
+  g.addColorStop(1,'rgba(1,2,8,.84)');
+  return g;
+ });
  ctx.fillRect(0,0,W,H);
  ctx.globalCompositeOperation='overlay';
  ctx.globalAlpha=.09;
@@ -149,12 +719,16 @@ draw=function(){
  ctx.restore();
 
  if(game.running&&game.lives<=1){
-  const pulse=.16+.12*Math.sin(game.elapsed*6);
   ctx.save();
-  const danger=ctx.createRadialGradient(W*.5,H*.5,Math.min(W,H)*.3,W*.5,H*.5,Math.max(W,H)*.7);
-  danger.addColorStop(0,'transparent');
-  danger.addColorStop(1,`rgba(255,42,80,${pulse})`);
-  ctx.fillStyle=danger;
+  /* The pulse is the alpha, not a colour stop, so the gradient itself never has to be rebuilt —
+     and this one runs on the frames where the player is already one hit from losing the run. */
+  ctx.globalAlpha=.57+.43*Math.sin(game.elapsed*6);
+  ctx.fillStyle=v26Fill(`danger|${W}x${H}`,()=>{
+   const g=ctx.createRadialGradient(W*.5,H*.5,Math.min(W,H)*.3,W*.5,H*.5,Math.max(W,H)*.7);
+   g.addColorStop(0,'transparent');
+   g.addColorStop(1,'rgba(255,42,80,.28)');
+   return g;
+  });
   ctx.fillRect(0,0,W,H);
   ctx.restore();
  }
@@ -182,7 +756,9 @@ spawnBoss=function(omega=false){
  if(!boss)return;
  if(isMobile){
   boss.r=Math.max(88,Math.min(W*.27,112));
-  boss.y=Math.max(215,Math.min(H*.31,H-330));
+  /* Dropped a little further down the screen than V15 put it: the titan now has a head and a
+     crown above its shoulders, and at the old height both sat behind the boss health panel. */
+  boss.y=Math.max(232,Math.min(H*.35,H-320));
  }else{
   boss.r=Math.max(100,Math.min(W*.17,158));
  }
