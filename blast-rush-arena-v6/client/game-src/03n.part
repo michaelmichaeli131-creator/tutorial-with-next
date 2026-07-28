@@ -37,9 +37,66 @@ const v16GibShapes={
  splitter:[[[0,-9],[8,-2],[5,7],[-6,7],[-8,-2]],[[-8,-5],[8,-6],[6,5],[-7,5]],[[0,-10],[6,5],[-6,5]]],
  rival:[[[0,-11],[8,-3],[6,8],[-6,8],[-8,-3]],[[-8,-6],[8,-7],[6,5],[-7,6]],[[0,-9],[7,5],[-7,5]]]
 };
+/* Every shape gets a name up front so the sprite cache can key on it without stringifying an array
+   ninety times a frame — and so two species whose first fragment happens to start at the same point
+   cannot collide on the same cached sprite. */
+for(const [type,shapes] of Object.entries(v16GibShapes))shapes.forEach((shape,i)=>{shape.key=`${type}${i}`;});
 
 function v16Palette(o){
  return typeof v15Skin==='function'?v15Skin(o):{body:'#8a7bff',trim:'#dcd4ff',glow:'#a98bff',eye:'#ffffff'};
+}
+
+/* ---------- Shaded debris ----------
+
+   The shards were a flat fill with a bright stroke all the way round, and captured frame by frame
+   that reads as confetti: a lit object has a lit side and a dark side, and an outline that is
+   uniformly bright is the one thing that says "cut from paper". Fragments of a machine that just
+   came apart should look like plate — bright where the blast is behind them, dropping to almost
+   black on the away side, with a torn edge catching the light along one rim only.
+
+   Baked into a sprite per shape and colour rather than shaded per piece per frame. There can be
+   ninety of these on screen at once, and a gradient built per shard per frame is one of the most
+   expensive things canvas 2D offers. It also makes each shard one small blit instead of a path
+   fill plus a path stroke, so the better-looking version is the cheaper one. */
+const V16_GIB_SPRITE=36;
+const v16GibSprites=new Map();
+function v16GibSprite(shape,fill,edge){
+ const key=`${shape.key}|${fill}|${edge}|${DPR}`;
+ const hit=v16GibSprites.get(key);
+ if(hit)return hit;
+ const sprite=document.createElement('canvas');
+ sprite.width=sprite.height=Math.round(V16_GIB_SPRITE*DPR);
+ const c=sprite.getContext('2d');
+ c.setTransform(DPR,0,0,DPR,0,0);
+ c.translate(V16_GIB_SPRITE/2,V16_GIB_SPRITE/2);
+ /* Lit from the upper left, which is where the pilot's own light comes from and where the arena's
+    sky body sits — debris lit from somewhere else would read as belonging to another scene. */
+ /* The shading has to stay bright. A shard is about fifteen pixels across on a phone, and at that
+    size a proper dark side is not read as form — it is read as a dimmer, smaller piece of confetti,
+    which is what the first attempt at this looked like. The dark end therefore only drops to about
+    forty per cent of the fill's own lightness, keeping the piece a bright chip of the creature that
+    happens to have a lit edge. */
+ const g=c.createLinearGradient(-11,-11,9,11);
+ g.addColorStop(0,edge);
+ g.addColorStop(.5,fill);
+ g.addColorStop(1,v33Shift(fill,0,.6));
+ c.fillStyle=g;
+ v14Art.poly(c,shape);
+ c.fill();
+ /* Rim on the lit side only: clipped to the shape, then a thick stroke offset up and left so only
+    the edge facing the light survives the clip. */
+ c.save();
+ v14Art.poly(c,shape);
+ c.clip();
+ c.strokeStyle=edge;
+ c.lineWidth=2.4;
+ c.translate(-1.1,-1.1);
+ v14Art.poly(c,shape);
+ c.stroke();
+ c.restore();
+ if(v16GibSprites.size>72)v16GibSprites.clear();
+ v16GibSprites.set(key,sprite);
+ return sprite;
 }
 
 function v16SpawnGibs(o,power){
@@ -56,8 +113,11 @@ function v16SpawnGibs(o,power){
    vx:Math.cos(angle)*speed,
    vy:Math.sin(angle)*speed-90,
    rot:rng()*6.28,vr:(rng()-.5)*13,
-   life:.7+rng()*.5,max:1.2,
-   scale:scale*(.55+rng()*.7),
+   life:.7+rng()*.5,max:1.2,born:game.elapsed,
+   /* Every fourth piece is a chunk rather than a chip. A cloud of uniformly small fragments reads
+      as dust; what says "that came apart" is a few recognisable plates tumbling out among the
+      dust, and it costs nothing to make some of them large. */
+   scale:scale*(i%4===1?1.5+rng()*.8:.5+rng()*.55),
    shape:shapes[i%shapes.length],
    fill:i%4===0?pal.trim:i%3===0?pal.glow:pal.body,
    edge:pal.trim
@@ -188,20 +248,25 @@ draw=function(){
  ctx.save();
  for(const g of v16Gibs){
   const alpha=Math.max(0,Math.min(1,g.life/.5));
+  const sprite=v16GibSprite(g.shape,g.fill,g.edge);
+  const size=V16_GIB_SPRITE*g.scale;
   ctx.save();
   ctx.translate(g.x,g.y);
   ctx.rotate(g.rot);
-  ctx.scale(g.scale,g.scale);
   /* No shadowBlur here: it is per-shard and there can be ninety of them. The additive rings and
-     flashes already supply the glow, and the bright edge stroke keeps each shard readable. */
+     flashes already supply the glow, and the baked rim keeps each shard readable. */
   ctx.globalAlpha=alpha;
-  ctx.fillStyle=g.fill;
-  v14Art.poly(ctx,g.shape);
-  ctx.fill();
-  ctx.globalAlpha=alpha*.9;
-  ctx.strokeStyle=g.edge;
-  ctx.lineWidth=1.3;
-  ctx.stroke();
+  ctx.drawImage(sprite,-size/2,-size/2,size,size);
+  /* Fresh debris is still carrying the blast. An additive pass over the first fifth of a second
+     cools from white through the creature's own glow, which is what makes the shards read as
+     thrown out of an explosion rather than dropped out of one. */
+  const age=game.elapsed-(g.born||0);
+  const heat=age<.22?1-age/.22:0;
+  if(heat>.02){
+   ctx.globalCompositeOperation='lighter';
+   ctx.globalAlpha=alpha*heat*.85;
+   ctx.drawImage(sprite,-size/2,-size/2,size,size);
+  }
   ctx.restore();
  }
  ctx.restore();

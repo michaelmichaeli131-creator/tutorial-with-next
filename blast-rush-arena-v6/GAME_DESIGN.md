@@ -69,6 +69,36 @@ Two constraints shaped it:
   ever mirrored or resized. Art already ran at 1.15× the collision radius against a tap ellipse of
   roughly 1.6×, so ±8% on the drawing never approaches the edge of what is hittable.
 
+## V33 — debris that came off a machine
+
+Judged by capturing a single kill frame by frame rather than by watching it, because a 300 ms
+effect cannot be assessed at speed. The sequence was structurally right — flash, ring, debris,
+smoke, score — but the debris was a flat fill with a uniformly bright outline all the way round,
+and frozen on a frame that reads unmistakably as confetti.
+
+Two changes, and one correction along the way:
+
+- **Shaded fragments, baked into sprites.** Lit from the upper left to match the pilot's own light
+  and the arena's sky body, with the rim highlight clipped to the lit edge only. Ninety of these
+  can be on screen at once, so the shading is baked per shape and colour rather than built per
+  piece per frame — which also turns each shard from a path fill plus a path stroke into one small
+  blit, making the better-looking version the cheaper one.
+- **A cooling pass.** Fresh debris carries the blast: an additive second blit over the first fifth
+  of a second, fading out. It is what makes the shards read as thrown out of an explosion rather
+  than dropped out of one.
+- **Chunks among the chips.** Every fourth piece is now 1.5–2.3× rather than around half size. A
+  cloud of uniformly small fragments reads as dust; what says *that came apart* is a few
+  recognisable plates tumbling out among the dust.
+
+The correction: the first attempt shaded properly, all the way down to near-black on the away
+side, and it looked worse. A shard is about fifteen pixels across on a phone, and at that size a
+real dark side is not read as form — it is read as a dimmer, smaller piece of confetti. The dark
+end now only drops to about sixty per cent of the fill's own lightness.
+
+Cost, measured against the same harness: fill went from 707k to 738k pixels per frame — 4% — while
+`drawImage` self time over 25 s at a 4× CPU throttle continued down to 1,847 ms from the 3,615 ms
+it started this pass at, and idle time rose from 74.6% to 82.3%.
+
 ## V23 — two buttons become two decisions
 
 This one began by overturning an assumption behind V21 and V22. Both were tuned against bots that
