@@ -55,6 +55,7 @@ interface Room {
   endsAt: number;
   timer: number | null;
   createdAt: number;
+  finishedAt: number;
 }
 
 const MATCH_DURATION_MS = 120_000;
@@ -63,6 +64,13 @@ const MAX_SCORE_EVENTS_PER_SECOND = 45;
 const PRESSURE_COOLDOWN_MS = 2_500;
 const CORE_LAUNCH_COOLDOWN_MS = 650;
 const RECONNECT_GRACE_MS = 12_000;
+/**
+ * How long a decided match is kept addressable so both players can still agree to a rematch.
+ * Past this the room is dropped even if the sockets are still open — a client that sits on the
+ * results screen used to pin its room, its spawn schedule and both player records in memory for
+ * as long as the tab stayed open, and nothing ever collected them.
+ */
+const FINISHED_ROOM_TTL_MS = 5 * 60_000;
 const AMMO_SCORE_STEP = 3_800;
 const MAX_AMMO = 5;
 const HAZARDS: HazardKind[] = ["gravity", "emp", "fracture", "swarm"];
@@ -261,6 +269,7 @@ export class Matchmaker {
       endsAt: 0,
       timer: null,
       createdAt: Date.now(),
+      finishedAt: 0,
     };
     for (const player of players) {
       player.roomCode = code;
@@ -471,7 +480,9 @@ export class Matchmaker {
   private finish(room: Room, reason: "time" | "disconnect"): void {
     if (room.status === "finished") return;
     room.status = "finished";
+    room.finishedAt = Date.now();
     if (room.timer) clearTimeout(room.timer);
+    room.timer = null;
     const standings = [...room.players].sort((a, b) => b.score - a.score).map(publicPlayer);
     const winnerId = standings[0]?.score === standings[1]?.score ? null : standings[0]?.id ?? null;
     this.broadcast(room, { type: "match_end", reason, winnerId, standings });
@@ -541,7 +552,24 @@ export class Matchmaker {
     const now = Date.now();
     this.#queue = this.#queue.filter((player) => player.connected && player.socket.readyState === WebSocket.OPEN);
     for (const room of this.#rooms.values()) {
-      if (!room.players.length || (room.status === "waiting" && now - room.createdAt > 20 * 60_000)) this.#rooms.delete(room.code);
+      const abandoned = !room.players.length;
+      const staleWaiting = room.status === "waiting" && now - room.createdAt > 20 * 60_000;
+      const settled = room.status === "finished" && now - room.finishedAt > FINISHED_ROOM_TTL_MS;
+      if (!abandoned && !staleWaiting && !settled) continue;
+      /* Detach first: a player left holding a roomCode for a deleted room reads as "in a room" to
+         roomOf(), so every later join or quick match would be filtered against a room that is gone. */
+      for (const player of room.players) {
+        if (player.roomCode === room.code) player.roomCode = null;
+      }
+      room.players = [];
+      if (room.timer) clearTimeout(room.timer);
+      room.timer = null;
+      this.#rooms.delete(room.code);
+    }
+    /* Player records outlive their room; drop the ones whose socket is gone for good. */
+    for (const [id, player] of this.#players) {
+      if (player.connected || player.disconnectTimer || player.socket.readyState !== WebSocket.CLOSED) continue;
+      this.#players.delete(id);
     }
   }
 
@@ -560,8 +588,17 @@ export class Matchmaker {
     };
   }
 
+  /**
+   * Serialise once per room rather than once per recipient.
+   *
+   * match_state goes out every 400 ms and carries both players' full public records, so the old
+   * per-socket JSON.stringify was re-encoding an identical object for every live match, twice.
+   */
   private broadcast(room: Room, payload: unknown): void {
-    for (const player of room.players) this.send(player.socket, payload);
+    const encoded = JSON.stringify(payload);
+    for (const player of room.players) {
+      if (player.socket.readyState === WebSocket.OPEN) player.socket.send(encoded);
+    }
   }
 
   private send(socket: WebSocket, payload: unknown): void {

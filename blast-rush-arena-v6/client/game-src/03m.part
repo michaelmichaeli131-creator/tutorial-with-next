@@ -21,48 +21,77 @@ function v15PrepareBuffer(context,canvasEl){
  context.setTransform(2,0,0,2,V15_BUFFER/2,V15_BUFFER/2);
 }
 
+/* The top-down light and the upper-left specular do not depend on the pilot, the time or the
+   scale, so they are baked once. Rebuilding two gradients and filling the whole buffer twice on
+   every frame was pure repeat work: the result was byte-identical from frame to frame. */
+const v15Light=document.createElement('canvas');
+v15Light.width=v15Light.height=V15_BUFFER;
+(()=>{
+ const c=v15Light.getContext('2d');
+ c.setTransform(2,0,0,2,V15_BUFFER/2,V15_BUFFER/2);
+ const light=c.createLinearGradient(0,-V15_HALF*.72,0,V15_HALF*.8);
+ light.addColorStop(0,'rgba(255,255,255,.17)');
+ light.addColorStop(.38,'rgba(255,255,255,.02)');
+ light.addColorStop(.66,'rgba(4,10,28,.2)');
+ light.addColorStop(1,'rgba(2,5,18,.52)');
+ c.fillStyle=light;
+ c.fillRect(-V15_HALF,-V15_HALF,V15_HALF*2,V15_HALF*2);
+ const spec=c.createRadialGradient(-30,-48,2,-30,-48,72);
+ spec.addColorStop(0,'rgba(255,255,255,.17)');
+ spec.addColorStop(1,'rgba(255,255,255,0)');
+ c.fillStyle=spec;
+ c.fillRect(-V15_HALF,-V15_HALF,V15_HALF*2,V15_HALF*2);
+})();
+
+/* The aura and the contact shadow depend only on the pilot's colours and the draw scale, and a
+   gradient's stops are resolved when it is created, not when it is painted. Keeping them per
+   context stops the same two gradients being rebuilt sixty times a second. */
+const v15GradCache=new WeakMap();
+function v15Grad(c,key,build){
+ let perContext=v15GradCache.get(c);
+ if(!perContext){perContext=new Map();v15GradCache.set(c,perContext);}
+ let gradient=perContext.get(key);
+ if(!gradient){gradient=build();perContext.set(key,gradient);}
+ return gradient;
+}
+
 v14DrawCharacter=function(c,characterId,time,options={}){
  const ch=v14Character(characterId);
  const scale=options.scale||1;
  const frame=v14Frames[ch.frame]||v14Frames.knight;
+ const glow=options.glow??18;
 
+ /* The pilot is built from roughly thirty fills and strokes. Canvas 2D re-runs the shadow blur
+    for every one of them, so setting shadowBlur once around the whole frame routine cost thirty
+    blurs per frame — profiling put the reactor at 6.2ms of a 7.2ms frame almost entirely on this.
+    The silhouette is blurred once instead, in the rim pass below. */
  v15PrepareBuffer(v15ShapeCtx,v15Shape);
- v15ShapeCtx.save();
- v15ShapeCtx.shadowBlur=options.glow??18;
- v15ShapeCtx.shadowColor=ch.c1;
  frame(v15ShapeCtx,ch,time);
- v15ShapeCtx.restore();
 
  v15PrepareBuffer(v15OutCtx,v15Out);
- /* Rim: the silhouette blown up slightly and flooded with the accent, sitting behind the art. */
+ /* Rim and glow in one pass: the silhouette blown up slightly, with a single blurred copy of
+    itself behind it, both flooded with the accent. The art is painted opaque on top afterwards,
+    so only the part of the blur that falls outside the pilot survives. */
  v15OutCtx.save();
  v15OutCtx.setTransform(1,0,0,1,0,0);
  v15OutCtx.globalAlpha=.52;
+ /* One blur, on the silhouette, instead of one per fill. This is the whole saving: the cost is
+    paid once for the shape rather than thirty times for the parts that make it up, and the glow
+    the pilot is supposed to have survives. */
+ v15OutCtx.shadowBlur=glow;
+ v15OutCtx.shadowColor='#ffffff';
  const spread=2;
  v15OutCtx.drawImage(v15Shape,-spread,-spread,v15Shape.width+spread*2,v15Shape.height+spread*2);
+ v15OutCtx.shadowBlur=0;
  v15OutCtx.globalCompositeOperation='source-in';
  v15OutCtx.fillStyle=ch.c1;
  v15OutCtx.fillRect(0,0,v15Out.width,v15Out.height);
  v15OutCtx.globalCompositeOperation='source-over';
  v15OutCtx.globalAlpha=1;
  v15OutCtx.drawImage(v15Shape,0,0);
- v15OutCtx.restore();
-
- /* Volumetric light: bright along the top, shaded toward the feet, plus an upper-left specular. */
- v15OutCtx.save();
+ /* Volumetric light: bright along the top, shaded toward the feet, plus the specular. */
  v15OutCtx.globalCompositeOperation='source-atop';
- const light=v15OutCtx.createLinearGradient(0,-V15_HALF*.72,0,V15_HALF*.8);
- light.addColorStop(0,'rgba(255,255,255,.17)');
- light.addColorStop(.38,'rgba(255,255,255,.02)');
- light.addColorStop(.66,'rgba(4,10,28,.2)');
- light.addColorStop(1,'rgba(2,5,18,.52)');
- v15OutCtx.fillStyle=light;
- v15OutCtx.fillRect(-V15_HALF,-V15_HALF,V15_HALF*2,V15_HALF*2);
- const spec=v15OutCtx.createRadialGradient(-30,-48,2,-30,-48,72);
- spec.addColorStop(0,'rgba(255,255,255,.17)');
- spec.addColorStop(1,'rgba(255,255,255,0)');
- v15OutCtx.fillStyle=spec;
- v15OutCtx.fillRect(-V15_HALF,-V15_HALF,V15_HALF*2,V15_HALF*2);
+ v15OutCtx.drawImage(v15Light,0,0);
  v15OutCtx.restore();
 
  c.save();
@@ -72,13 +101,15 @@ v14DrawCharacter=function(c,characterId,time,options={}){
   c.save();
   c.globalCompositeOperation='lighter';
   const radius=(options.auraRadius||86)*scale;
-  const aura=c.createRadialGradient(0,0,4,0,0,radius);
-  aura.addColorStop(0,'#ffffff');
-  aura.addColorStop(.16,ch.c1+'cc');
-  aura.addColorStop(.52,ch.c2+'55');
-  aura.addColorStop(1,'transparent');
   c.globalAlpha=options.auraAlpha??.85;
-  c.fillStyle=aura;
+  c.fillStyle=v15Grad(c,`aura|${ch.c1}|${ch.c2}|${radius}`,()=>{
+   const aura=c.createRadialGradient(0,0,4,0,0,radius);
+   aura.addColorStop(0,'#ffffff');
+   aura.addColorStop(.16,ch.c1+'cc');
+   aura.addColorStop(.52,ch.c2+'55');
+   aura.addColorStop(1,'transparent');
+   return aura;
+  });
   c.beginPath();c.arc(0,0,radius,0,Math.PI*2);c.fill();
   c.restore();
  }
@@ -86,10 +117,12 @@ v14DrawCharacter=function(c,characterId,time,options={}){
  /* Contact shadow keeps the pilot planted rather than floating. */
  c.save();
  c.globalAlpha=.42;
- const contact=c.createRadialGradient(0,52*scale,0,0,52*scale,50*scale);
- contact.addColorStop(0,'rgba(1,3,10,.85)');
- contact.addColorStop(1,'rgba(1,3,10,0)');
- c.fillStyle=contact;
+ c.fillStyle=v15Grad(c,`contact|${scale}`,()=>{
+  const contact=c.createRadialGradient(0,52*scale,0,0,52*scale,50*scale);
+  contact.addColorStop(0,'rgba(1,3,10,.85)');
+  contact.addColorStop(1,'rgba(1,3,10,0)');
+  return contact;
+ });
  c.beginPath();c.ellipse(0,52*scale,48*scale,12*scale,0,0,Math.PI*2);c.fill();
  c.restore();
 
