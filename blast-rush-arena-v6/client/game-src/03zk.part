@@ -1,0 +1,285 @@
+/* V30 SCORE II — a theme with a form, and two arrangements of it.
+
+   The V28 score fixed the delivery problem (the soundtrack was hotlinked from a third party and
+   mixed at 17% under it) but it was still boring, and researching how game music is actually
+   built said exactly why:
+
+   - A loop wants to run two to three minutes with variation every 16 or 32 bars, or it fatigues.
+     V28 looped a four-bar chord progression forever with no sections and no fills. Four bars is
+     roughly eight seconds. Nothing could carry that.
+   - Menus and combat should be *the same motif with different instrumentation*, not two unrelated
+     pieces. That is what makes a soundtrack feel like one game rather than a playlist.
+   - There was no tune. V28 had harmony, a kit and an arpeggio derived from chord degrees, but no
+     melody anyone could hum, and a theme is the thing you remember.
+
+   So this is a 32-bar form with four named sections, a fixed hook that survives across all of
+   them, and two arrangements — LAUNCH and COMBAT — built from the same material.
+
+   Cost is unchanged: every voice is scheduled ahead on the Web Audio clock and nothing is
+   allocated per animation frame. */
+
+const V30={
+ bpm:124,
+ /* Two eight-bar halves that answer each other, so the harmony has somewhere to go instead of
+    resetting every four bars. */
+ harmonyA:[0,0,8,8,3,3,10,10],
+ harmonyB:[0,0,5,5,8,8,10,3],
+ scale:[0,2,3,5,7,8,10],
+ /* The hook: sixteen sixteenth-note slots across two bars, scale degrees or null for a rest. The
+    rests are what make it a phrase rather than a run of notes. */
+ hook:[4,null,null,2,3,null,1,null,2,null,null,0,1,null,null,null],
+ duck:.36,
+ bars:32
+};
+
+let v30Step=0;
+let v30NextAt=0;
+let v30Bus=null;
+let v30SubBus=null;
+
+function v30Section(bar){
+ const pos=bar%V30.bars;
+ if(pos<8)return 'a';        /* statement */
+ if(pos<16)return 'b';       /* answer, the hook arrives on top */
+ if(pos<20)return 'break';   /* kit drops out, filter opens — the reset that stops fatigue */
+ return 'drop';              /* everything, octave up */
+}
+
+function v30Ensure(){
+ if(v30Bus||!audio.ctx)return;
+ v30Bus=audio.ctx.createGain();
+ v30Bus.gain.value=1;
+ v30Bus.connect(audio.music);
+ v30SubBus=audio.ctx.createGain();
+ v30SubBus.gain.value=.92;
+ v30SubBus.connect(audio.music);
+}
+
+/* ---- Voices ------------------------------------------------------------------------------- */
+
+function v30Voice(freq,when,dur,gain,cutoff,pan,detune,type){
+ const ctx=audio.ctx;
+ if(!ctx)return;
+ const t=ctx.currentTime+when;
+ const mix=ctx.createGain();
+ const filter=ctx.createBiquadFilter();
+ filter.type='lowpass';
+ filter.frequency.setValueAtTime(Math.max(140,cutoff),t);
+ filter.frequency.exponentialRampToValueAtTime(Math.max(120,cutoff*.5),t+dur);
+ filter.Q.value=5;
+ mix.gain.setValueAtTime(.0001,t);
+ mix.gain.exponentialRampToValueAtTime(Math.max(.0002,gain),t+.014);
+ mix.gain.exponentialRampToValueAtTime(.0001,t+dur);
+ for(const cents of [-detune,detune]){
+  const osc=ctx.createOscillator();
+  osc.type=type;
+  osc.frequency.setValueAtTime(freq,t);
+  osc.detune.setValueAtTime(cents,t);
+  osc.connect(filter);
+  osc.start(t);
+  osc.stop(t+dur+.06);
+ }
+ filter.connect(mix);
+ if(ctx.createStereoPanner){
+  const panner=ctx.createStereoPanner();
+  panner.pan.value=Math.max(-1,Math.min(1,pan));
+  mix.connect(panner);panner.connect(v30Bus);
+ }else mix.connect(v30Bus);
+}
+
+function v30Sub(freq,when,dur,gain){
+ const ctx=audio.ctx;
+ if(!ctx||!v30SubBus)return;
+ const t=ctx.currentTime+when;
+ const osc=ctx.createOscillator();
+ const env=ctx.createGain();
+ osc.type='sine';
+ osc.frequency.setValueAtTime(freq,t);
+ env.gain.setValueAtTime(.0001,t);
+ env.gain.exponentialRampToValueAtTime(gain,t+.02);
+ env.gain.exponentialRampToValueAtTime(.0001,t+dur);
+ osc.connect(env);env.connect(v30SubBus);
+ osc.start(t);osc.stop(t+dur+.05);
+}
+
+function v30Kick(when,gain){
+ const ctx=audio.ctx;
+ if(!ctx)return;
+ const t=ctx.currentTime+when;
+ const osc=ctx.createOscillator();
+ const env=ctx.createGain();
+ osc.type='sine';
+ osc.frequency.setValueAtTime(158,t);
+ osc.frequency.exponentialRampToValueAtTime(44,t+.085);
+ env.gain.setValueAtTime(.0001,t);
+ env.gain.exponentialRampToValueAtTime(gain,t+.004);
+ env.gain.exponentialRampToValueAtTime(.0001,t+.27);
+ osc.connect(env);env.connect(audio.music);
+ osc.start(t);osc.stop(t+.32);
+ if(v30Bus){
+  const level=v30Bus.gain;
+  const at=ctx.currentTime+when;
+  level.cancelScheduledValues(at);
+  level.setValueAtTime(1-V30.duck,at);
+  level.linearRampToValueAtTime(1,at+.2);
+ }
+}
+
+function v30Noise(when,dur,gain,cut,q,pan,curve){
+ const ctx=audio.ctx;
+ if(!ctx)return;
+ const t=ctx.currentTime+when;
+ const length=Math.max(1,Math.floor(ctx.sampleRate*dur));
+ const buffer=ctx.createBuffer(1,length,ctx.sampleRate);
+ const data=buffer.getChannelData(0);
+ for(let i=0;i<length;i++)data[i]=(Math.random()*2-1)*Math.pow(1-i/length,curve||2.1);
+ const source=ctx.createBufferSource();
+ const filter=ctx.createBiquadFilter();
+ const env=ctx.createGain();
+ filter.type='bandpass';
+ filter.frequency.value=cut;
+ filter.Q.value=q;
+ source.buffer=buffer;
+ env.gain.setValueAtTime(gain,t);
+ env.gain.exponentialRampToValueAtTime(.0001,t+dur);
+ source.connect(filter);filter.connect(env);
+ if(ctx.createStereoPanner){
+  const panner=ctx.createStereoPanner();
+  panner.pan.value=pan;
+  env.connect(panner);panner.connect(audio.music);
+ }else env.connect(audio.music);
+ source.start(t);
+}
+
+/* A riser across the last bar of the breakdown, which is the single clearest signal in this kind
+   of music that something is about to arrive. */
+function v30Riser(when,dur){
+ const ctx=audio.ctx;
+ if(!ctx)return;
+ const t=ctx.currentTime+when;
+ const length=Math.max(1,Math.floor(ctx.sampleRate*dur));
+ const buffer=ctx.createBuffer(1,length,ctx.sampleRate);
+ const data=buffer.getChannelData(0);
+ for(let i=0;i<length;i++)data[i]=(Math.random()*2-1)*(i/length);
+ const source=ctx.createBufferSource();
+ const filter=ctx.createBiquadFilter();
+ const env=ctx.createGain();
+ filter.type='bandpass';
+ filter.Q.value=1.6;
+ filter.frequency.setValueAtTime(500,t);
+ filter.frequency.exponentialRampToValueAtTime(7000,t+dur);
+ source.buffer=buffer;
+ env.gain.setValueAtTime(.0001,t);
+ env.gain.exponentialRampToValueAtTime(.12,t+dur*.9);
+ env.gain.exponentialRampToValueAtTime(.0001,t+dur);
+ source.connect(filter);filter.connect(env);env.connect(audio.music);
+ source.start(t);
+}
+
+/* ---- Arrangement -------------------------------------------------------------------------- */
+
+audio.update=function(g){
+ if(!this.ctx)return;
+ v30Ensure();
+ const musicLevel=typeof v12MusicCurve==='function'?v12MusicCurve(save.music):save.music/100;
+ const sfxLevel=typeof v12MusicCurve==='function'?v12MusicCurve(save.sfx):save.sfx/100;
+ this.music.gain.setTargetAtTime(musicLevel*.5,this.ctx.currentTime,.15);
+ this.sfxGain.gain.setTargetAtTime(Math.min(1,sfxLevel*.96),this.ctx.currentTime,.06);
+
+ const combat=!!g.running;
+ const intensity=combat?Math.min(1,
+  (g.wave-1)/12+(g.combo>10?.12:0)+(g.combo>24?.14:0)
+  +(g.boss?.3:0)+(g.overdriveTime>0?.26:0)+(g.lives<=1?.16:0)):0;
+
+ const bpm=combat?V30.bpm+Math.round(intensity*16):V30.bpm;
+ const sixteenth=60/bpm/4;
+ if(this.ctx.currentTime<v30NextAt){return;}
+ const lead=Math.max(0,v30NextAt-this.ctx.currentTime);
+
+ const step=v30Step%16;
+ const bar=Math.floor(v30Step/16);
+ const section=v30Section(bar);
+ const half=(bar%V30.bars)<16?V30.harmonyA:V30.harmonyB;
+ const degree=half[(bar%8)];
+ const world=combat?g.world%v9WorldRoots.length:0;
+ const root=v9WorldRoots[world]*Math.pow(2,degree/12);
+ const lastBarOfPhrase=(bar%8)===7;
+
+ /* The filter is the main difference between the two arrangements: LAUNCH sits warm and closed,
+    COMBAT opens up with pressure, and the breakdown opens further still before the drop. */
+ const target=!combat?1700
+  :section==='break'?3200+intensity*2000
+  :section==='drop'?3600+intensity*7000
+  :2400+intensity*5200;
+ this.musicFilter.frequency.setTargetAtTime(target,this.ctx.currentTime,.3);
+
+ const kit=combat&&section!=='break';
+
+ if(kit){
+  if(step%4===0)v30Kick(lead,.5+intensity*.12);
+  if(section==='drop'&&step===10)v30Kick(lead,.34);
+  if(step===4||step===12){
+   v30Noise(lead,.14,.26+intensity*.05,1900,1.1,-.2);
+   v30Noise(lead+.012,.11,.2,2600,1.6,.22);
+  }
+  if(step%2===1)v30Noise(lead,.034,step%4===3?.1:.052,8400,2.4,(step%8)/8-.4);
+  /* A fill on the last bar of every eight: the "something changed" marker the research calls for
+     every 16 or 32 bars, delivered a little more often because runs here are short. */
+  if(lastBarOfPhrase&&step>=12)v30Noise(lead,.07,.16,3000+step*260,1.4,(step-14)*.4,1.2);
+ }
+
+ /* Bass and sub. The breakdown keeps the sub only, so the floor never disappears entirely. */
+ if(combat&&[0,3,6,8,11,14].includes(step)){
+  v30Sub(root/4,lead,sixteenth*1.7,section==='break'?.24:.34);
+  if(section!=='break')v30Voice(root/2,lead,sixteenth*1.5,.075+intensity*.03,420+intensity*900,0,7,'sawtooth');
+ }
+ if(!combat&&step===0)v30Sub(root/4,lead,sixteenth*13,.2);
+
+ /* Pad: present in both arrangements, wider and softer on the launch screen. */
+ if(step===0||(step===8&&section==='drop')){
+  [0,7,12,15].forEach((semi,i)=>{
+   v30Voice(root*Math.pow(2,semi/12),lead+i*.014,sixteenth*(combat?15:15.5),
+    (combat?.028:.042)+intensity*.012,
+    (combat?900:700)+intensity*2600,(i-1.5)*.3,i===0?5:15,combat?'sawtooth':'triangle');
+  });
+ }
+
+ /* The hook. This is the tune, and it is deliberately the same notes in both arrangements — on
+    the launch screen it is a soft triangle an octave down with space around it, in combat it is a
+    saw doubled up in the drop. Same theme, different clothes. */
+ const hookSlot=(bar%2)*16+step;
+ const hookDegree=V30.hook[hookSlot%16];
+ const hookOn=hookDegree!==null&&hookSlot<16;
+ if(hookOn){
+  const semitone=V30.scale[hookDegree%V30.scale.length];
+  const freq=root*Math.pow(2,semitone/12);
+  if(!combat){
+   v30Voice(freq,lead,sixteenth*3.2,.05,1500,-.15,8,'triangle');
+  }else if(section==='b'||section==='drop'){
+   v30Voice(freq*2,lead,sixteenth*2.4,.03+intensity*.022,2800+intensity*4200,.2,14,'sawtooth');
+   if(section==='drop')v30Voice(freq*4,lead+.01,sixteenth*1.6,.014+intensity*.012,6000,-.3,20,'square');
+  }
+ }
+
+ /* Arp under the hook once the run is under pressure, so the texture thickens with the fight. */
+ if(combat&&section!=='break'&&intensity>.3&&step%2===0){
+  const pick=[0,2,1,3,2,1,3,0][(step/2)%8];
+  v30Voice(root*Math.pow(2,[0,7,12,15][pick]/12)*2,lead,sixteenth*.8,
+   .016+intensity*.022,2400+intensity*3800,((step/2)%4)/3-.5,16,'sawtooth');
+ }
+
+ if(combat&&section==='break'&&(bar%V30.bars)===19&&step===0)v30Riser(lead,sixteenth*16);
+
+ v30Step++;
+ v30NextAt=(v30NextAt||this.ctx.currentTime)+sixteenth;
+ if(v30NextAt<this.ctx.currentTime)v30NextAt=this.ctx.currentTime+sixteenth;
+};
+
+/* Entering a run restarts the form at bar zero, so a match always begins on the statement rather
+   than dropping the player into the middle of a breakdown. */
+const v30BeginBase=begin;
+begin=function(mode='solo',seed){
+ v30Step=0;
+ v30NextAt=0;
+ v30BeginBase(mode,seed);
+};
