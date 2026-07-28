@@ -1,0 +1,106 @@
+/* V25 DETONATION CORE — give the kill a hot centre.
+
+   Judged from the frames rather than from the code. V16 already spawns rings, shards, smoke,
+   camera punch and a freeze, and all of that is good — but ninety milliseconds after a kill the
+   screen shows debris drifting outward with nothing at the middle of it. The white flash V16
+   pushes lasts 0.13s, which is gone before the eye arrives, so what the player actually sees is
+   the aftermath and never the explosion. The shards read as confetti because there is no light
+   source for them to have come from.
+
+   This adds the missing thing and only that: a hot core at the kill point that blooms and fades
+   over a quarter of a second, plus an ember that lingers behind it.
+
+   Cost was the constraint, because the two commits before this one existed to take per-frame blur
+   cost out of the renderer and it would be absurd to hand it straight back. Everything here is
+   one pre-rendered sprite per colour, drawn with drawImage — no gradient built per frame, no
+   shadowBlur, no per-particle work. A detonation is two draws whatever its size. */
+
+const V25_CORE={life:.26, ember:.62, size:128};
+
+const v25Cores=[];
+const v25Embers=[];
+const v25Sprites=new Map();
+
+/* One sprite per colour, built the first time that colour explodes and reused forever after.
+   The white centre is what sells it as a light source rather than a coloured blob. */
+function v25Sprite(color){
+ let sprite=v25Sprites.get(color);
+ if(sprite)return sprite;
+ sprite=document.createElement('canvas');
+ sprite.width=sprite.height=V25_CORE.size;
+ const c=sprite.getContext('2d');
+ const half=V25_CORE.size/2;
+ const g=c.createRadialGradient(half,half,0,half,half,half);
+ g.addColorStop(0,'#ffffff');
+ g.addColorStop(.16,'#ffffff');
+ g.addColorStop(.34,color);
+ g.addColorStop(.7,color+'55');
+ g.addColorStop(1,color+'00');
+ c.fillStyle=g;
+ c.fillRect(0,0,V25_CORE.size,V25_CORE.size);
+ v25Sprites.set(color,sprite);
+ return sprite;
+}
+
+const v25DetonateBase=v16Detonate;
+v16Detonate=function(x,y,color,power,combo){
+ v25DetonateBase(x,y,color,power,combo);
+ const scale=(26+power*34)/(V25_CORE.size/2);
+ v25Cores.push({x,y,color,scale,life:V25_CORE.life,max:V25_CORE.life});
+ v25Embers.push({x,y,color,scale:scale*.72,life:V25_CORE.ember,max:V25_CORE.ember});
+ /* A big kill leaves more than a small one, but the list is capped: a chain reaction can call
+    this a dozen times in one frame and an uncapped list would still be drawing them a second
+    later, which is exactly the kind of slow accumulation that reads as the game getting heavy. */
+ if(v25Cores.length>14)v25Cores.splice(0,v25Cores.length-14);
+ if(v25Embers.length>18)v25Embers.splice(0,v25Embers.length-18);
+};
+
+const v25UpdateBase=update;
+update=function(dt){
+ v25UpdateBase(dt);
+ /* The base bails out early when the game is paused, so decaying unconditionally here would
+    drain an explosion while the player sits on the pause screen and drop them back into a dead
+    frame. The effect belongs to the world clock, not to real time. */
+ if(!game.running||game.paused)return;
+ for(let i=v25Cores.length-1;i>=0;i--){
+  v25Cores[i].life-=dt;
+  if(v25Cores[i].life<=0)v25Cores.splice(i,1);
+ }
+ for(let i=v25Embers.length-1;i>=0;i--){
+  v25Embers[i].life-=dt;
+  if(v25Embers[i].life<=0)v25Embers.splice(i,1);
+ }
+};
+
+const v25DrawBase=draw;
+draw=function(){
+ v25DrawBase();
+ if(!v25Cores.length&&!v25Embers.length)return;
+ ctx.save();
+ ctx.globalCompositeOperation='lighter';
+ /* Embers first so the core burns on top of its own afterglow. */
+ for(const e of v25Embers){
+  const t=1-e.life/e.max;
+  const size=V25_CORE.size*e.scale*(.85+t*.5);
+  ctx.globalAlpha=Math.pow(1-t,2.2)*.5;
+  ctx.drawImage(v25Sprite(e.color),e.x-size/2,e.y-size/2,size,size);
+ }
+ for(const core of v25Cores){
+  const t=1-core.life/core.max;
+  /* Fast out of the gate then easing wide: a linear expansion reads as a growing circle, this
+     reads as something detonating. */
+  const grow=1-Math.pow(1-t,3);
+  const size=V25_CORE.size*core.scale*(.45+grow*1.5);
+  ctx.globalAlpha=Math.pow(1-t,1.5);
+  ctx.drawImage(v25Sprite(core.color),core.x-size/2,core.y-size/2,size,size);
+ }
+ ctx.restore();
+};
+
+/* Cleared on a new run so a core from the last one cannot bloom over the first frame of the next. */
+const v25BeginBase=begin;
+begin=function(mode='solo',seed){
+ v25Cores.length=0;
+ v25Embers.length=0;
+ v25BeginBase(mode,seed);
+};
