@@ -1,0 +1,194 @@
+/* V34 — kills become notes.
+
+   The destruction sounds were built to the standard impact recipe: a noise transient, a sine body
+   sweeping downward, a noise tail. That recipe is correct, and it is correct for a *gun*. This
+   game is neon vector art over a 124 BPM synthwave arrangement in a fixed key, and a filtered
+   noise boom belongs to a different game entirely — it is the one thing in the mix that sounds
+   like it was borrowed rather than written.
+
+   There is also a concrete fault underneath the aesthetic one. V16 raised the kill pitch smoothly
+   with the combo (`1+heat*.5`, a continuous multiplier), while V30 plays a fixed-key arrangement
+   underneath. So the better the player did, the further out of tune every kill drifted against the
+   soundtrack — the reward for a long chain was a rising detune.
+
+   What this genre actually does — Geometry Wars, Rez, Lumines, Thumper — is make the kill part of
+   the music:
+
+   1. **The kill is a note, not a thud.** A short plucked synth, decaying inside 250ms, so twelve
+      kills in a second read as twelve notes rather than as mud.
+   2. **The note is in the track's key.** It is chosen from V30's own scale over the current
+      world's root, transposed by the harmony degree of the bar that is playing right now — the
+      music's own state, read directly, so a kill lands on the chord under it.
+   3. **The combo climbs the scale in steps.** Each kill in a chain takes the next degree up
+      instead of a continuous glide, so a chain sounds like a run and a broken chain audibly starts
+      again from the bottom. Capped at two octaves so it never turns shrill.
+   4. **Species keep their register and timbre**, because which creature died is information: the
+      wraith is a high glass bell, the sentinel a low metal stab, the raider still detonates — but
+      on a tuned fundamental instead of a swept one.
+
+   The V16 primitives (`snap`, `tail`, `ring`) stay; they are good, and a small amount of noise on
+   the transient is what keeps a synth pluck sounding percussive. What changes is that they now sit
+   under a pitched voice rather than being the whole sound. */
+
+/* Two detuned oscillators through a filter that closes as it decays: the standard synth pluck, and
+   the reason a note reads as "struck" rather than "played". */
+audio.pluck=function(freq,when=0,dur=.22,gain=.4,pan=0,shape='sawtooth',open=3200,close=800,detune=7){
+ if(!this.ctx)return;
+ const t=this.ctx.currentTime+when;
+ const filter=this.ctx.createBiquadFilter();
+ const g=this.ctx.createGain();
+ const p=this.ctx.createStereoPanner?this.ctx.createStereoPanner():null;
+ filter.type='lowpass';
+ filter.Q.value=6;
+ filter.frequency.setValueAtTime(Math.max(200,open),t);
+ filter.frequency.exponentialRampToValueAtTime(Math.max(160,close),t+dur*.7);
+ /* 4ms attack. Any slower and the note stops arriving on the frame the creature breaks, which is
+    the whole reason it registers as the same event. */
+ g.gain.setValueAtTime(.0001,t);
+ g.gain.exponentialRampToValueAtTime(Math.max(.0002,gain),t+.004);
+ g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+ for(const side of [-1,1]){
+  const osc=this.ctx.createOscillator();
+  osc.type=shape;
+  osc.frequency.setValueAtTime(freq,t);
+  osc.detune.value=side*detune;
+  osc.connect(filter);
+  osc.start(t);osc.stop(t+dur+.03);
+ }
+ filter.connect(g);
+ if(p){p.pan.value=Math.max(-1,Math.min(1,pan));g.connect(p);p.connect(this.sfxGain);}
+ else g.connect(this.sfxGain);
+};
+
+/* Weight under the note for the heavy species, on the same fundamental so it reinforces the pitch
+   instead of fighting it. */
+audio.subNote=function(freq,when=0,dur=.4,gain=.4){
+ if(!this.ctx)return;
+ const t=this.ctx.currentTime+when;
+ const osc=this.ctx.createOscillator();
+ const g=this.ctx.createGain();
+ osc.type='sine';
+ osc.frequency.setValueAtTime(freq,t);
+ g.gain.setValueAtTime(.0001,t);
+ g.gain.exponentialRampToValueAtTime(Math.max(.0002,gain),t+.008);
+ g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+ osc.connect(g);g.connect(this.sfxGain);
+ osc.start(t);osc.stop(t+dur+.04);
+};
+
+/* `oct` is octaves above the world root, which is what sets each species apart in the mix before
+   any timbre difference is heard. */
+const V34_KITS={
+ normal  :{oct:3,dur:.20,gain:.34,shape:'sawtooth',open:3400,close:900 ,detune:9 ,noise:2800,tail:.26},
+ shard   :{oct:4,dur:.26,gain:.26,shape:'triangle',open:6500,close:2600,detune:4 ,noise:5200,tail:.30,bell:true},
+ armored :{oct:2,dur:.30,gain:.40,shape:'square'  ,open:1900,close:520 ,detune:12,noise:1700,tail:.38,metal:true},
+ bomb    :{oct:1,dur:.44,gain:.44,shape:'sawtooth',open:1500,close:300 ,detune:16,noise:1300,tail:.70,boom:true},
+ splitter:{oct:3,dur:.22,gain:.32,shape:'sawtooth',open:3000,close:820 ,detune:9 ,noise:2600,tail:.30,twin:true},
+ rival   :{oct:2,dur:.36,gain:.44,shape:'sawtooth',open:2700,close:700 ,detune:24,noise:2000,tail:.46,metal:true}
+};
+
+/* Two octaves of climb. Beyond that a long chain stops being a reward and starts being shrill. */
+const V34_CLIMB=14;
+
+/* The bar the arrangement is actually playing, so a kill lands on the chord underneath it rather
+   than on whatever the key was when the run started. Falls back to the tonic when the music has
+   not started — with the soundtrack muted the kills are still in a key, just a fixed one. */
+function v34Root(){
+ const world=game.world%v9WorldRoots.length;
+ const step=typeof v30Step==='number'?v30Step:0;
+ const bar=Math.floor(step/16);
+ const half=(bar%V30.bars)<16?V30.harmonyA:V30.harmonyB;
+ const degree=half[bar%8]||0;
+ return v9WorldRoots[world]*Math.pow(2,degree/12);
+}
+
+function v34Note(kit,combo){
+ const scale=V30.scale;
+ const climb=Math.max(0,Math.min(V34_CLIMB,combo));
+ const semis=scale[climb%scale.length]+12*Math.floor(climb/scale.length);
+ return v34Root()*Math.pow(2,(kit.oct*12+semis)/12);
+}
+
+let v34LastAt=0;
+let v34InWindow=0;
+
+audio.impact=function(type,power=1,combo=0,perfect=false){
+ if(!this.ctx)return;
+ const now=this.ctx.currentTime;
+ /* A chain can fire a dozen kills inside one frame. Notes mask each other far more gracefully
+    than noise bursts do, so the budget is wider than V16's three — but it is still a budget. */
+ if(now-v34LastAt<.045)v34InWindow++;
+ else v34InWindow=0;
+ v34LastAt=now;
+ if(v34InWindow>5)return;
+
+ const kit=V34_KITS[type]||V34_KITS.normal;
+ const level=Math.min(1.1,kit.gain*power)*(1-v34InWindow*.13);
+ const pan=Math.max(-.7,Math.min(.7,(Math.random()-.5)*1.1));
+ const note=v34Note(kit,combo);
+
+ /* The transient stays noise and stays short — a pluck with no click on the front reads as soft,
+    however fast its attack is. It is a click now, not the body of the sound. */
+ this.snap(0,level*.34,kit.noise,pan);
+ this.pluck(note,0,kit.dur,level,pan,kit.shape,kit.open,kit.close,kit.detune);
+ /* A fifth above, quiet, on every kill: it is what makes a chain sound harmonised rather than
+    like one voice repeating. */
+ this.pluck(note*1.4983,.006,kit.dur*.7,level*.2,-pan*.6,kit.shape,kit.open*1.2,kit.close,kit.detune);
+ this.tail(0,kit.tail,level*.16,kit.noise*.5,pan);
+
+ if(kit.metal)this.ring(.006,note*2,level*.16,pan);
+ if(kit.bell){
+  /* Deliberately inharmonic partials over the note — 2x is the octave, the other two are not in
+     any scale, and that is the point: struck glass has no harmonic series and forcing these into
+     the key would turn the wraith into a chime. They sit at a tenth of the kill's level, which is
+     where an inharmonic voice can colour a note without arguing with the track. */
+  for(let i=0;i<3;i++)this.tone(note*(2+i*1.41),.2,'triangle',level*.1,this.sfxGain,.008+i*.016,.7,pan);
+ }
+ if(kit.twin){
+  /* The Twin Beast splits, so it dies on two notes: the second a minor third up, arriving late
+     enough to be heard as a separate event. */
+  this.pluck(note*Math.pow(2,3/12),.06,kit.dur*.85,level*.6,-pan,kit.shape,kit.open,kit.close,kit.detune);
+ }
+ if(kit.boom){
+  /* The raider is a bomb and still has to detonate — but on the note's own octave below, so the
+     weight lands in the key instead of underneath it. */
+  this.subNote(note/2,.012,.62,level*.5);
+  this.tail(.03,.95,level*.18,340,0);
+ }
+ /* A perfect hit is worth an octave of sparkle, which is the cleanest way to say "that one was
+    exact" without another sound competing with the kill. */
+ if(perfect){
+  this.pluck(note*2,.01,.16,level*.3,pan*.5,'triangle',7000,3000,3);
+  this.tone(note*4,.12,'sine',level*.12,this.sfxGain,.02,1.2,pan);
+ }
+ haptic(power>1.2?[14,10,18]:10);
+};
+
+/* The tap sounds are tuned to the same scale for the same reason: a miss and a hit that are both
+   in key make the whole thing sound composed rather than assembled. These stay much quieter than
+   the kill — they are the weapon connecting, not the thing dying. */
+const v34SfxBase=audio.sfx.bind(audio);
+audio.sfx=function(name){
+ if(!this.ctx)return;
+ switch(name){
+  case 'hit':
+   this.snap(0,.13,3600,(Math.random()-.5)*.6);
+   this.pluck(v34Root()*8,0,.07,.07,(Math.random()-.5)*.5,'triangle',5200,2600,4);
+   return;
+  case 'perfect':
+   this.snap(0,.16,4800,(Math.random()-.5)*.5);
+   this.pluck(v34Root()*8,0,.1,.1,0,'triangle',7000,3200,4);
+   this.pluck(v34Root()*12,.028,.13,.06,.24,'sine',8000,4000,2);
+   return;
+  case 'armor':
+   /* Armour holding is the tonic with the metallic ring over it and no climb and no fifth — the
+      one tap response that deliberately does not resolve, so it reads as "blocked" rather than as
+      a quieter kill. */
+   this.snap(0,.2,1600);
+   this.pluck(v34Root()*4,0,.14,.16,0,'square',1600,600,14);
+   this.ring(.004,v34Root()*8,.1);
+   return;
+  default:
+   return v34SfxBase(name);
+ }
+};

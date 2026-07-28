@@ -1,5 +1,48 @@
 # Blast Rush Arena V6 — Game and Social Design
 
+## V34 — kills become notes
+
+The destruction sounds were built to the standard impact recipe: noise transient, sine body
+sweeping downward, noise tail. That recipe is correct, and it is correct for a *gun*. This game is
+neon vector art over a 124 BPM synthwave arrangement in a fixed key, and a filtered noise boom
+belongs to a different game — it was the one thing in the mix that sounded borrowed rather than
+written.
+
+There was a concrete fault under the aesthetic one. V16 raised the kill pitch smoothly with the
+combo (`1+heat*.5`, a continuous multiplier) while V30 plays a fixed-key arrangement underneath, so
+the better the player did the further out of tune every kill drifted against the soundtrack. The
+reward for a long chain was a rising detune.
+
+What the genre actually does — Geometry Wars, Rez, Lumines, Thumper — is make the kill part of the
+music. So:
+
+- **The kill is a note.** A short plucked synth (two detuned oscillators through a filter that
+  closes as it decays), under 250 ms, so twelve kills in a second read as twelve notes rather than
+  as mud.
+- **The note is in the track's key**, chosen from V30's own scale over the current world's root and
+  transposed by the harmony degree of the bar playing *right now* — the music's own state, read
+  directly, so a kill lands on the chord under it.
+- **The combo climbs the scale in steps**, not as a glide. A chain sounds like a run; a broken
+  chain audibly starts again from the bottom.
+- **Species keep their register**, because which creature died is information.
+
+Verified arithmetically, since I cannot listen to it: a spy on every scheduled oscillator
+frequency, converted to semitones above the live root.
+
+| combo | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 10 | 12 | 14 | 20 | 40 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Hz | 440 | 494 | 523 | 587 | 659 | 699 | 784 | 880 | 988 | 1175 | 1397 | 1760 | 1760 | 1760 |
+| semitones | +36 | +38 | +39 | +41 | +43 | +44 | +46 | +48 | +50 | +53 | +56 | +60 | +60 | +60 |
+
+Every degree on the scale, two octaves of climb, then it holds rather than turning shrill. Species
+registers came out as designed: wraith +48, scout and twin +36, sentinel and warlord +24, raider
++12. Twelve kills in one frame schedule 36 nodes against roughly 96 unbudgeted.
+
+Two voices are deliberately off-scale and stay that way: the wraith's bell partials and the
+metallic ring on armour. Struck glass and struck metal have no harmonic series, and forcing those
+into the key would turn them into chimes. They sit at a tenth of the kill's level, which is where
+an inharmonic voice can colour a note without arguing with the track.
+
 ## V33 — measuring the slowness instead of reasoning about it
 
 Three separate reports of "still very slow" had been answered by reading the rendering code and
