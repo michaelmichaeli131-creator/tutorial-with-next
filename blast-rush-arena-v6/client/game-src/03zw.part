@@ -1,0 +1,166 @@
+/* V47 — stop hitting things.
+
+   The note back was that the sounds are like banging on tables or drums, and reading what V43
+   actually built, that is exactly what it is. A kill fired four layers and three of them were
+   **noise with a percussive envelope**: `snap` is a filtered noise burst with a one-millisecond
+   attack, `grit` is a band of noise over ninety milliseconds, `tail` is a noise decay. Noise plus a
+   fast attack plus a fast decay is the definition of a drum. I built a drum kit and called it a
+   kill.
+
+   Percussion and tension are close to opposites. A drum *hits and dies* — it resolves in eighty
+   milliseconds, which is why it feels satisfying and never feels tense. Tension comes from sound
+   that **holds and refuses to settle**: something that rings, or slides, or swells and does not
+   land where the ear expects.
+
+   So the kill is rebuilt with no noise in it at all:
+
+   1. **A resonant sweep** instead of a transient. A saw through a high-Q filter whose cutoff falls
+      fast — the classic discharge. It reads as energy leaving something rather than as an object
+      being struck, and it carries pitch, so it stays in the track's key.
+   2. **A ringing partial stack** instead of a tail. Two or three inharmonic partials with a long
+      decay, which is how struck metal actually behaves: it does not thud, it rings, and an
+      inharmonic ring is unsettling for free.
+   3. **A sub swell** instead of a thump. It rises into the kill and falls out of it, so there is
+      weight without a kick-drum attack.
+   4. **An eighteen-millisecond attack** rather than four. Four is a click. Eighteen is a swell, and
+      that single number is most of the difference between percussive and tense.
+
+   The pitch structure from V34 is untouched again — the key, the combo climbing the scale, the
+   per-species registers, and V43's tritone and downward bend all stay. What changes is that none
+   of it is delivered by hitting something. */
+
+const V47={
+ attack:.018,
+ /* High resonance is what makes a falling cutoff read as a *sweep* rather than as something simply
+    getting quieter. Below about 8 it stops being a voice and goes back to being a thump. */
+ q:13,
+ /* Inharmonic on purpose: struck metal has no harmonic series, and the ear reads that as strain. */
+ partials:[1,2.76,5.404],
+ ringDur:.46
+};
+
+/* The discharge. One filter, swept, doing all the work a noise burst used to do — and unlike noise
+   it has a pitch, so a chain of these is still a run up the scale. */
+audio.sweepVoice=function(freq,when=0,dur=.3,gain=.4,pan=0,shape='sawtooth',open=2600,close=260,detune=9){
+ if(!this.ctx)return;
+ const t=this.ctx.currentTime+when;
+ const filter=this.ctx.createBiquadFilter();
+ const g=this.ctx.createGain();
+ const p=this.ctx.createStereoPanner?this.ctx.createStereoPanner():null;
+ filter.type='lowpass';
+ filter.Q.value=V47.q;
+ filter.frequency.setValueAtTime(Math.max(200,open),t);
+ /* The whole character sits in this ramp. Fast enough to feel like a discharge, slow enough that
+    the resonance is heard travelling rather than just clicking shut. */
+ filter.frequency.exponentialRampToValueAtTime(Math.max(90,close),t+dur*.8);
+ g.gain.setValueAtTime(.0001,t);
+ g.gain.exponentialRampToValueAtTime(Math.max(.0002,gain),t+V47.attack);
+ g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+ for(const side of [-1,1]){
+  const osc=this.ctx.createOscillator();
+  osc.type=shape;
+  osc.frequency.setValueAtTime(freq,t);
+  osc.frequency.exponentialRampToValueAtTime(Math.max(20,freq*V43.bend),t+dur*.95);
+  osc.detune.value=side*detune;
+  osc.connect(filter);
+  osc.start(t);osc.stop(t+dur+.04);
+ }
+ filter.connect(g);
+ if(p){p.pan.value=Math.max(-1,Math.min(1,pan));g.connect(p);p.connect(this.sfxGain);}
+ else g.connect(this.sfxGain);
+};
+
+/* The ring that replaces the noise tail. Quiet and long rather than loud and short, which is the
+   trade that turns an impact into an atmosphere. */
+audio.strain=function(freq,when=0,gain=.1,pan=0,dur=V47.ringDur){
+ if(!this.ctx)return;
+ const t=this.ctx.currentTime+when;
+ V47.partials.forEach((ratio,i)=>{
+  const osc=this.ctx.createOscillator();
+  const g=this.ctx.createGain();
+  const p=this.ctx.createStereoPanner?this.ctx.createStereoPanner():null;
+  osc.type=i?'sine':'triangle';
+  osc.frequency.setValueAtTime(freq*ratio,t);
+  /* A slight downward drift on every partial. A ring that holds dead still sounds synthetic; one
+     that sags very slightly sounds like metal cooling. */
+  osc.frequency.exponentialRampToValueAtTime(Math.max(20,freq*ratio*.985),t+dur);
+  const level=gain/(1+i*1.35);
+  g.gain.setValueAtTime(.0001,t);
+  g.gain.exponentialRampToValueAtTime(Math.max(.0002,level),t+V47.attack*1.4);
+  g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+  osc.connect(g);
+  if(p){p.pan.value=Math.max(-1,Math.min(1,pan+(i-1)*.16));g.connect(p);p.connect(this.sfxGain);}
+  else g.connect(this.sfxGain);
+  osc.start(t);osc.stop(t+dur+.05);
+ });
+};
+
+/* Weight that arrives rather than lands: it rises into the kill instead of starting at full. */
+audio.swell=function(freq,when=0,dur=.5,gain=.4){
+ if(!this.ctx)return;
+ const t=this.ctx.currentTime+when;
+ const osc=this.ctx.createOscillator();
+ const g=this.ctx.createGain();
+ osc.type='sine';
+ osc.frequency.setValueAtTime(freq*1.12,t);
+ osc.frequency.exponentialRampToValueAtTime(Math.max(18,freq*.82),t+dur);
+ g.gain.setValueAtTime(.0001,t);
+ g.gain.exponentialRampToValueAtTime(Math.max(.0002,gain),t+dur*.28);
+ g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+ osc.connect(g);g.connect(this.sfxGain);
+ osc.start(t);osc.stop(t+dur+.05);
+};
+
+audio.impact=function(type,power=1,combo=0,perfect=false){
+ if(!this.ctx)return;
+ const now=this.ctx.currentTime;
+ /* Sustained voices mask each other far less forgivingly than short ones, so the budget tightens
+    from V34's five to three — beyond that a chain turns into a chord nobody asked for. */
+ if(now-v34LastAt<.045)v34InWindow++;
+ else v34InWindow=0;
+ v34LastAt=now;
+ if(v34InWindow>3)return;
+
+ const kit=V34_KITS[type]||V34_KITS.normal;
+ const level=Math.min(1.1,kit.gain*power)*(1-v34InWindow*.16);
+ const pan=Math.max(-.7,Math.min(.7,(Math.random()-.5)*1.1));
+ const note=v34Note(kit,combo);
+
+ /* No snap, no grit, no noise tail. Those three were the drum. */
+ this.sweepVoice(note,0,kit.dur*1.5,level*.9,pan,kit.shape,kit.open*.8,kit.close*.55,kit.detune+4);
+ /* The tritone still arrives late and quiet, and now it rings instead of clicking. */
+ this.strain(note*V43.tritone,.012,level*.2,-pan*.6);
+ this.strain(note,.004,level*.26,pan);
+
+ if(kit.metal)this.strain(note*1.53,.02,level*.14,pan*.4,V47.ringDur*1.3);
+ if(kit.bell)this.strain(note*2,.01,level*.16,pan,V47.ringDur*1.5);
+ if(kit.twin)this.sweepVoice(note*Math.pow(2,3/12),.07,kit.dur*1.2,level*.5,-pan,kit.shape,kit.open*.8,kit.close*.6,kit.detune);
+ if(kit.boom)this.swell(note/2,0,.75,level*.6);
+ /* A perfect hit rings a fifth higher and a little longer. It is the only cue in the set that is
+    allowed to sound like an achievement, and even that is a ring rather than a chime. */
+ if(perfect)this.strain(note*1.4983,.008,level*.2,pan*.5,V47.ringDur*1.2);
+ haptic(power>1.2?[14,10,18]:10);
+};
+
+/* The tap was `snap` plus `grit` — two noise bursts, which is a rimshot. It is a short filter ping
+   now: same pitch world as everything else, no noise anywhere in it. */
+const v47SfxBase=audio.sfx.bind(audio);
+audio.sfx=function(name){
+ if(!this.ctx)return;
+ switch(name){
+  case 'hit':
+   this.sweepVoice(v34Root()*4,0,.1,.09,(Math.random()-.5)*.5,'triangle',1800,420,5);
+   return;
+  case 'perfect':
+   this.sweepVoice(v34Root()*6,0,.13,.11,(Math.random()-.5)*.4,'triangle',2600,600,4);
+   this.strain(v34Root()*8,.01,.05,0,.26);
+   return;
+  case 'armor':
+   /* Blocked: a ring that starts and refuses to develop, which is what "nothing happened" sounds
+      like when it still has to be audible. */
+   this.strain(v34Root()*4,0,.12,0,.3);
+   return;
+  default:
+   return v47SfxBase(name);
+ }
+};

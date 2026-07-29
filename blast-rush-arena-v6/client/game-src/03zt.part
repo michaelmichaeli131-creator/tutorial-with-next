@@ -80,22 +80,45 @@ const V42_ART={
  }
 };
 
+/* A beam drawn in three passes rather than one stroke: a wide dim halo, the coloured body, and a
+   near-white core. A single stroke with a shadow reads as a drawn line; three concentric passes
+   read as something emitting light, which is what these are meant to be. */
 function v42Beam(c,x0,y0,x1,y1,width,col){
  c.save();
- c.shadowBlur=16;c.shadowColor=col;
- c.strokeStyle=col;c.lineCap='round';
+ c.lineCap='round';
+ c.globalCompositeOperation='lighter';
+ c.strokeStyle=col;
+ c.globalAlpha=.18;
+ c.lineWidth=width*3.4;
+ c.beginPath();c.moveTo(x0,y0);c.lineTo(x1,y1);c.stroke();
+ c.globalAlpha=.9;
+ c.shadowBlur=14;c.shadowColor=col;
  c.lineWidth=width;
+ c.beginPath();c.moveTo(x0,y0);c.lineTo(x1,y1);c.stroke();
+ c.shadowBlur=0;
+ c.globalAlpha=.95;
+ c.strokeStyle='#ffffff';
+ c.lineWidth=Math.max(1,width*.34);
  c.beginPath();c.moveTo(x0,y0);c.lineTo(x1,y1);c.stroke();
  c.restore();
 }
 
+/* An impact point: a wide bloom, then a hot centre. Additive so overlapping hits build up the way
+   light does rather than painting over each other. */
 function v42Dot(c,x,y,r,col,spark){
- const g=c.createRadialGradient(x,y,0,x,y,r*2.1);
- g.addColorStop(0,spark);
- g.addColorStop(.4,col);
+ c.save();
+ c.globalCompositeOperation='lighter';
+ const g=c.createRadialGradient(x,y,0,x,y,r*2.4);
+ g.addColorStop(0,'#ffffff');
+ g.addColorStop(.16,spark);
+ g.addColorStop(.42,col);
  g.addColorStop(1,'transparent');
  c.fillStyle=g;
- c.beginPath();c.arc(x,y,r*2.1,0,Math.PI*2);c.fill();
+ c.beginPath();c.arc(x,y,r*2.4,0,Math.PI*2);c.fill();
+ c.fillStyle='#ffffff';
+ c.globalAlpha=.85;
+ c.beginPath();c.arc(x,y,Math.max(1,r*.42),0,Math.PI*2);c.fill();
+ c.restore();
 }
 
 /* One sprite per weapon, built once. Six small canvases cost nothing and the armory rebuilds its
@@ -113,9 +136,30 @@ function v42Sprite(id){
  sprite.height=Math.round(V42_SIZE.h*dpr);
  const c=sprite.getContext('2d');
  c.setTransform(dpr,0,0,dpr,0,0);
- /* A muzzle to fire from, so the diagram has an origin and does not float. */
- c.fillStyle='rgba(255,255,255,.14)';
- c.beginPath();c.roundRect?c.roundRect(56,64,20,8,3):c.rect(56,64,20,8);c.fill();
+ /* A backdrop of measurement lines. These are technical readouts of what a weapon does, and a
+    faint grid is what tells the eye to read them that way rather than as loose doodles. */
+ c.save();
+ c.strokeStyle='rgba(120,190,240,.09)';
+ c.lineWidth=1;
+ for(let x=12;x<V42_SIZE.w;x+=24){c.beginPath();c.moveTo(x,6);c.lineTo(x,V42_SIZE.h-6);c.stroke();}
+ for(let y=14;y<V42_SIZE.h;y+=18){c.beginPath();c.moveTo(8,y);c.lineTo(V42_SIZE.w-8,y);c.stroke();}
+ c.restore();
+
+ /* The emitter. A plate with a lit throat rather than a grey rectangle, so the beam has somewhere
+    it plausibly came from. */
+ c.save();
+ c.fillStyle='rgba(150,190,225,.22)';
+ c.beginPath();c.roundRect?c.roundRect(52,62,28,11,4):c.rect(52,62,28,11);c.fill();
+ c.fillStyle='rgba(210,235,255,.3)';
+ c.fillRect(56,60,20,3);
+ const throat=c.createLinearGradient(66,72,66,58);
+ throat.addColorStop(0,'transparent');
+ throat.addColorStop(1,vfx.color);
+ c.globalAlpha=.8;
+ c.fillStyle=throat;
+ c.fillRect(60,58,12,14);
+ c.restore();
+
  paint(c,vfx.color,vfx.spark);
  v42Sprites.set(id,sprite);
  return sprite;

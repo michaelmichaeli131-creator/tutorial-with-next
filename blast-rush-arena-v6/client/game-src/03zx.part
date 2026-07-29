@@ -1,0 +1,182 @@
+/* V48 — the creatures had no light and no weight.
+
+   Six species share one body helper, one eye helper and one drawOrb. Reading them rather than
+   admiring them turns up three things that are the whole of why a crowd looks like clipart:
+
+   1. **There is no light direction.** Every species fills its shell with a gradient whose
+      endpoints are that species' own bounding box, so the scout is lit down its length and the
+      sentinel across its width. Six creatures side by side are lit six different ways, which the
+      eye reads as "drawn" rather than "photographed" even when it cannot say why.
+   2. **The ground shadow is a glow.** It is drawn with `lighter` in the creature's own colour —
+      it *brightens* the field underneath. Nothing casts, so nothing has mass, so everything
+      floats.
+   3. **The eyes have catchlights.** A round iris with a white highlight in the upper left is the
+      single most reliable way to make anything look friendly. It is on five of the six species.
+
+   So: one light vector for the whole roster, a real cast shadow, and a slit instead of a pupil.
+
+   All three land in the two shared helpers plus one drawOrb wrapper, which is deliberate. Editing
+   six species functions would have produced six new inconsistencies; editing the thing they all
+   call through produces one consistent result and keeps every silhouette exactly as it was — the
+   silhouettes are the part that already works. */
+
+const V48={
+ /* Light comes from above and behind the field, so the shadow falls toward the player and toward
+    the reactor. Down-right in screen space. */
+ lightX:-.62,
+ lightY:-.78,
+ /* Shadow-side depth. Past about .7 the creature's own colours stop being readable in a crowd. */
+ shade:.62,
+ /* The reactor sits below everything and is the brightest thing in the arena, so it throws a
+    bounce onto the underside of every creature. This is the detail that makes them belong to the
+    scene instead of sitting on top of it.
+
+    First pass ran this at .85 and it was plainly wrong in the lineup: a bright additive outline on
+    every body made the crowd *more* neon, not more solid, which is the opposite of what a bounce
+    does. A bounce is dim — it is light that has already hit something else. */
+ rim:.34
+};
+
+/* Bodies go dark and the colour moves into the light.
+
+   This is the same move that made the titan work in V41, applied to the roster: a saturated fill
+   with a white trim is a sticker, and no amount of shading rescues it, because the shading has
+   nothing to be darker *than*. Drop the body two stops and the shadow wedge, the reactor bounce
+   and the eye suddenly have somewhere to read against — and a crowd of dark shapes with lit eyes
+   is a threat in a way that a crowd of bright shapes never is.
+
+   The glow and the eye colours are untouched. Those are the light, and the light is also the
+   readout: a player still tells a raider from a wraith by the colour coming off it. Only the mass
+   changes. */
+Object.assign(v15Palette.normal,{body:'#3d2a8c',trim:'#8f7ce0'});
+Object.assign(v15Palette.armored,{body:'#33475e',trim:'#83a0bb'});
+Object.assign(v15Palette.bomb,{body:'#7d1b2e',trim:'#cf6a58'});
+Object.assign(v15Palette.shard,{body:'#12684a',trim:'#6fcea8'});
+Object.assign(v15Palette.splitter,{body:'#7a5c15',trim:'#d0ad5f'});
+Object.assign(v15Palette.rival,{body:'#4a2c9e',trim:'#b9a4ee'});
+
+/* The shared body. Base fill as before — the species' own colours and seams are not touched —
+   then a shadow wedge across the light vector, then the reactor bounce along the lower edge.
+
+   Both overlays reuse the body polygon, so they clip themselves: a stroke and a fill of the same
+   path can never bleed onto the field behind the creature, which is the reason this is done here
+   rather than as a rectangle over the sprite. */
+function v15Carapace(c,pal,points,x0,y0,x1,y1){
+ const span=Math.max(24,Math.hypot(x1-x0,y1-y0));
+ /* The gradient runs along the light vector at the body's own scale rather than corner to corner,
+    which is what puts every species under the same lamp. */
+ const g=v15Grad(c,`v48body|${pal.body}|${pal.trim}|${Math.round(span)}`,()=>{
+  const grad=c.createLinearGradient(V48.lightX*span*.5,V48.lightY*span*.5,-V48.lightX*span*.5,-V48.lightY*span*.5);
+  grad.addColorStop(0,pal.trim);
+  grad.addColorStop(.16,pal.body);
+  grad.addColorStop(.58,'#0a1024');
+  grad.addColorStop(1,'#04060f');
+  return grad;
+ });
+ c.fillStyle=g;
+ v14Art.poly(c,points);
+ c.fill();
+
+ /* The turn into shadow. A gradient stop can only darken what the base already painted; this is a
+    separate pass because the base has to stay a colour ramp — a body that goes straight to black
+    loses the species' colour, and the colour is the readout. */
+ c.save();
+ c.fillStyle=v15Grad(c,`v48shade|${Math.round(span)}`,()=>{
+  const grad=c.createLinearGradient(V48.lightX*span*.55,V48.lightY*span*.55,-V48.lightX*span*.62,-V48.lightY*span*.62);
+  grad.addColorStop(0,'rgba(0,0,0,0)');
+  grad.addColorStop(.5,`rgba(2,4,12,${V48.shade*.42})`);
+  grad.addColorStop(1,`rgba(2,4,12,${V48.shade})`);
+  return grad;
+ });
+ v14Art.poly(c,points);
+ c.fill();
+ c.restore();
+
+ /* The reactor bounce. Additive and only on the lower edge, so it lights the underside without
+    turning the whole outline into a neon tube. */
+ c.save();
+ c.globalCompositeOperation='lighter';
+ c.strokeStyle=v15Grad(c,`v48rim|${pal.glow}|${Math.round(span)}`,()=>{
+  const grad=c.createLinearGradient(0,span*.5,0,-span*.16);
+  grad.addColorStop(0,pal.glow);
+  grad.addColorStop(.45,pal.glow+'55');
+  grad.addColorStop(1,'transparent');
+  return grad;
+ });
+ c.globalAlpha=V48.rim;
+ c.lineWidth=2.2;
+ c.lineJoin='round';
+ v14Art.poly(c,points);
+ c.stroke();
+ c.restore();
+
+ /* The original seam. Kept at the old weight so V19's plating still reads. */
+ c.strokeStyle=pal.glow+'55';
+ c.lineWidth=1.6;
+ v14Art.poly(c,points);
+ c.stroke();
+}
+
+/* An eye that is looking at you rather than blinking at you.
+
+   The catchlight goes, because a specular highlight on a wet round surface is what makes a thing
+   read as alive-and-harmless. What replaces it is a vertical slit — the same cue the titan uses,
+   and the reason the titan works. Same glow, same colour, same position, same cost; the creature
+   simply stops being cute. */
+function v15Eye(c,x,y,r,pal,intensity=1){
+ c.save();
+ c.translate(x,y);
+ /* A dark socket under the iris. Without it a bright eye on a dark body reads as a lamp stuck to
+    the outside rather than as something set into a skull. */
+ c.fillStyle='rgba(2,3,10,.9)';
+ c.beginPath();c.ellipse(0,0,r*1.5,r*1.25,0,0,Math.PI*2);c.fill();
+
+ v15Halo(c,pal.eye,r*2.4*intensity);
+ c.fillStyle=pal.eye;
+ c.beginPath();c.ellipse(0,0,r,r*.78,0,0,Math.PI*2);c.fill();
+
+ /* The slit. Narrow enough that at thumbnail size it reads as a dark seam through a lit eye,
+    which is all it has to do. */
+ c.fillStyle='rgba(3,2,8,.92)';
+ c.beginPath();c.ellipse(0,0,Math.max(.7,r*.2),r*.82,0,0,Math.PI*2);c.fill();
+ /* A hot line down one side of the slit, so the eye still has a specular — just not a friendly
+    one. Additive, one fill, no blur. */
+ c.save();
+ c.globalCompositeOperation='lighter';
+ c.fillStyle='#ffffff';
+ c.globalAlpha=.5;
+ c.beginPath();c.ellipse(-r*.34,0,Math.max(.5,r*.14),r*.5,0,0,Math.PI*2);c.fill();
+ c.restore();
+ c.restore();
+}
+
+/* The cast shadow.
+
+   Drawn before the body, offset along the light vector rather than centred, and dark rather than
+   additive. Offsetting matters more than it sounds: the creature's own coloured halo is still
+   drawn centred underneath it, so a centred shadow simply cancels against it — which is what the
+   first attempt did, and it was invisible in the lineup for exactly that reason. It also has to
+   clear the body: a shadow tucked under the feet is hidden by the thing casting it.
+
+   So it sits low and wide, pushed down and to the right, beside the glow rather than beneath it.
+   Emission under the body, shadow next to it, which is how a lit object over a surface actually
+   reads. */
+const v48DrawOrb=drawOrb;
+drawOrb=function(o,w){
+ if(o.alive!==false&&quality.glow>0){
+  const scale=o.r/30*1.15;
+  ctx.save();
+  ctx.fillStyle=v15Grad(ctx,'v48cast',()=>{
+   const grad=ctx.createRadialGradient(0,0,0,0,0,1);
+   grad.addColorStop(0,'rgba(1,2,7,.62)');
+   grad.addColorStop(.55,'rgba(1,2,7,.34)');
+   grad.addColorStop(1,'transparent');
+   return grad;
+  });
+  ctx.translate(o.x-V48.lightX*16*scale,o.y+40*scale);
+  ctx.scale(34*scale,11*scale);
+  ctx.beginPath();ctx.arc(0,0,1,0,Math.PI*2);ctx.fill();
+  ctx.restore();
+ }
+ v48DrawOrb(o,w);
+};

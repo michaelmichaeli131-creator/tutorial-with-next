@@ -1021,3 +1021,86 @@ resolves into the real result when it stops.
 
 Nothing here changes the spawn schedule. Both arenas still replay one server-authoritative list of
 enemies, and the score gap still reflects play.
+
+
+## V47 — the sounds were a drum kit
+
+The note back was that the sounds are like banging on tables or on drums. Reading V43 rather than
+defending it, that is exactly what they were: a kill fired four layers and three of them were noise
+with a percussive envelope. `snap` was a filtered noise burst with a one-millisecond attack, `grit`
+was a band of noise over ninety milliseconds, `tail` was a noise decay. Noise plus a fast attack
+plus a fast decay is the definition of a drum. The kill was a drum kit.
+
+Percussion and tension are close to opposites. A drum hits and dies — it resolves inside eighty
+milliseconds, which is why it is satisfying and why it is never tense. Tension is sound that holds
+and refuses to settle: something that rings, or slides, or swells and does not land where the ear
+expects.
+
+So the kill has no noise in it at all. A resonant sweep replaces the transient — a saw through a
+high-Q lowpass whose cutoff falls fast, which reads as energy leaving something rather than as an
+object being struck, and which carries pitch so it stays in the track's key. A ringing stack of
+inharmonic partials replaces the tail, because struck metal does not thud, it rings, and an
+inharmonic ring is unsettling for free. A sub swell replaces the thump, rising into the kill instead
+of starting at full. And the attack goes from four milliseconds to eighteen: four is a click,
+eighteen is a swell, and that one number is most of the difference between percussive and tense.
+
+The pitch structure is untouched — the key, the combo climbing the scale, the per-species registers,
+V43's tritone and downward bend. What changed is that none of it is delivered by hitting something.
+Measured across the four species: zero noise sources, fundamentals unchanged (440/880/220/110Hz),
+the combo still climbs +36 to +60 semitones in key, and twelve kills in one frame now schedule 32
+nodes against V34's 42, because the simultaneous-voice budget tightened from five to three.
+Sustained voices mask each other far less forgivingly than short ones; past three, a chain becomes a
+chord nobody asked for.
+
+Whether it now *feels* tense is not something a harness can answer. The measurements say the drums
+are gone and the pitch world survived; the ear has to say the rest.
+
+
+## V48 — the creatures had no light and no weight
+
+Six species share one body helper, one eye helper and one `drawOrb`. Reading those three rather than
+the species turns up why a crowd looked like clipart, and none of the three reasons is about the
+drawings themselves — the silhouettes were already good, and they are untouched.
+
+**There was no light direction.** Every species filled its shell with a gradient whose endpoints
+were that species' own bounding box, so the scout was lit down its length and the sentinel across
+its width. Six creatures side by side were lit six different ways. The eye reads that as "drawn"
+rather than "lit" without being able to say why. There is now one light vector for the whole roster,
+a shadow wedge across it, and a dim additive bounce along the lower edge — the reactor is the
+brightest thing in the arena and it sits below everything, so it throws light onto every underside.
+Both overlays reuse the body polygon, so they clip themselves and can never bleed onto the field.
+
+**The ground shadow was a glow.** It was drawn with `lighter` in the creature's own colour, so it
+*brightened* the field underneath. Nothing cast, so nothing had mass. There is now a real cast
+shadow: dark, low, wide, and pushed down-and-right rather than centred. Centred was the first
+attempt and it was invisible, because the creature's own coloured halo is drawn centred underneath
+it and simply cancelled it. Beside the glow rather than beneath it, the pair reads the way a lit
+object over a surface actually reads.
+
+**The eyes had catchlights.** A round iris with a white highlight in the upper left is the most
+reliable way to make anything look friendly, and it was on five of the six species. It is a slit
+now — the same cue the titan uses, and the reason the titan works. Same glow, same colour, same
+position, same cost; the creature simply stops being cute.
+
+Bodies also went dark, and the colour moved into the light. A saturated fill with a white trim is a
+sticker, and shading cannot rescue it because the shading has nothing to be darker than. The glow
+and eye colours are untouched — those are the light, and the light is also the readout, since a
+player still tells a raider from a wraith by the colour coming off it. Only the mass changed.
+
+The first pass ran the reactor bounce at .85 alpha and it was plainly wrong in the lineup: a bright
+additive outline on every body made the crowd *more* neon, which is the opposite of what a bounce
+does. A bounce is dim — it is light that has already hit something else. It runs at .34.
+
+### The art pass made the game twice as fast
+
+Unintended and worth recording. Median frame interval went from 33.3ms to 16.7ms — 30fps to 60fps —
+repeatably, three runs on each side with no other change. It is not the art. The old `v15Carapace`
+called `createLinearGradient` with four colour stops on every invocation, which is once per creature
+per frame, twice for the splitter: twenty to thirty gradient objects allocated and resolved per
+frame on a full field. Routing it through `v15Grad`, the per-context cache that the pilot renderer
+and the debris sprites already used, removes all of them. The two extra passes the lighting adds
+cost far less than the allocations it removed, so the better-looking version is also the faster one
+— the same trade the debris sprites made in V16.
+
+The knock-on is visible in the regression: the scripted combat run now clears stage one 12/12 with
+three lives where the same script previously failed at 5/12.
