@@ -1,5 +1,45 @@
 # Blast Rush Arena V6 — Game and Social Design
 
+## V38 — the two screens the design pass never reached
+
+Captured rather than assumed, and they came back very different from each other.
+
+**Settings was the weak one.** On an 844px phone the content stopped a third of the way down and
+left the rest of the panel empty. Empty space at the bottom of a panel is the most reliable
+"unfinished" signal a UI can send, and no amount of polish above it compensates. Worse, not one
+control said what it did — "COMFORT FX" is meaningless to anyone who has not read the source, and a
+toggle whose effect the player cannot predict is a toggle they will not touch.
+
+It now has three sections (audio, motion and comfort, device), a plain-language line under every
+control saying what actually changes, a **haptics toggle** that should have existed all along —
+`haptic()` was firing on every mobile device with no way to refuse it, which is an accessibility
+problem rather than a missing preference — and a **build stamp** at the foot of the panel. The
+stamp is there because it is the only honest answer, from inside the app, to "is the thing on my
+screen the thing that was deployed": the first question worth asking when a change appears to have
+had no effect.
+
+**Pause was fine as a composition** — centred, clear hierarchy, the blurred arena behind it doing
+real work. What it did not do was answer the question people pause to ask. In a score-attack game
+you pause to find out how you are doing, and the panel said nothing about the run it had just
+interrupted. It now carries score, wave progress and reactor state between the title and the
+buttons, with the reactor reddening at one life.
+
+Three faults of my own on the way, all caught by capture and measurement:
+
+- The status row landed *below* the buttons, because the insertion point I picked in the markup was
+  the wrong closing tag.
+- The hint lines were first put *inside* each row by moving the row's children into a wrapper. That
+  quietly destroyed the audio rows: `.audio-row` is a three-column grid sized for label, slider and
+  percentage, and once those were nested a level deeper the wrapper became the first grid item —
+  squeezed into the 60px label column, collapsing the slider to **six pixels wide** with the
+  percentage printed over the text. Measuring the computed style rather than guessing at
+  specificity is what found it, and the fix was not a stronger selector but to stop restructuring a
+  layout that was already correct. The hints sit after each row now.
+- The haptics toggle, the build stamp and the pause row were created at runtime, and the build
+  validator rejected the commit: every id reached through `$()` must exist in the markup so the
+  check that those elements still exist keeps working. The check was right. They are static
+  structure and now live in `index.html`.
+
 ## V37 — the results screen was doing no retaining
 
 Captured after a real run rather than reasoned about, and the capture settled it. The run scored
