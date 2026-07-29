@@ -55,31 +55,34 @@ Object.assign(v15Palette.shard,{body:'#12684a',trim:'#6fcea8'});
 Object.assign(v15Palette.splitter,{body:'#7a5c15',trim:'#d0ad5f'});
 Object.assign(v15Palette.rival,{body:'#4a2c9e',trim:'#b9a4ee'});
 
-/* The shared body. Base fill as before — the species' own colours and seams are not touched —
-   then a shadow wedge across the light vector, then the reactor bounce along the lower edge.
+/* The shared body, as an added pass over whatever the chain already draws.
+
+   The first version of this was a `function v15Carapace(...)` declaration, on the assumption that a
+   later declaration replaces an earlier one. It does not replace an *assignment*: 03v assigns
+   `v15Carapace=function(...)` when its module body runs, and a runtime assignment always beats a
+   hoisted declaration no matter which file is later in the bundle. So V48's lighting was dead code
+   from the moment it was written — the crowd looked better because of the darker palette, the slit
+   eyes and the cast shadow, all three of which happen to be assignments, and not because of any of
+   this. Counting gradient allocations is what turned it up: none of the keys this function creates
+   ever appeared in the cache.
+
+   Rewritten to the convention every other layer here uses — capture the current value, call it,
+   add to it. That is also the better design: calling the base keeps V19's plating and specular and
+   V26's world bounce, which a wholesale replacement was quietly throwing away. The key light stays
+   V19's; what this adds is the shadow wedge along one consistent vector and the reactor bounce.
 
    Both overlays reuse the body polygon, so they clip themselves: a stroke and a fill of the same
    path can never bleed onto the field behind the creature, which is the reason this is done here
    rather than as a rectangle over the sprite. */
-function v15Carapace(c,pal,points,x0,y0,x1,y1){
+const v48CarapaceBase=v15Carapace;
+v15Carapace=function(c,pal,points,x0,y0,x1,y1){
+ v48CarapaceBase(c,pal,points,x0,y0,x1,y1);
  const span=Math.max(24,Math.hypot(x1-x0,y1-y0));
- /* The gradient runs along the light vector at the body's own scale rather than corner to corner,
-    which is what puts every species under the same lamp. */
- const g=v15Grad(c,`v48body|${pal.body}|${pal.trim}|${Math.round(span)}`,()=>{
-  const grad=c.createLinearGradient(V48.lightX*span*.5,V48.lightY*span*.5,-V48.lightX*span*.5,-V48.lightY*span*.5);
-  grad.addColorStop(0,pal.trim);
-  grad.addColorStop(.16,pal.body);
-  grad.addColorStop(.58,'#0a1024');
-  grad.addColorStop(1,'#04060f');
-  return grad;
- });
- c.fillStyle=g;
- v14Art.poly(c,points);
- c.fill();
 
- /* The turn into shadow. A gradient stop can only darken what the base already painted; this is a
-    separate pass because the base has to stay a colour ramp — a body that goes straight to black
-    loses the species' colour, and the colour is the readout. */
+ /* The turn into shadow. A gradient stop in the base can only darken what the base itself paints;
+    this is a separate pass so that one light direction applies across all six species, whose base
+    gradients each run corner to corner of their own bounding box and therefore each point a
+    different way. */
  c.save();
  c.fillStyle=v15Grad(c,`v48shade|${Math.round(span)}`,()=>{
   const grad=c.createLinearGradient(V48.lightX*span*.55,V48.lightY*span*.55,-V48.lightX*span*.62,-V48.lightY*span*.62);
@@ -109,21 +112,20 @@ function v15Carapace(c,pal,points,x0,y0,x1,y1){
  v14Art.poly(c,points);
  c.stroke();
  c.restore();
-
- /* The original seam. Kept at the old weight so V19's plating still reads. */
- c.strokeStyle=pal.glow+'55';
- c.lineWidth=1.6;
- v14Art.poly(c,points);
- c.stroke();
-}
+};
 
 /* An eye that is looking at you rather than blinking at you.
 
    The catchlight goes, because a specular highlight on a wet round surface is what makes a thing
    read as alive-and-harmless. What replaces it is a vertical slit — the same cue the titan uses,
    and the reason the titan works. Same glow, same colour, same position, same cost; the creature
-   simply stops being cute. */
-function v15Eye(c,x,y,r,pal,intensity=1){
+   simply stops being cute.
+
+   An assignment rather than a declaration. Nothing else in the chain assigns `v15Eye`, so the
+   declaration this replaced did win the hoist and did run — but relying on that is relying on
+   nobody ever adding an eye layer above it, and the carapace above is exactly what happens when
+   that assumption turns out to be wrong. */
+v15Eye=function(c,x,y,r,pal,intensity=1){
  c.save();
  c.translate(x,y);
  /* A dark socket under the iris. Without it a bright eye on a dark body reads as a lamp stuck to
@@ -148,7 +150,7 @@ function v15Eye(c,x,y,r,pal,intensity=1){
  c.beginPath();c.ellipse(-r*.34,0,Math.max(.5,r*.14),r*.5,0,0,Math.PI*2);c.fill();
  c.restore();
  c.restore();
-}
+};
 
 /* The cast shadow.
 

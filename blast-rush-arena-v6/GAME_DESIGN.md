@@ -1091,16 +1091,138 @@ The first pass ran the reactor bounce at .85 alpha and it was plainly wrong in t
 additive outline on every body made the crowd *more* neon, which is the opposite of what a bounce
 does. A bounce is dim — it is light that has already hit something else. It runs at .34.
 
-### The art pass made the game twice as fast
+### Correction: the art pass did not make the game twice as fast
 
-Unintended and worth recording. Median frame interval went from 33.3ms to 16.7ms — 30fps to 60fps —
-repeatably, three runs on each side with no other change. It is not the art. The old `v15Carapace`
-called `createLinearGradient` with four colour stops on every invocation, which is once per creature
-per frame, twice for the splitter: twenty to thirty gradient objects allocated and resolved per
-frame on a full field. Routing it through `v15Grad`, the per-context cache that the pilot renderer
-and the debris sprites already used, removes all of them. The two extra passes the lighting adds
-cost far less than the allocations it removed, so the better-looking version is also the faster one
-— the same trade the debris sprites made in V16.
+This section previously claimed V48 took the median frame interval from 33.3ms to 16.7ms — 30fps to
+60fps — on the strength of three runs on each side. That claim was wrong twice over and is retracted.
 
-The knock-on is visible in the regression: the scripted combat run now clears stage one 12/12 with
-three lives where the same script previously failed at 5/12.
+It was wrong about the measurement. Re-running the identical build later produced 33.3ms medians on
+both sides, including on code that had measured 16.7ms an hour earlier. This sandbox's wall-clock
+spread is larger than the effect being measured, which was already documented elsewhere in this file
+and which I should not have measured against anyway. Three consistent runs on each side is not
+evidence when the machine drifts between the two batches rather than within them.
+
+It was also wrong about the mechanism, and that error is the more useful one. The claim was that the
+old `v15Carapace` allocated a gradient per creature per frame and that routing it through `v15Grad`
+removed twenty to thirty allocations a frame. Counting the allocations directly — which is
+deterministic, unlike frame time — says the cache was already at a 100% hit rate over 4,536 calls
+across 14 distinct keys, and that none of the keys V48 introduced were ever present. V48's lighting
+was **dead code**.
+
+The reason is worth writing down, because it is a trap this codebase's whole layering convention
+sets. Every layer here overrides by assignment: `name = function(...)`, capturing the previous value
+first. V48 instead re-declared `function v15Carapace(...)` in a later part, on the assumption that a
+later declaration wins. Declarations are hoisted and assigned before any module body runs, so an
+*assignment* anywhere — 03v does exactly this — overwrites the declaration no matter which file is
+later in the bundle. The palette change, the slit eyes and the cast shadow all happened to be
+assignments, so those three ran and are what the improved screenshots actually showed. The lighting
+never executed once.
+
+Rewritten as an assignment over a captured base, which is also the better design: calling the base
+keeps V19's plating and V26's world bounce, which a wholesale replacement had been silently
+discarding. The overlays now run and cache — 8,047 calls, 45 keys, 1 miss.
+
+### What the gradient count did turn up
+
+Per rendered frame at twenty creatures, attributed by caller:
+
+    115/frame  v19PanelSeams
+     99/frame  draw
+     58/frame  v15Carapace   (V19's base gradient, still uncached, ~3 per creature)
+     42/frame  drawOrb
+      8/frame  v15Halo
+
+Three hundred-odd gradient objects built and thrown away every frame, none of it from V48. The two
+large ones are pre-existing and neither is cached. This is a real, measured, un-actioned performance
+finding and it is the obvious next thing to work on; it is recorded here rather than fixed in the
+same pass that got the previous perf claim wrong.
+
+A quantisation pass on V33's per-creature hue and luminance was written to shrink the key space and
+then deleted: measurement said the gradient cache was already converging, `v16GibSprite` allocates
+nothing on the live path at all, and the distinct-tint count is small and bounded either way (15
+without it, 12 with). It cost visual variety for no measurable gain.
+
+
+## V49 — what actually makes sound frightening, and where it belongs
+
+The note was that the sounds should be mysterious, frightening and tense, and to go and find out
+which sounds do that rather than guessing. Four techniques came back that the game did not have, and
+one finding that contradicts a decision made in V47.
+
+**Close-interval dissonance.** Two tones about a semitone apart do not beat pleasantly, they clash:
+both frequencies fall inside one critical band, and the result is rough and refuses to resolve. This
+is the most reliably unsettling interval available, and V35 deliberately rejected it — "a minor
+second in the bass is pure fright" — which was the right call when the brief was tension with only a
+trace of fright. The brief is now explicitly frightening, so it is back: a semitone pair two octaves
+above the root, each voice detuned a handful of cents off its partner so the pair also drifts. The
+semitone supplies the roughness and the detune supplies the unsteadiness; neither does both.
+
+**Low, unsteady sound.** The infrasound literature is real but routinely overstated, and as usually
+quoted it is unusable here: the documented cortisol response sits around 18–19Hz and no phone
+speaker reproduces 18Hz at any volume. Writing that tone would be writing something nobody can hear.
+What survives a phone speaker is a low bed that will not sit still, so the sub is amplitude modulated
+at 4.6Hz — audible on any speaker, and read as something wrong with the floor rather than as a note.
+This is a substitute for the technique, not the technique, and it is labelled that way in the code.
+
+**The Shepard–Risset glissando.** Octave-spaced voices, each gliding upward, each fading in at the
+bottom of its sweep and out at the top, so the pitch appears to rise forever while the mix never gets
+louder. Recommended at roughly 0.1–0.2Hz; this runs one octave per 7 seconds across four voices. It
+is close to a perfect fit for a wave arena, because mounting pressure is precisely what this game has
+and precisely what it was not expressing.
+
+**Somewhere for the dread to be continuous.** All of the above is held rather than triggered. A
+one-shot cue is a scare, and a scare is not tension — tension is the thing that was already there
+when you started paying attention. V35 had built the hush, which is the hard part; what it lacked was
+anything sustained for the hush to be a hole in. The bed ducks to near-silence during a hush and
+comes back after it, so the held breath is still held.
+
+The bed routes through the music bus rather than the sfx bus, so it obeys the music slider and V35's
+dread filter closes over it for free: when things go badly the bed loses its top end along with the
+arrangement. The frightening element is rationed — the clash sits near silence while a run is going
+well and only really arrives when the player is in trouble, which is what makes it mean something.
+
+### The correction to V47
+
+V47 removed the noise from the kill, which was right; the drum complaint was accurate. But it also
+gave the kill an eighteen-millisecond attack and no transient whatsoever, and that overshot. The
+game-feel literature is consistent that player-action feedback has to *confirm* — a hit sound carries
+information, not just mood, and a hit with no edge on the front of it reads as mushy rather than as
+tense.
+
+Tension and confirmation are not in conflict because they are not the same layer, and every adaptive
+audio guide says so explicitly: **the bed carries the dread, the hit carries the information.** So
+the kill gets an edge back — three milliseconds of a pitched ping, a tone and not a noise burst, so
+the drum does not return — and the sweep's attack comes down from eighteen milliseconds to nine.
+Everything frightening moved into the sustained layer, where it can be continuous, which is the one
+thing a per-kill sound can never be.
+
+### Measured
+
+Verified against a live run rather than asserted: the clash pair is one semitone apart to five
+decimal places and detuned -7/+6 cents; the sub is 55Hz wobbling at 4.6Hz; every Risset voice climbs
+between wraps and is inaudible at the wrap itself (loudest voice within 0.28 octaves of a wrap:
+0.019); the spectral centroid holds still to a standard deviation of 0.015 octaves, which is the
+mechanism — that is why the rise costs no headroom and can be held indefinitely. The bed output ducks
+from .0850 to .0018 in a hush and returns. As dread rises the clash goes from .050 to .677, the bed's
+cutoff from 1300Hz to 556Hz, and the sub's wobble depth from .100 to .447. The whole bed is eight
+oscillators built once: zero node allocations per frame while playing, and zero after the run ends.
+Kills still schedule no noise sources on any of the six species, and the combo still climbs +36 to
++60 semitones in key.
+
+### Is this commercially sensible?
+
+Worth asking, since the game is also meant to be fun and addictive. Three things say yes and one says
+be careful.
+
+Horror is a large and fast-growing segment rather than a niche — around $9.8bn in 2025 with double
+digit growth forecast. The closest genre comparison is exact: *Devil Daggers* is an arena wave
+survival shooter whose sound design was singled out as the reason it induces dread, and one of its
+signature weapon sounds is a shotgun modulated by an LFO, which is the same family of technique used
+here. Dread and arcade replayability demonstrably coexist in this exact genre.
+
+The caution is that this must not come at the cost of feedback, which is the correction above, and
+that audio cannot be the only carrier: survey figures for how many mobile players keep sound on are
+wildly inconsistent — claims range from 9% to 91%, with a recent survey putting roughly 60% on and
+9% fully silent. Tension therefore has to be legible with the sound off too, which is what V35's
+vignette and desaturation and V48's dark bodies and lit eyes are for. The audio deepens it; it cannot
+be the whole of it.
