@@ -105,10 +105,28 @@ activateBlast=function(){
  const crowd=Math.pow(caught.length,V23_BLAST.crowd);
  const payout=Math.round(600+540*crowd*(charge/100));
  score(payout,'blast');
- /* A set-piece has to announce itself, or it is a number going up somewhere off to the side. */
+ /* A set-piece has to announce itself, or it is a number going up somewhere off to the side.
+
+    The payout was raised to where a twelve-catch is a quarter of a good run, and the feedback was
+    left exactly as it had been when the same press was worth five per cent. A moment the player is
+    now expected to *set up* has to land like one, so everything here scales with the catch: the
+    hit-stop, the flash, and a wave that crosses the whole arena rather than stopping at the blast's
+    own reach. Capped, because the point is a punch and not a seizure. */
  if(caught.length>=V23_BLAST.big){
+  const heft=Math.min(1,(caught.length-V23_BLAST.big)/8);
   floating(W/2,line-70,`${caught.length}x CHAIN +${format(payout)}`,'#7df3ff');
   toast(`REACTOR DISCHARGE • ${caught.length} CAUGHT`);
+  if(typeof v16Cam==='object'){
+   /* Hit-stop is the cheapest way to say "that mattered" — the brain reads the pause as weight. */
+   v16Cam.freeze=Math.max(v16Cam.freeze,.09+heft*.1);
+   v16Cam.zoom=Math.min(.13,v16Cam.zoom+.03+heft*.04);
+   v16Cam.chroma=Math.min(1,v16Cam.chroma+.5+heft*.5);
+  }
+  game.flash=Math.max(game.flash,Math.min(.5,.2+heft*.28));
+  /* One ring that leaves the screen. The discharge's own wave stops at its reach, which is correct
+     for reading the ability and useless for celebrating it. */
+  ring(W/2,line-10,'#9ff6ff',Math.round(H*(.55+heft*.4)));
+  haptic([26,18,60]);
  }
  /* Every kill charges Blast, including the ones Blast itself made — so a discharge that caught
     eleven hostiles handed back 99% and was ready again immediately. An ability that pays for

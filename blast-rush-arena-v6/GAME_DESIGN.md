@@ -1,5 +1,42 @@
 # Blast Rush Arena V6 — Game and Social Design
 
+## V44 — the set-piece had to look like one
+
+V40 raised a full-overcharge twelve-catch from about five per cent of a run to roughly a quarter of
+it, and left the feedback exactly as it had been when the same press was worth five per cent: one
+explosion, one toast. A moment the player is now expected to *set up* has to land like one.
+
+Everything scales with the catch above the six-hostile threshold, and everything is capped, because
+the point is a punch and not a seizure:
+
+| caught | freeze | zoom | flash | widest ring |
+| --- | --- | --- | --- | --- |
+| 1–5 | .089 | ≤.09 | .12 | 34 |
+| **6** | .09 | .12 | .20 | **464** |
+| 8 | .115 | .13 | .27 | 549 |
+| 10 | .14 | .13 | .34 | 633 |
+| 14 | .19 | .13 | .48 | 802 |
+
+The threshold is deliberately sharp. Below six it is an ordinary discharge; at six the ring stops
+being the ability's own reach marker — useful for reading the ability, useless for celebrating it —
+and becomes a wave that crosses the whole 844px arena. Hit-stop tops out at 0.19s, about eleven
+frames, which reads as weight rather than as a hang.
+
+### The verification that never completed
+
+Four attempts, across a clean environment and a loaded one: the bot A/B that would show whether
+*banking* now beats *pressing on sight* has never run to completion here. A 45-second run times out
+before printing. So the position on V40 is unchanged and worth stating plainly rather than letting
+it fade:
+
+- **Measured:** the payout curve, and now the feedback curve. Both exactly as designed.
+- **Not measured:** whether the change creates a *new* degenerate strategy — "ignore everything,
+  wait for twelve, press". The argument that it does not is that waiting already carries enforced
+  cost: bombs reaching the line take a life, runners take shards, and heat punishes inaccuracy, so
+  a player cannot simply stop shooting. That is an argument, not evidence.
+- **The knob, if it plays too swingy:** `V23_BLAST.crowd`, currently 1.55. Dropping it toward 1.2
+  flattens the curve without touching anything else.
+
 ## V41–V43 — the titan, the shop, and the cheerful kills
 
 Three reports, three different kinds of fault.
