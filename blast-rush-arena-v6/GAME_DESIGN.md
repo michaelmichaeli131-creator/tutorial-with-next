@@ -1,5 +1,56 @@
 # Blast Rush Arena V6 — Game and Social Design
 
+## V39 — the daily arena
+
+The last of the four original priorities was "reasons to come back", and the honest description of
+the game before this is that **nothing changed between sessions**. Solo is the same endless ladder
+every time; the campaign has fifteen stages and then it is finished. V37 gave the results screen a
+personal best to chase, which is a reason to press PLAY AGAIN — but nothing anywhere was a reason
+to open the app tomorrow.
+
+The answer this genre settled on long ago is a daily seeded run, and it works because it turns a
+score into a *comparable* one: everyone plays the same field, so a number means something it cannot
+mean when every run is a different arena. And it expires, which is the part that brings people
+back.
+
+The machinery already existed — `begin(mode,seed)` takes a seed, `rng()` is seeded from it, and V20
+had already made spawns deterministic so two duellists meet identical enemies. What was missing was
+a reason to use it.
+
+**Verified before building anything on top of it**, because "everyone gets the same arena today" is
+not worth saying unless it is true. The same seed run twice produced an identical sequence of 19
+spawns — type, position, speed, radius and elite modifier — while a different seed diverged, so the
+check can actually fail. The `Math.random()` calls that remain are all cosmetic: particle angles,
+stereo pan, the launch scene.
+
+The seed is an FNV-plus-avalanche hash of the **UTC** date, so the arena turns over at the same
+instant everywhere and nobody gets a second attempt by changing timezone. Four consecutive days
+produced four distinct seeds.
+
+The streak is the actual hook, and it is decided when a run *finishes*, not when the app opens —
+otherwise merely launching the game would extend it. Tested across every transition:
+
+| situation | result |
+| --- | --- |
+| first play | streak 1, best set |
+| replay the same day | streak stays 1, best rises 5,000 → 9,000 |
+| a worse replay | best holds at 9,000 |
+| played yesterday, streak 4 | streak 5 |
+| last played long ago, streak 9 | streak resets to 1 |
+
+Two things the build forced out into the open:
+
+- **PLAY AGAIN and RESTART both call `begin(game.mode)`.** Running the daily as `'solo'`
+  internally meant pressing PLAY AGAIN on a daily result silently started a *random* arena — the
+  one thing a daily must never do, since the whole proposition is that you can attack the same
+  field again. The base is still entered as solo so every layer that switches on mode behaves
+  identically, and the mode is stamped back to `'daily'` afterwards. Nothing in the codebase reads
+  `'solo'` specifically; every check tests for duel, campaign or gauntlet.
+- **V33's comment about reproducible crowds was wrong.** Its signature counter was module-level and
+  never reset, so two runs of one seed produced identically-*behaving* hostiles that *looked*
+  different. It is now seeded from the run, which makes the claim true and the daily identical
+  down to the artwork.
+
 ## V38 — the two screens the design pass never reached
 
 Captured rather than assumed, and they came back very different from each other.
