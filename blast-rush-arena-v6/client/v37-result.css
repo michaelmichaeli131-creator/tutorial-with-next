@@ -1,0 +1,55 @@
+/* V37 — the results screen has to say how the run went.
+
+   The score is already the loudest thing on the panel and that is correct. What was missing sat
+   directly under it: whether the number was any good, and what decided it. These two lines carry
+   that, so they are weighted second and third — above the stat tiles, which are reference rather
+   than headline. */
+
+.v37-verdict {
+  /* Positive, not negative. Tightening this up against the score pulled it inside the score's own
+     line box — at 70px the glyphs fill most of it — and the two overlapped on both branches. */
+  margin: 6px 0 2px;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: #8fb6cf;
+}
+
+/* Beating your own best is the one moment on this screen worth celebrating, so it gets the gold
+   the score itself uses and a glow the "short by" state deliberately does not have. */
+.v37-verdict.best {
+  color: #ffe25e;
+  font-size: 15px;
+  text-shadow: 0 0 22px #ffc93a66;
+}
+
+.v37-verdict b {
+  color: #fff;
+  font-weight: 1000;
+}
+
+/* The read on the run: one sentence, sentence case, deliberately quieter than everything above it.
+   It is there to be found after the number has landed, not to compete with it. */
+.v37-read {
+  max-width: 42ch;
+  margin: 10px auto 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #93a9bd;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+}
+
+.v37-read em {
+  color: #cfe4f3;
+  font-style: normal;
+  font-weight: 900;
+}
+
+@media (max-width: 800px), (pointer: coarse) {
+  .v37-verdict { font-size: 12px; }
+  .v37-verdict.best { font-size: 14px; }
+  .v37-read { font-size: 12px; margin-top: 8px; }
+}

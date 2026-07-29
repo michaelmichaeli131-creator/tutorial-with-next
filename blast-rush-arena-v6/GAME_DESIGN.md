@@ -1,5 +1,43 @@
 # Blast Rush Arena V6 — Game and Social Design
 
+## V37 — the results screen was doing no retaining
+
+Captured after a real run rather than reasoned about, and the capture settled it. The run scored
+**85,001 against a stored best of 21,500** — four times the player's previous best, the biggest
+moment they had had with this game — and the screen said `RUN COMPLETE`. It said it twice, because
+the eyebrow above the title is hardcoded in the markup and `finish` sets the title to the same
+words.
+
+Under the score sat four numbers: WAVE 3, PERFECT 43, MAX COMBO x36, SHARDS +77. Every one is true
+and not one tells the player whether that was good, what decided the run, or why to press PLAY
+AGAIN rather than put the phone down. This is the retention screen, and it was retaining nothing.
+
+Three changes, in the order the eye reaches them:
+
+1. **The eyebrow carries context** — `SOLO · CRYSTAL RIFT · WAVE 5`, or the stage in campaign —
+   instead of repeating the title.
+2. **A line about the best.** Beating it is celebrated with the margin in gold; not beating it
+   shows the gap. "12,400 SHORT" is the most reliable replay hook in the genre and it costs one
+   line of text. The prior best has to be read *before* `finish` runs, because `finish` opens by
+   writing the new best over the old one — by the time the panel is populated the number to
+   compare against is already gone. Campaign runs compare against that stage's best rather than a
+   career high, which would be meaningless.
+3. **A read on the run**, derived from what actually happened rather than from a bank of flavour
+   text. Overheats mean accuracy was the problem, escapes mean priority was, a long chain means
+   the combo was the story. Two sentences at most. It gives the player something to *intend* next
+   run, which is the difference between playing again and playing again for a reason.
+
+Duels are excluded from the best line and the read: they are scored against a person, V20's own
+result block already says who won, and a personal-best comparison there answers a question nobody
+asked.
+
+Two faults in my own first version, both caught by looking at the capture rather than the diff. The
+best line read `NEW BEST · +70,957 OVER YOUR LAST` and wrapped to two rows on a phone — the plus
+sign already says what the number is, so the words came out. And the read glued two clauses with
+"and" when each already contained one, which with a single raider produced *"1 raider reached the
+reactor, and each one took…"* — the plural agreement broke in the most common case. Each clause is
+a whole sentence now.
+
 ## V36 — tension is what you take away
 
 The follow-up to V35 sharpened the brief: more tension, only a trace of fright, and put it in the

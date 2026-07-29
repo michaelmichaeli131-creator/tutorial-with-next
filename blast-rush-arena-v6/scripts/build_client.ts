@@ -27,6 +27,7 @@ const STYLESHEETS = [
   "v18-home.css",
   "v19-craft.css",
   "v20-duel.css",
+  "v37-result.css",
 ];
 
 export async function buildStyles(): Promise<void> {
