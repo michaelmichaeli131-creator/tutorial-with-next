@@ -1,5 +1,57 @@
 # Blast Rush Arena V6 — Game and Social Design
 
+## V40 — the two biggest buttons were decoration
+
+The brief was "fun and addictive", and the daily arena had just made something measurable that
+never was before: a **fixed field**. Every previous comparison in this document was fought against
+spawn randomness so wide that nothing could be concluded — 116k and 524k on consecutive runs of an
+identical build. On the daily seed that collapses:
+
+| | run 1 | run 2 | run 3 | spread |
+| --- | --- | --- | --- | --- |
+| random field (earlier) | 116,000 | — | 524,000 | **4.5×** |
+| fixed daily field | 157,182 | 155,513 | 181,441 | **1.17×** |
+
+That is a finding in its own right. Almost all the variance was *which field you drew*, not how you
+played — which means solo is where luck decides and the daily is where skill shows.
+
+With that instrument, the ability row could finally be tested. Same field, same bot, same tap rate;
+only the ability policy changed.
+
+| policy | Overdrives | Blasts | scores | median |
+| --- | --- | --- | --- | --- |
+| press on sight | 3 | 2–3 | 157,182 / 155,513 / 181,441 | 157,182 |
+| bank and wait | 0–1 | 1 | 166,561 / 147,692 / 134,845 | 147,692 |
+
+**Tripling ability use moved the score less than the run-to-run noise, with the ranges overlapping.**
+A perfectly timed discharge catching eight hostiles was worth about five per cent of a run. Two
+buttons that occupy a quarter of the HUD, glow, pulse and carry their own charge meters were, in
+outcome terms, decoration — and a button whose timing does not matter is not a decision, it is a
+lever.
+
+The reward was already proportional to the catch; it was *linear*, and linear is not enough to make
+waiting worth the risk. Raising it to an exponent of 1.55 does. Measured directly by placing
+exactly N hostiles inside the reach and reading the score delta — arithmetic, so it is tested
+arithmetically rather than inferred from a bot:
+
+| hostiles caught | 1 | 2 | 3 | 6 | 8 | 10 | 12 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| at minimum charge | 1,876 | 3,710 | 5,961 | 14,887 | 22,527 | 31,482 | 41,753 |
+| at full overcharge | 2,289 | 4,943 | 8,838 | 22,178 | 34,890 | 48,726 | **65,391** |
+
+Twelve caught at full overcharge is 29× one caught, against roughly 5× before, and against a
+150,000 run it is a set-piece worth building toward. Dumping a full bank on a straggler stays the
+waste it always was. The trade the ability row never had now exists: let the field build and the
+payoff climbs steeply, but every extra hostile is another chance at a breach.
+
+A catch of six or more announces itself with a floating chain count and a toast, because a
+set-piece that does not celebrate itself is a number going up somewhere off to the side.
+
+**Honest limit:** the payout curve is verified precisely. The strategy-level re-run — does *hold*
+now beat *asap* — did not complete: the sandbox degraded to eleven orphaned browsers and the runs
+stopped finishing. What is shipped is a change whose direct effect is measured and whose intended
+effect on strategy is argued, not yet demonstrated.
+
 ## V39 — the daily arena
 
 The last of the four original priorities was "reasons to come back", and the honest description of

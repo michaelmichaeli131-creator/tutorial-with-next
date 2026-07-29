@@ -36,7 +36,11 @@ const V23_BLAST={
     minimum, all of it at full overcharge. */
  floor:.5,
  gain:.67,
- boss:18
+ boss:18,
+ /* The exponent on the number of hostiles a discharge catches, and the size at which a catch stops
+    being housekeeping and becomes the thing you were waiting for. See the note at the score. */
+ crowd:1.55,
+ big:6
 };
 
 /* The base clamps blast charge at 100 and discards the surplus. Overcharge is precisely that
@@ -83,9 +87,29 @@ activateBlast=function(){
    if(weak.hp<=0)weak.alive=false;
   }
  }
- /* Scored on what it actually caught rather than a flat figure, so dumping a full bank on two
-    stragglers reads as the waste it is. */
- score(Math.round(600+caught.length*540*(charge/100)),'blast');
+ /* Scored on what it caught, and scored *super*-linearly.
+
+    The linear version was measured and it did not work. On a fixed daily field a bot that pressed
+    both abilities the instant they lit (three Overdrives, three Blasts) scored a median 157,182,
+    and the same bot banking them (one Overdrive, one Blast) scored 147,692 — with the ranges
+    overlapping, so tripling ability use moved the score less than the run-to-run noise. A perfectly
+    timed catch of eight hostiles was worth about five per cent of a run. Two buttons that occupy a
+    quarter of the HUD, glow, pulse and carry their own charge meters were, in outcome terms,
+    decoration.
+
+    The exponent is the fix. At full overcharge one straggler pays about 1,500 and a bank held until
+    ten hostiles are on the field pays about 36,000 — a quarter of a good run in a single press.
+    Waiting is now worth something specific and risky, which is the trade the ability row never had:
+    let the field build and the payoff climbs, but every extra hostile is another chance at a
+    breach. */
+ const crowd=Math.pow(caught.length,V23_BLAST.crowd);
+ const payout=Math.round(600+540*crowd*(charge/100));
+ score(payout,'blast');
+ /* A set-piece has to announce itself, or it is a number going up somewhere off to the side. */
+ if(caught.length>=V23_BLAST.big){
+  floating(W/2,line-70,`${caught.length}x CHAIN +${format(payout)}`,'#7df3ff');
+  toast(`REACTOR DISCHARGE • ${caught.length} CAUGHT`);
+ }
  /* Every kill charges Blast, including the ones Blast itself made — so a discharge that caught
     eleven hostiles handed back 99% and was ready again immediately. An ability that pays for
     itself is not a resource, and a bank nobody has to save for is not a decision. Zeroed after
