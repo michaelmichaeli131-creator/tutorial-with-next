@@ -27,22 +27,33 @@ function v19PanelSeams(c,points,pal){
   c.beginPath();c.moveTo(minX-4,y+1.2);c.lineTo(maxX+4,y+1.2);c.stroke();
  }
 
- /* Vent: light escaping from inside the shell. */
+ /* Vent: light escaping from inside the shell.
+
+    Cached, like the specular below it and like the body fill further down. Counting gradient
+    allocations on a full field put this function at the top of the list — two gradients per
+    carapace call, roughly three per creature per frame, rebuilt every frame for stops that never
+    change. The geometry here is a species' own bounding box and the colour is its palette, both
+    fixed for the life of that creature, so there is nothing to rebuild. `v15Grad` is the cache the
+    pilot renderer and V26's world bounce already use; this simply joins them. */
  c.globalCompositeOperation='lighter';
  const ventY=minY+height*.62;
- const vent=c.createLinearGradient(0,ventY-3,0,ventY+3);
- vent.addColorStop(0,'transparent');
- vent.addColorStop(.5,pal.glow);
- vent.addColorStop(1,'transparent');
- c.fillStyle=vent;
+ c.fillStyle=v15Grad(c,`v19vent|${pal.glow}|${Math.round(ventY)}`,()=>{
+  const vent=c.createLinearGradient(0,ventY-3,0,ventY+3);
+  vent.addColorStop(0,'transparent');
+  vent.addColorStop(.5,pal.glow);
+  vent.addColorStop(1,'transparent');
+  return vent;
+ });
  c.fillRect(minX,ventY-3,(maxX-minX),6);
 
  /* Specular: one broad diagonal band, the cheapest convincing cue for a hard curved surface. */
- const spec=c.createLinearGradient(minX,minY,maxX*.5,maxY);
- spec.addColorStop(0,'rgba(255,255,255,.22)');
- spec.addColorStop(.42,'rgba(255,255,255,.05)');
- spec.addColorStop(.75,'transparent');
- c.fillStyle=spec;
+ c.fillStyle=v15Grad(c,`v19spec|${Math.round(minX)}|${Math.round(minY)}|${Math.round(maxX)}|${Math.round(maxY)}`,()=>{
+  const spec=c.createLinearGradient(minX,minY,maxX*.5,maxY);
+  spec.addColorStop(0,'rgba(255,255,255,.22)');
+  spec.addColorStop(.42,'rgba(255,255,255,.05)');
+  spec.addColorStop(.75,'transparent');
+  return spec;
+ });
  c.fillRect(minX-6,minY-6,(maxX-minX)+12,(maxY-minY)+12);
  c.restore();
 
@@ -60,13 +71,19 @@ function v19PanelSeams(c,points,pal){
 
 /* Reassigns the shared body helper; every creature picks the new passes up automatically. */
 v15Carapace=function(c,pal,points,x0,y0,x1,y1){
- const g=c.createLinearGradient(x0,y0,x1,y1);
- g.addColorStop(0,pal.trim);
- g.addColorStop(.16,pal.body);
- g.addColorStop(.55,'#0b1226');
- g.addColorStop(.82,pal.body);
- g.addColorStop(1,'#04060f');
- c.fillStyle=g;
+ /* Keyed on the two palette colours the ramp actually uses plus the species' bounding box. V33
+    gives every hostile its own hue and luminance shift, so this is not one entry per species — but
+    it is a small bounded set in practice rather than one per creature, and the alternative was
+    rebuilding a five-stop ramp for every creature on every frame. */
+ c.fillStyle=v15Grad(c,`v19body|${pal.trim}|${pal.body}|${Math.round(x0)}|${Math.round(y0)}|${Math.round(x1)}|${Math.round(y1)}`,()=>{
+  const g=c.createLinearGradient(x0,y0,x1,y1);
+  g.addColorStop(0,pal.trim);
+  g.addColorStop(.16,pal.body);
+  g.addColorStop(.55,'#0b1226');
+  g.addColorStop(.82,pal.body);
+  g.addColorStop(1,'#04060f');
+  return g;
+ });
  v14Art.poly(c,points);
  c.fill();
  c.strokeStyle=pal.glow+'99';

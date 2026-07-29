@@ -3,7 +3,37 @@ function v10PushTrail(x,y,color,size,life=.34){if(v10Trails.length>(isMobile?80:
 const v10UpdateBase=update;
 update=function(dt){v10UpdateBase(dt);if(!game.running||game.paused)return;for(const o of game.orbs){if((o.phase*10|0)%3===0)v10PushTrail(o.x,o.y+o.r*.45,o.type==='bomb'?'#ff4264':o.type==='shard'?'#69ffb5':worlds[game.world].enemy,Math.max(3,o.r*.18),.24);}for(const p of game.projectiles)v10PushTrail(p.x-p.vx*.025,p.y-p.vy*.025,p.color,Math.max(3,p.r*.55),.18);for(let i=v10Trails.length-1;i>=0;i--){v10Trails[i].life-=dt;if(v10Trails[i].life<=0)v10Trails.splice(i,1);}}
 const v10DrawBase=draw;
-draw=function(){v10DrawBase();if(!game.running)return;ctx.save();ctx.globalCompositeOperation='lighter';for(const t of v10Trails){ctx.globalAlpha=Math.max(0,t.life/t.max)*.58;const g=ctx.createRadialGradient(t.x,t.y,0,t.x,t.y,t.size*2.8);g.addColorStop(0,t.color);g.addColorStop(1,'transparent');ctx.fillStyle=g;ctx.beginPath();ctx.arc(t.x,t.y,t.size*2.8,0,Math.PI*2);ctx.fill();}ctx.restore();ctx.globalAlpha=1;};
+/* One radial gradient per trail per frame was the single largest remaining source of gradient
+   allocation on a busy field — around fifty a frame, more than the entire creature roster costs.
+   Because the gradient was centred on the trail's own position it could not be keyed and reused: a
+   moving centre makes every frame's gradient unique.
+
+   Translating the context and building the gradient around the origin makes it cacheable, which is
+   the identical fix V16 applied to smoke puffs in 03n for the identical reason. The radius is
+   rounded to a whole pixel so a continuously shrinking trail does not mint a new entry every frame;
+   sub-pixel accuracy in the radius of a soft additive glow is not observable. */
+draw=function(){
+ v10DrawBase();
+ if(!game.running)return;
+ ctx.save();
+ ctx.globalCompositeOperation='lighter';
+ for(const t of v10Trails){
+  const radius=Math.max(1,Math.round(t.size*2.8));
+  ctx.globalAlpha=Math.max(0,t.life/t.max)*.58;
+  ctx.fillStyle=v15Grad(ctx,`v10trail|${t.color}|${radius}`,()=>{
+   const g=ctx.createRadialGradient(0,0,0,0,0,radius);
+   g.addColorStop(0,t.color);
+   g.addColorStop(1,'transparent');
+   return g;
+  });
+  ctx.save();
+  ctx.translate(t.x,t.y);
+  ctx.beginPath();ctx.arc(0,0,radius,0,Math.PI*2);ctx.fill();
+  ctx.restore();
+ }
+ ctx.restore();
+ ctx.globalAlpha=1;
+};
 const v10DrawScout=v9DrawScout;
 v9DrawScout=function(o,color){ctx.save();const lean=Math.sin(o.phase*.9+o.variant)*.12;ctx.rotate(lean);v10DrawScout(o,color);ctx.globalCompositeOperation='lighter';ctx.fillStyle=color+'88';for(const side of [-1,1]){ctx.beginPath();ctx.moveTo(side*13,21);ctx.lineTo(side*7,42+Math.sin(o.phase*3)*5);ctx.lineTo(side*2,22);ctx.fill();}ctx.restore();};
 const v10DrawHeavy=v9DrawHeavy;

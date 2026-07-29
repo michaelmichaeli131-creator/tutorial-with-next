@@ -1226,3 +1226,55 @@ wildly inconsistent — claims range from 9% to 91%, with a recent survey puttin
 9% fully silent. Tension therefore has to be legible with the sound off too, which is what V35's
 vignette and desaturation and V48's dark bodies and lit eyes are for. The audio deepens it; it cannot
 be the whole of it.
+
+
+## V51 — 172 gradients a frame down to 2
+
+The previous section recorded ~330 gradient objects built and discarded per frame at twenty
+creatures, and named it the obvious next thing to work on. First job was to fix the instrument: the
+harness was counting one rAF tick as one frame while both the harness and the game's own loop were
+calling `draw()`, so every figure was two to three times too high. The real baseline is **172
+gradients per `draw()`** at twenty creatures — 93 linear, 79 radial.
+
+Attributed by caller, four sources accounted for 96% of it, and all four were the same mistake:
+building a gradient whose colour stops and geometry never change, once per entity, once per frame.
+
+    61.6/draw   v19PanelSeams    vent + specular, 2 per carapace call
+    51.4/draw   draw             one radial per motion trail
+    30.8/draw   v15Carapace      V19's five-stop body ramp
+    21.6/draw   drawOrb          the creature's ground halo
+
+All four now route through `v15Grad`, the per-context cache that the pilot renderer, V26's world
+bounce and V16's debris sprites were already using. Result: **2.1 gradients per `draw()`**, and —
+more importantly than the ratio — the count is now **flat with creature count** (1.8 at five
+creatures, 2.1 at ten, 2.1 at twenty) where before it climbed steeply with how busy the field was.
+The two that remain are the animated background nebula, which genuinely changes every frame, and one
+in the pilot renderer.
+
+### Why three of them could not simply be keyed
+
+Two of the four were straightforward: the vent, the specular and the body ramp are all functions of a
+species' bounding box and its palette, both fixed for the life of a creature.
+
+The other two were keyed on continuously varying values, which is a cache that never hits — and this
+is the general trap. The motion trail's gradient was **centred on the trail's own position**, so a
+moving trail mints a unique gradient every frame no matter what you key on. The fix is to translate
+the context and build the gradient around the origin, which is precisely what V16 did to smoke puffs
+in 03n for precisely this reason; the note there says "up to 26 gradient objects every frame". The
+same trick had simply never been applied to trails.
+
+The creature's ground halo and `v15Halo` both took continuous radii — the halo from V33's
+per-creature size jitter, `v15Halo` from the raider's fuse beat. Both are now rounded before they
+become a key, which is worth stating plainly: sub-pixel precision in the radius of a soft additive
+glow is not observable, and `v15Halo` in particular was a cache that did nothing at all for the one
+creature that calls it most. The raider's pulse still moves through eleven distinct sizes.
+
+### What is deliberately not claimed
+
+No frame-rate number. The retraction above explains why: this sandbox's wall-clock spread is larger
+than the effects being measured, and a frame-time claim here would be exactly the mistake made last
+time. What is claimed is what was counted — 172 allocations per draw down to 2, and no longer growing
+with field density — plus that the creature lineup and a live combat frame are pixel-comparable
+before and after, and that audit, legacy, combat and the audio bed harness all pass.
+
+Whether this is felt on a real phone is a question for a real phone.
