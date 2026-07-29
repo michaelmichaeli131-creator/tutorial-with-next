@@ -1278,3 +1278,97 @@ with field density — plus that the creature lineup and a live combat frame are
 before and after, and that audit, legacy, combat and the audio bed harness all pass.
 
 Whether this is felt on a real phone is a question for a real phone.
+
+
+## V52 — the music was not quiet, it was mixed for a speaker nobody has
+
+The note was that the background music is very weak. Tapping the music bus with an analyser rather
+than guessing gave a spectrum that explains the complaint completely — power-averaged over 28
+seconds, so it spans many bars rather than whichever one happened to be playing:
+
+    <200Hz    -54.3 dB
+    200-800   -71.2 dB
+    800-2.4k  -96.3 dB
+    2.4-6k   -110.4 dB
+    >6k      -118.7 dB
+
+That is not a quiet mix. It is a mix with essentially nothing in it above two hundred hertz. And a
+phone speaker cannot reproduce below roughly three or four hundred hertz at any volume — the driver
+is a few millimetres across. Almost all of the music's energy was going into the one band the target
+device physically cannot play, so turning the volume up would have produced a slightly louder
+nothing.
+
+Reading the arrangement confirms it from the other side. `v30Sub` is called at .34 and `v30Kick` at
+.5, while every melodic and harmonic voice — bass line, pad, hook, sparkle — sits between .014 and
+.075. The sub is fourteen to twenty-seven decibels above the melody. On headphones or a laptop that
+is a reasonable club balance, which is presumably how it survived; on the device the game is played
+on it means only the thump gets through.
+
+Three things compounded it:
+
+1. Every note passes its own resonant lowpass in `v30Voice`, opening at `cutoff` and closing to
+   `cutoff*.5` across the note.
+2. The bus passes `musicFilter`, which V30 set to 1700Hz outside combat and `2400 + intensity*5200`
+   inside it — so at wave one, with no combo and no boss, the whole arrangement sat behind a 2.4kHz
+   lowpass. "Warm and closed" is a fair choice for a menu; 1700Hz is not warm, it is muffled.
+3. The bus gain was `curve*0.5`, and a second writer left from V12 set `curve*0.17` — nine decibels
+   lower, on the same parameter. The per-frame writer wins in steady state, so the only audible
+   effect of the old value was the music dropping for a moment whenever the player touched a setting.
+
+### And the pedal was below the threshold of hearing
+
+Dumping what the arrangement actually emits turned up something sharper than a bad balance. The bass
+pedal runs at 13.75, 16.35, 18.35, 21.83 and 24.50Hz, because it is written as `bass/4` and the world
+roots are already low. Human hearing gives out around 20Hz. A 13.75Hz sine is not a quiet note, it is
+not a note — its only audible contribution is whatever intermodulation it causes on the way out. A
+measurable share of that -54dB bottom band was energy no listener could receive on any hardware.
+
+It is transposed up two octaves. The first attempt doubled in a loop until each note cleared a 35Hz
+floor, which mapped the five pedal notes to 55, 65.4, 36.7, 43.66 and 49Hz — two octaves for some and
+one for others, scrambling the intervals of the bass line, which is a worse bug than the one it
+fixed. A single constant transpose clears the floor for all of them (every sub call is `bass/4` or
+`root/4`, so all sit between 10 and 28Hz) and preserves every pitch relationship, including V36's
+held pedal at high tension. Verified: 13.75 → 55, 16.35 → 65.4, 18.35 → 73.4, 21.83 → 87.3,
+24.50 → 98.
+
+### The rebalance
+
+Not a note of the composition changes. The harmony, the 32-bar form, the hook and the tension
+behaviour V36 tuned are untouched. What changes is which part of the spectrum carries the tune:
+
+- **A tilt on the melodic voices.** Nothing below the bass register gains anything; the lift grows
+  with pitch to 3.2x three octaves up, then flattens. Measured: 1.00x at 110Hz, 1.73x at 220,
+  2.47x at 440, 3.20x at 880 and above.
+- **Octave doubling on the melodic voices**, the oldest trick for making a lead audible on a small
+  speaker — the double lands where the driver is efficient while the original keeps the register the
+  composition wants. Which voices count as melodic is inferred from note length, and that is a
+  heuristic worth stating: the hook and sparkle run .8 to 3.2 sixteenths, the pads run 15 and 30, so
+  anything under three quarters of a second is treated as melody. Doubling a thirty-sixteenth pad
+  would thicken it into mud, which is what the threshold exists to prevent.
+- **Sub and kick trimmed** to .62 and .7 — enough to stop owning the mix and no further, because on
+  hardware that can produce it this track is meant to have a floor.
+- **Filter floors up roughly an octave**, preserving the difference between sections that the line
+  exists to express: menu 1700 → 3400, combat 2400 → 4400 over intensity, break and drop to match.
+- **Bus gain .5 → .9**, and the stale V12 writer brought into step.
+
+### Measured
+
+Same harness, same 28-second power-averaged method, A/B by stashing the change:
+
+    band        before    after    change
+    <200Hz      -54.3    -48.7     +5.6
+    200-800     -71.2    -62.4     +8.8
+    800-2.4k    -96.3    -87.9     +8.4
+    2.4-6k     -110.4    -99.8    +10.6
+    >6k        -118.7   -111.6     +7.1
+
+Bus RMS went from -34.0 to about -28 dB. The phone's passband gains more than the sub does, which is
+the point. Compressor gain reduction stayed under three tenths of a decibel throughout, so none of
+this is bought with pumping — there was headroom going unused.
+
+One caveat on precision: the 800Hz-6kHz figures moved by two to four decibels between runs even at 28
+seconds, because the form is 62 seconds long and combat intensity depends on how the run goes. The
+direction was consistent across three measurements; the individual decibel values should be read as
+approximate.
+
+Audit, legacy, combat and the V49 bed harness all pass.

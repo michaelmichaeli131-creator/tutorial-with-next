@@ -174,7 +174,11 @@ function v12ApplyAudioLevels(){
  v12Track.volume=musicLevel*(game.running?1:.72);
  if(audio.ctx){
   audio.master.gain.setTargetAtTime(1,audio.ctx.currentTime,.03);
-  audio.music.gain.setTargetAtTime(musicLevel*.17,audio.ctx.currentTime,.04);
+  /* Was .17, against the .9 the per-frame arrangement update uses — a nine-decibel disagreement
+     between two writers on the same parameter. The per-frame one wins in steady state because it
+     runs sixty times a second, so the only audible effect of the old value was the music dropping
+     for a moment every time the player touched a setting. Kept in step deliberately. */
+  audio.music.gain.setTargetAtTime(musicLevel*.9,audio.ctx.currentTime,.04);
   audio.sfxGain.gain.setTargetAtTime(Math.min(1,sfxLevel*.96),audio.ctx.currentTime,.04);
   audio.compressor.threshold.setTargetAtTime(-10,audio.ctx.currentTime,.08);
  }

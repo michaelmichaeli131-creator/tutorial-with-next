@@ -183,7 +183,10 @@ audio.update=function(g){
  v30Ensure();
  const musicLevel=typeof v12MusicCurve==='function'?v12MusicCurve(save.music):save.music/100;
  const sfxLevel=typeof v12MusicCurve==='function'?v12MusicCurve(save.sfx):save.sfx/100;
- this.music.gain.setTargetAtTime(musicLevel*.5,this.ctx.currentTime,.15);
+ /* Raised from .5. With the spectrum corrected the bus can carry more without the compressor
+    working — measured gain reduction on this mix was under a tenth of a decibel, so there was
+    headroom going unused while the player heard a track that was too quiet. */
+ this.music.gain.setTargetAtTime(musicLevel*.9,this.ctx.currentTime,.15);
  this.sfxGain.gain.setTargetAtTime(Math.min(1,sfxLevel*.96),this.ctx.currentTime,.06);
 
  const combat=!!g.running;
@@ -218,11 +221,18 @@ audio.update=function(g){
  const lastBarOfPhrase=(bar%8)===7;
 
  /* The filter is the main difference between the two arrangements: LAUNCH sits warm and closed,
-    COMBAT opens up with pressure, and the breakdown opens further still before the drop. */
- const target=!combat?1700
-  :section==='break'?3200+intensity*2000
-  :section==='drop'?3600+intensity*7000
-  :2400+intensity*5200;
+    COMBAT opens up with pressure, and the breakdown opens further still before the drop.
+
+    The shape is right and the floors were far too low. Measured on the bus, the arrangement had
+    -118dB in the 2.4-6k band and -135dB above 6k: at wave one, with no combo and no boss, intensity
+    is zero and the entire track sat behind a 2.4kHz lowpass. "Warm and closed" is a legitimate
+    choice for a menu; 1700Hz is not warm, it is muffled, and on a phone speaker it removes most of
+    what the speaker can actually reproduce. Every floor moves up by roughly an octave. The
+    difference between the sections — which is the point of this line — is preserved. */
+ const target=!combat?3400
+  :section==='break'?4600+intensity*2200
+  :section==='drop'?5200+intensity*6500
+  :4400+intensity*4800;
  this.musicFilter.frequency.setTargetAtTime(target,this.ctx.currentTime,.3);
 
  const kit=combat&&section!=='break';
