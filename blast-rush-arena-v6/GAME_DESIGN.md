@@ -1,5 +1,45 @@
 # Blast Rush Arena V6 — Game and Social Design
 
+## V35 — dread
+
+The brief was tension and a little fear. The first thing worth saying is why the game had neither,
+because it is not what it looks like from outside. It is not that the palette is bright or the
+music upbeat. It is that **nothing ever stopped.** Hostiles spawned off a continuous timer that
+reset the instant it fired, the arrangement played without a gap from the first frame to the last,
+and the arena was lit evenly from edge to edge. Fear needs a silence to sit in and a dark to hide
+in, and there was neither. So this is a pacing and lighting change, not a colour pass.
+
+**The hush.** Clearing a directive now buys a beat of nothing before the next wave arrives. The
+field drains, a detuned sub swells under it, and the incoming wave is drawn as silhouettes
+descending through the haze — visible, indistinct, and impossible to shoot. Anticipation is where
+fear actually lives; surprise is just a noise. This is the biggest change here and the one that
+does the most work.
+
+**The dark closes in when you are hurt.** One dread value driven by lives lost, reactor heat, how
+close the nearest hostile is to the line, and whether a titan is out. It drains the colour from the
+arena through a single non-separable blend fill, closes a vignette centred on the reactor rather
+than the screen — the light that is failing is the player's own — shuts the music filter down, and
+brings in a heartbeat that speeds up. It rises about three times faster than it falls, so relief
+after a close call takes a moment to arrive instead of the arena flickering between moods.
+
+**Divers look at you before they commit.** V21's divers already drifted and then accelerated. What
+was missing was the moment of being noticed, so a sightline now snaps from the diver to the reactor
+during its tell.
+
+Three limits, all deliberate:
+
+- **Readability is not negotiable.** Desaturation caps at 62% and the vignette stays out at the
+  edges. Captured at full dread with a frozen field, every hostile, health bar and status label is
+  still legible — a hostile the player cannot see is not tension, it is an unfair death.
+- **Solo and campaign only for the hush.** It changes when hostiles arrive, and V20 made duel
+  spawns server-authoritative so two players meet identical enemies at identical moments. The
+  atmosphere is presentation and runs everywhere; the pacing change does not.
+- **It has to be affordable.** Measured on a frozen field, 700 draws a sample, three interleaved
+  passes: dread 0 costs nothing (15.53 ms baseline, the treatment is gated off), dread 0.19 is
+  +2.2% with only the vignette, and dread 0.5 and 1.0 are +10.4% and +9.5% with both passes
+  running. A tenth of a frame, only while the player is in trouble, against the 56% of fill V33
+  removed.
+
 ## V34 — kills become notes
 
 The destruction sounds were built to the standard impact recipe: noise transient, sine body

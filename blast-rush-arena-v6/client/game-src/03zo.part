@@ -1,0 +1,301 @@
+/* V35 DREAD — make the arena feel like somewhere you can lose.
+
+   The brief was tension and a little fear, and the first thing to say is why the game has neither
+   right now. It is not that the palette is bright or the music upbeat. It is that **nothing ever
+   stops.** Hostiles spawn off a continuous timer that resets the instant it fires, the arrangement
+   plays without a gap from the first frame to the last, and the arena is lit evenly from edge to
+   edge. Fear needs a silence to sit in and a dark to hide in, and there was neither.
+
+   So this is not a colour pass. Three systems:
+
+   1. **The hush.** Clearing a directive now buys a beat of nothing before the next wave arrives.
+      The field drains, the arrangement thins to a drone, a sub swells — and the incoming wave is
+      drawn as silhouettes descending in the haze, visible and too far away to shoot. Anticipation
+      is where fear actually lives; surprise is just a noise. This is the single biggest change
+      here, and it is a change to *pacing*, which is what was missing.
+
+   2. **The dark closes in when you are hurt.** One dread value, driven by lives lost, reactor
+      heat, how close the nearest hostile is to the line, and whether a titan is on the field. It
+      drains colour from the arena, closes a vignette, shuts the music filter down, and brings in a
+      heartbeat that speeds up. At one life it should be uncomfortable to look at.
+
+   3. **Divers look at you before they commit.** V21's divers already pause and then accelerate;
+      what was missing was the moment of being noticed. A sightline snaps from the diver to the
+      reactor during its tell.
+
+   Two limits, deliberately:
+
+   - **Readability is not negotiable.** Desaturation caps at 62% and the vignette stays out at the
+     edges, because a hostile the player cannot see is not tension, it is an unfair death. The
+     brief said a little fear, not a horror game, and an arcade score-attack stops being playable
+     long before it stops being frightening.
+   - **Solo and campaign only for the hush.** It changes when hostiles arrive, and V20 made duel
+     spawns server-authoritative so that two players meet identical enemies at identical moments.
+     The atmosphere — dread, vignette, heartbeat — is presentation and runs everywhere; the pacing
+     change does not. Same line V21 drew, for the same reason. */
+
+const V35={
+ hush:1.5,        /* seconds of held breath after a directive completes */
+ desat:.62,       /* hard cap: past this the neon stops separating from the background */
+ vignette:.72,
+ heartLow:.62,    /* seconds between beats at the calmest that still has a pulse */
+ heartHigh:.34
+};
+
+function v35Live(){return game.running&&!game.paused;}
+
+const v35BeginDread=begin;
+begin=function(mode='solo',seed){
+ v35BeginDread(mode,seed);
+ game.v35Dread=0;
+ game.v35Hush=0;
+ game.v35Heart=0;
+ game.v35Incoming=[];
+};
+
+/* ---- The hush ------------------------------------------------------------------------------ */
+
+/* Held by pushing the base loop's own spawn timer forward rather than by gating spawnOrb, so the
+   arrival ramp and everything else downstream keeps working off one clock. */
+const v35UpdateDread=update;
+update=function(dt){
+ if(v35Live()&&game.v35Hush>0){
+  game.v35Hush=Math.max(0,game.v35Hush-dt);
+  game.spawnTimer=Math.max(game.spawnTimer,.1);
+ }
+ v35UpdateDread(dt);
+ if(!v35Live())return;
+
+ /* Dread is mostly about how much you have left to lose. Lives dominate; everything else colours
+    it. A player at full health in a quiet moment sits near zero and the arena looks normal. */
+ const lives=Math.max(0,Math.min(3,game.lives));
+ const hurt=(3-lives)/3;
+ const line=H-(isMobile?105:72);
+ let closest=0;
+ for(const o of game.orbs){
+  if(o.y<0)continue;
+  closest=Math.max(closest,Math.min(1,o.y/line));
+ }
+ const heat=Math.min(1,(game.v21Heat||0)/100);
+ const target=Math.min(1,
+  hurt*.72
+  +Math.pow(closest,3)*.3
+  +heat*.18
+  +(game.boss?.22:0)
+  +(game.v35Hush>0?.3:0));
+ /* Rises faster than it falls: the relief after a close call should take a moment to arrive, or
+    the arena flickers between moods every time a hostile crosses the screen. */
+ const rate=target>game.v35Dread?3.2:1.1;
+ game.v35Dread=(game.v35Dread||0)+(target-game.v35Dread)*Math.min(1,dt*rate);
+
+ v35Pulse(dt);
+ v35Incoming(dt);
+};
+
+/* Silhouettes of what is coming, drifting down through the haze while the field is quiet. They are
+   drawn above the play area and are not hostiles — nothing can be shot during the hush, and that
+   is the point: you can see it and you cannot do anything yet. */
+function v35Incoming(dt){
+ const list=game.v35Incoming||(game.v35Incoming=[]);
+ if(game.v35Hush>0&&list.length===0){
+  const count=isMobile?4:6;
+  for(let i=0;i<count;i++){
+   /* Aimed at the band between the HUD and the horizon — roughly a fifth to a half of the way
+      down — because that is the only part of the frame that is actually empty and visible. The
+      first pass seeded them a third of a screen higher at a fifth of this speed and they were
+      still above the top edge when the wave landed; the second put them behind the HUD bar. The
+      held breath needs something to hold it for. */
+   list.push({x:.1+((i*.29+game.wave*.13)%.8),y:-.02-i*.04,speed:.34+((i*7)%3)*.06,phase:i*1.7});
+  }
+ }
+ if(!list.length)return;
+ const fading=game.v35Hush<=0;
+ for(let i=list.length-1;i>=0;i--){
+  const s=list[i];
+  s.y+=s.speed*dt;
+  if(fading)s.gone=(s.gone||0)+dt*2.6;
+  if(s.y>.62||(s.gone||0)>1)list.splice(i,1);
+ }
+}
+
+const v35NextWaveDread=nextWave;
+nextWave=function(){
+ const before=game.wave;
+ v35NextWaveDread();
+ /* Duels keep the server's spawn schedule untouched — see the note at the top. */
+ if(!game.running||game.mode==='duel')return;
+ if(game.wave===before||game.boss)return;
+ game.v35Hush=V35.hush;
+ game.v35Incoming=[];
+ audio.dread();
+};
+
+/* ---- Sound -------------------------------------------------------------------------------- */
+
+/* A swell under the hush: two detuned sub oscillators rising a minor second, which is the interval
+   that refuses to settle. Tuned to the world root so it belongs to the arrangement rather than
+   sitting on top of it. */
+audio.dread=function(){
+ if(!this.ctx||!save.sfx)return;
+ const root=typeof v34Root==='function'?v34Root():55;
+ const t=this.ctx.currentTime;
+ const g=this.ctx.createGain();
+ g.gain.setValueAtTime(.0001,t);
+ g.gain.exponentialRampToValueAtTime(.34,t+V35.hush*.75);
+ g.gain.exponentialRampToValueAtTime(.0001,t+V35.hush+.5);
+ const filter=this.ctx.createBiquadFilter();
+ filter.type='lowpass';
+ filter.frequency.setValueAtTime(220,t);
+ filter.frequency.exponentialRampToValueAtTime(90,t+V35.hush);
+ for(const [mult,detune] of [[1,-6],[1,7],[Math.pow(2,1/12),4]]){
+  const osc=this.ctx.createOscillator();
+  osc.type='sawtooth';
+  osc.frequency.setValueAtTime(root*mult,t);
+  osc.detune.value=detune;
+  osc.connect(filter);
+  osc.start(t);osc.stop(t+V35.hush+.6);
+ }
+ filter.connect(g);g.connect(this.sfxGain);
+};
+
+/* The heartbeat. Two thumps, the second softer and close behind — a single thump is a drum, the
+   pair is a pulse, and the brain hears the difference immediately. */
+audio.heartbeat=function(level){
+ if(!this.ctx||!save.sfx)return;
+ const t=this.ctx.currentTime;
+ for(const [when,gain] of [[0,level],[.15,level*.62]]){
+  const osc=this.ctx.createOscillator();
+  const g=this.ctx.createGain();
+  osc.type='sine';
+  osc.frequency.setValueAtTime(64,t+when);
+  osc.frequency.exponentialRampToValueAtTime(38,t+when+.13);
+  g.gain.setValueAtTime(.0001,t+when);
+  g.gain.exponentialRampToValueAtTime(Math.max(.0002,gain),t+when+.012);
+  g.gain.exponentialRampToValueAtTime(.0001,t+when+.17);
+  osc.connect(g);g.connect(this.sfxGain);
+  osc.start(t+when);osc.stop(t+when+.2);
+ }
+};
+
+/* Below this the pulse is not tension, it is a rattle under a game going fine. */
+const V35_PULSE_AT=.34;
+function v35Pulse(dt){
+ const dread=game.v35Dread||0;
+ if(dread<V35_PULSE_AT){game.v35Heart=0;return;}
+ const k=(dread-V35_PULSE_AT)/(1-V35_PULSE_AT);
+ game.v35Heart=(game.v35Heart||0)-dt;
+ if(game.v35Heart>0)return;
+ game.v35Heart=V35.heartLow-(V35.heartLow-V35.heartHigh)*k;
+ audio.heartbeat(.1+k*.16);
+}
+
+/* The arrangement's own filter is driven by the audio layers above; dread pulls it further down
+   the worse things get, so the track loses its top end exactly when the screen loses its colour. */
+const v35AudioUpdate=audio.update.bind(audio);
+audio.update=function(g){
+ v35AudioUpdate(g);
+ if(!this.ctx||!this.musicFilter)return;
+ const dread=g.v35Dread||0;
+ if(dread<.12)return;
+ /* setTargetAtTime with the smaller value wins on the same param, so this reads the layer below's
+    intent and closes on top of it rather than fighting it every frame. */
+ this.musicFilter.frequency.setTargetAtTime(Math.max(520,2600-dread*2100),this.ctx.currentTime,.35);
+};
+
+/* ---- Screen ------------------------------------------------------------------------------- */
+
+let v35Vig=null;
+let v35VigKey='';
+function v35Vignette(){
+ const key=`${Math.round(W)}x${Math.round(H)}|${DPR}`;
+ if(v35Vig&&v35VigKey===key)return v35Vig;
+ const sprite=document.createElement('canvas');
+ sprite.width=Math.max(1,Math.round(W*DPR));
+ sprite.height=Math.max(1,Math.round(H*DPR));
+ const c=sprite.getContext('2d');
+ c.setTransform(DPR,0,0,DPR,0,0);
+ /* Centred a little low, on the reactor rather than on the screen: the light that is failing is
+    the player's own. */
+ const g=c.createRadialGradient(W*.5,H*.62,Math.min(W,H)*.18,W*.5,H*.62,Math.max(W,H)*.78);
+ g.addColorStop(0,'rgba(0,0,0,0)');
+ g.addColorStop(.55,'rgba(2,3,10,.42)');
+ g.addColorStop(1,'rgba(0,0,4,1)');
+ c.fillStyle=g;
+ c.fillRect(0,0,W,H);
+ v35Vig=sprite;v35VigKey=key;
+ return sprite;
+}
+
+const v35DrawDread=draw;
+draw=function(){
+ v35DrawDread();
+ const dread=game.running?(game.v35Dread||0):0;
+
+ /* Drawn after the base so it sits over the field, but the incoming wave goes under the dread
+    treatment — they are meant to be indistinct. */
+ if(game.v35Incoming&&game.v35Incoming.length)v35DrawIncoming();
+
+ if(dread<=.02)return;
+ ctx.save();
+ /* One non-separable blend fill takes the colour out of everything already painted. It is the
+    cheapest full-screen desaturation canvas 2D offers, and it costs one fill rather than a pass
+    over the pixels. Gated because a non-separable blend is not free. */
+ if(dread>.2){
+  ctx.globalCompositeOperation='saturation';
+  ctx.globalAlpha=Math.min(V35.desat,(dread-.2)*1.25);
+  ctx.fillStyle='#808080';
+  ctx.fillRect(0,0,W,H);
+  ctx.globalCompositeOperation='source-over';
+ }
+ ctx.globalAlpha=Math.min(V35.vignette,dread*.85);
+ ctx.drawImage(v35Vignette(),0,0,W,H);
+ ctx.restore();
+ ctx.globalAlpha=1;
+};
+
+function v35DrawIncoming(){
+ const w=worlds[game.world%worlds.length];
+ ctx.save();
+ for(const s of game.v35Incoming){
+  const fade=Math.max(0,1-(s.gone||0));
+  /* Fades in as it clears the HUD and out again as it nears the play area, so a silhouette never
+     sits at the same place on screen as something the player is expected to shoot. Legible as a
+     shape, never as a target. */
+  const enter=Math.max(0,Math.min(1,s.y/.1));
+  const leave=Math.max(0,Math.min(1,(.6-s.y)/.16));
+  const alpha=.42*enter*leave*fade;
+  if(alpha<=.01)continue;
+  const x=W*s.x+Math.sin(game.elapsed*.9+s.phase)*W*.02;
+  const y=H*s.y;
+  const size=13+s.y*26;
+  ctx.globalAlpha=alpha;
+  ctx.fillStyle=w.enemy;
+  v14Art.poly(ctx,[[x,y+size],[x-size*.72,y-size*.45],[x,y-size*.15],[x+size*.72,y-size*.45]]);
+  ctx.fill();
+ }
+ ctx.restore();
+ ctx.globalAlpha=1;
+}
+
+/* ---- Being noticed -------------------------------------------------------------------------- */
+
+/* V21's divers drift, then commit and accelerate. The drift already existed; what was missing was
+   the moment of being seen. A sightline snaps to the reactor as the diver locks on, so the player
+   gets told which one has chosen them before it moves. */
+v19OrbOverlays.push((o)=>{
+ if(!o.v21Dive||o.y<0)return;
+ const line=H-(isMobile?105:72);
+ const near=Math.min(1,Math.max(0,(o.y/line-V21_DIVE.trigger*.55)/(V21_DIVE.trigger*.45)));
+ if(near<=.02)return;
+ ctx.save();
+ ctx.globalCompositeOperation='lighter';
+ ctx.globalAlpha=near*(.22+Math.abs(Math.sin(game.elapsed*9))*.3);
+ ctx.strokeStyle='#ff7a4d';
+ ctx.lineWidth=1.2;
+ ctx.setLineDash([3,9]);
+ ctx.beginPath();
+ ctx.moveTo(o.x,o.y+o.r*.6);
+ ctx.lineTo(W/2,line);
+ ctx.stroke();
+ ctx.restore();
+});
