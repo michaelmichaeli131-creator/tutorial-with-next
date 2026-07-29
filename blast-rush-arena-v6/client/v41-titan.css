@@ -81,3 +81,27 @@
   margin: 0 auto 2px;
   opacity: .95;
 }
+
+/* ---- V45: the daily board line ----
+   Sits under V37's personal-best line. That one is about you, this one is about everybody, so it is
+   quieter and shorter — the rank is the payload and the rest is scaffolding. */
+
+.v45-board {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #8fb6cf;
+  font-weight: 600;
+}
+
+.v45-board b {
+  color: #cfe4f3;
+  font-weight: 1000;
+}
+
+/* Being first on a shared field is the one outcome this mode exists to produce. */
+.v45-board.lead b { color: #ffe25e; }
+
+/* Before the round trip lands there is nothing true to say, so it says so rather than showing a
+   rank that is about to change. */
+.v45-board.pending { opacity: .55; font-style: italic; }

@@ -2,6 +2,16 @@ import type { ChallengeAttempt, ChallengeRecord } from "./protocol.ts";
 
 const CHALLENGE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_ATTEMPTS = 40;
+/* Fifty is what the all-time board keeps and there is no reason for the daily to differ: past the
+   first page nobody reads it, and every extra row is stored and shipped for every request. */
+const MAX_DAILY = 50;
+
+export interface DailyEntry {
+  name: string;
+  score: number;
+  wave: number;
+  at: number;
+}
 
 export class GameStore {
   #kv: Deno.Kv | null = null;
@@ -63,6 +73,41 @@ export class GameStore {
     await this.set(["challenge", code], record);
     await this.addLeaderboard({ name: attempt.name, score: attempt.score, wave: attempt.wave, at: attempt.createdAt });
     return record;
+  }
+
+  /**
+   * The daily board.
+   *
+   * Separate storage from the all-time leaderboard on purpose. The all-time board answers "who is
+   * best"; this answers "how did I do on the field everyone else played today", which is the only
+   * question the daily arena makes askable — and it is the reason to come back tomorrow, because
+   * today's board stops mattering when the seed rolls over.
+   *
+   * Keyed by the UTC day string the client derives, so no clock negotiation is needed: both sides
+   * compute the same key from the same date.
+   */
+  async getDailyBoard(day: string): Promise<DailyEntry[]> {
+    return (await this.get<DailyEntry[]>(["daily", day])) ?? [];
+  }
+
+  /**
+   * One entry per player per day, keeping their best. Without the replacement a player retrying the
+   * same field twenty times would fill the board on their own, which would make it useless exactly
+   * for the people who engage with it most.
+   */
+  async addDailyScore(day: string, entry: DailyEntry): Promise<DailyEntry[]> {
+    const board = await this.getDailyBoard(day);
+    const existing = board.findIndex((e) => e.name === entry.name);
+    if (existing >= 0) {
+      if (board[existing].score >= entry.score) return board;
+      board[existing] = entry;
+    } else {
+      board.push(entry);
+    }
+    board.sort((a, b) => b.score - a.score || b.wave - a.wave || a.at - b.at);
+    const trimmed = board.slice(0, MAX_DAILY);
+    await this.set(["daily", day], trimmed);
+    return trimmed;
   }
 
   async getLeaderboard(): Promise<Array<{ name: string; score: number; wave: number; at: number }>> {

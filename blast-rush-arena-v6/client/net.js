@@ -210,6 +210,18 @@
       return this.post(`/api/challenges/${encodeURIComponent(code)}/attempt`, { name: this.playerName, score: result.score, wave: result.wave, perfects: result.perfects, maxCombo: result.maxCombo });
     }
 
+    /* The daily board. Both calls are allowed to fail quietly at the call site: a run that cannot
+       reach the network is still a run, and the daily has to stay playable offline. */
+    async submitDaily(day, score, wave) {
+      return this.post('/api/daily', { day, name: this.playerName, score, wave });
+    }
+
+    async dailyBoard(day) {
+      const response = await fetch(`/api/daily?day=${encodeURIComponent(day)}`);
+      if (!response.ok) throw new Error('Daily board unavailable');
+      return response.json();
+    }
+
     async leaderboard() {
       const response = await fetch('/api/leaderboard');
       if (!response.ok) throw new Error('Leaderboard unavailable');

@@ -90,24 +90,16 @@ function v37Read(snapshot){
  return bits.slice(0,2).join(' ');
 }
 
-/* Injected rather than added to index.html so the markup keeps one owner: `finish` and its three
-   wrappers all populate this panel, and a node that only exists once V37 has run cannot be left
-   half-filled by one of them. */
+/* These two live in index.html rather than being created here. The first version built them at
+   runtime and the build validator rejected the follow-up that referenced them by id: every id
+   reached through `$()` has to exist in the markup so the check that the element is still there
+   keeps working. The check was right both times — this is static structure. */
 let v37VerdictEl=null;
 let v37ReadEl=null;
 function v37Nodes(){
  if(v37VerdictEl)return;
- const score=$('finalScore');
- const grid=document.querySelector('#resultScreen .result-grid');
- if(!score||!grid)return;
- v37VerdictEl=document.createElement('div');
- v37VerdictEl.className='v37-verdict';
- v37VerdictEl.id='v37Verdict';
- v37ReadEl=document.createElement('p');
- v37ReadEl.className='v37-read';
- v37ReadEl.id='v37Read';
- grid.parentNode.insertBefore(v37VerdictEl,grid);
- grid.parentNode.insertBefore(v37ReadEl,grid);
+ v37VerdictEl=$('v37Verdict');
+ v37ReadEl=$('v37Read');
 }
 
 const v37FinishBase=finish;

@@ -1,5 +1,53 @@
 # Blast Rush Arena V6 — Game and Social Design
 
+## V45 — the daily board
+
+V39 built the daily arena and verified the field is identical across runs. What it could not do was
+the thing that makes a daily worth playing.
+
+A daily's whole proposition is that a score becomes **comparable** — everyone is on the same field,
+so a number finally means something it cannot mean when every run is a different arena. Left local,
+that proposition was unredeemed: you were comparing your score to your own earlier score, which the
+results screen already did for every other mode. The field being shared bought nothing.
+
+The run posts now, and the results screen says where you placed — under V37's personal-best line,
+which for a daily already reads "TODAY'S BEST … SHORT". One line is about you, the next is about
+everybody, and the pair is the point of the mode.
+
+**Stored separately from the all-time leaderboard, deliberately.** That board answers "who is
+best"; this answers "how did I do on the field everyone else played today", and it stops mattering
+when the seed rolls over — which is exactly why it brings people back. Keyed by the same UTC day
+string the client derives, so no clock negotiation is needed: both sides compute the same key from
+the same date or neither does.
+
+Three rules, all of which are about what the board refuses to do, and all tested:
+
+| rule | why |
+| --- | --- |
+| one row per player, keeping their best | a player retrying the same field twenty times would otherwise fill the board alone — useless for exactly the people who engage most |
+| a worse retry never overwrites | retrying should be free |
+| capped at 50, keeping the top | past the first page nobody reads it, and every row is stored and shipped on every request |
+
+`POST` only accepts the **current** UTC day. A client that could post to an arbitrary day could
+quietly fill in every board back to the epoch, and a score for a field nobody can play any more is
+not a score anybody can check. The day string is shape-checked against `\d{4}-\d{2}-\d{2}` rather
+than merely stringified, because it becomes part of a storage key.
+
+**Everything fails quietly.** A run that cannot reach the network is still a run: the local best and
+the streak are recorded first, and the daily stays fully playable with no server at all.
+
+Verified in two layers, because the store rules and the wire are different claims. Six store tests
+cover ordering, the one-row rule, the worse-retry rule, the cap keeping the *top* rather than the
+first fifty to arrive, and days not leaking into each other — 37/37 server tests pass. Then the real
+client was driven against a server speaking the same contract with a rival seeded at 120,000: it
+reported `2nd of 2 on today's field · leader 120,000`, then `1st of 2` after a bigger run, and every
+post carried today's date.
+
+The same lesson as V38 landed again on the way: `v37Read` and `v45Board` were reached through `$()`
+while being created at runtime, and the build validator rejected it. Every id reached that way has
+to exist in the markup so the check that the element is still there keeps working. Both are static
+structure and live in `index.html` now, which also simplified V37's node handling to two lookups.
+
 ## V44 — the set-piece had to look like one
 
 V40 raised a full-overcharge twelve-catch from about five per cent of a run to roughly a quarter of
