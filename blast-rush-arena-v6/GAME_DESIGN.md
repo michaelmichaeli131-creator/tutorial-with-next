@@ -1,5 +1,82 @@
 # Blast Rush Arena V6 — Game and Social Design
 
+## V41–V43 — the titan, the shop, and the cheerful kills
+
+Three reports, three different kinds of fault.
+
+### V41 — the titan's health bar was covering the titan
+
+Measurable, and the measurement is the whole diagnosis. With a boss on the field its centre sat at
+y=181 with a radius of 105, so it spanned **y 76 to 286** — while its own health card spanned
+**y 118 to 178**, straight across its face, with the wave bar crossing its head above that. What
+remained visible was a slice of body and some floating weak points. The fight had a health bar and
+no monster.
+
+The card was built like a panel — 60px tall, its own padding and title line, parked in the middle
+of the play area. It is a strip at the frame edge now, and the titan drops to 36% of screen height
+and grows 28%, which puts its top at y=181 against a bar ending at 173.
+
+On making it imposing, since it is easy to reach for gore and get nothing: a thing is frightening
+when it is **large** relative to you, **heavy** enough that hitting it will not move it, and plainly
+**aware of you**. So it gained a dark mass wider than its lit body, a shadow cast down the arena
+toward the reactor, and a single red eye that tracks the reactor with a lag — a head that snaps
+reads as a turret, one that swings late reads as something heavy deciding to look at you. A titan
+on the field now also holds V35's dread at a floor of 0.55, so the fight never brightens back to a
+normal wave halfway through.
+
+The first eye was white at the gradient centre with a white slit on top, and it read as a friendly
+glowing orb — the two whites swamped the red entirely. It is red almost all the way in now, with
+white only in the pupil line.
+
+### V42 — you could not see what you were buying
+
+The armory weapon card was a name, a tag, a paragraph and five level pips. Nothing on it was an
+image. A player choosing between 2,100 credits for ARC CHAIN and 1,500 for VOID LANCE had two
+sentences of prose to go on, in a shop for a game whose entire appeal is what the shooting looks
+like.
+
+Each card now draws its weapon firing from a muzzle at the bottom, in that weapon's own colour
+pulled from the same table the arena uses — one heavy bolt for PULSE, three diverging for SCATTER,
+a shaft through two struck targets for LANCE, a kinked path between nodes for ARC, a shell bursting
+into rings for NOVA, a line with shards coming back down it for SIPHON. Diagrams of *behaviour*
+rather than icons, because what separates these weapons is what the shot does. The same thumbnail
+goes on the in-combat weapon chip, so what you bought and what is firing are visibly the same
+thing.
+
+One fault worth recording: the base stylesheet styles the *element* — `canvas { position: fixed;
+inset: 0; width: 100%; height: 100% }` — for the arena surface, and that applies to every canvas in
+the document. All six diagrams were position-fixed and stacked in the top-left corner over the
+header, while a DOM check reported six canvases present and none blank. It had to be found by
+reading computed geometry, not by counting elements.
+
+### V43 — the kills were cheerful
+
+Two earlier passes each got half of this right. V34 made every kill a note in the soundtrack's key,
+fixing a real fault: before it, the combo raised pitch continuously against a fixed-key arrangement,
+so a good run drifted further out of tune the better it went. V36 then made the music tense — a
+pedal bass that stops following the chord, a sus voicing that never lands, the kit emptying out.
+
+What was left is a contradiction you can hear: a hollow, unresolved arrangement with **bright
+consonant arcade plucks fired over the top of it**. Every kill was a clean triangle pluck with a
+perfect fifth stacked on it — the most settled interval in music. The track was refusing to resolve
+and the kills were resolving on every shot.
+
+The pitch structure stays, because it earned its place; the character changes.
+
+- The companion interval becomes a **tritone** instead of a fifth — the single biggest change in
+  how a kill reads.
+- **Every kill bends down** a whole tone as it decays. Things that die fall in pitch; the note was
+  static, which is why it read as *played* rather than as coming apart.
+- Filters open around half as high, so the voice is a body rather than a chime.
+- A narrow band of **grit** under the transient, so a kill has debris in it.
+- The tap loses its bell entirely: it was a bright blip an octave above the kills' register, which
+  made every shot an event and left the kill nothing to be. It is a dry click now.
+
+Verified with the same spy used for V34: fundamentals and the combo climb are byte-identical —
+440, 494, 523, 587, 659, 699, 784, 880, 988, 1175, 1397, 1760 Hz, then holding. The scale check now
+reports `OFF-SCALE: 42.00` on several species, which is the tritone at +6 semitones doing exactly
+what it was added to do.
+
 ## V40 — the two biggest buttons were decoration
 
 The brief was "fun and addictive", and the daily arena had just made something measurable that

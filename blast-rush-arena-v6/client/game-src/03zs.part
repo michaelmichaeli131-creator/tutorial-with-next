@@ -1,0 +1,121 @@
+/* V41 — give the titan room, and give it weight.
+
+   Two faults, and the first one is measurable. With a boss on the field its centre sat at y=181
+   with a radius of 105, so it spanned y 76 to 286 — while its own health card spanned y 118 to 178,
+   directly across its face, with the wave bar crossing its head above that. What remained visible
+   was a slice of body and some floating weak points. The fight had a health bar and no monster.
+
+   The card is slimmed and moved to the frame edge in v41-titan.css. This part does the other half:
+   the titan drops far enough to clear the HUD entirely, grows, and gains the presence it never had.
+
+   On what "imposing" means here, since it is easy to reach for gore and get nothing: scale, weight
+   and attention. A thing is frightening when it is *large* relative to you, when it looks *heavy*
+   enough that hitting it will not move it, and when it is plainly *aware of you*. All three are
+   cheap. None of them is a new sprite. */
+
+const V41={
+ /* Deep enough that the top of the body clears the health strip with room to spare, and low enough
+    that the titan crowds the arena the way something that size should. */
+ restY:isMobile?.36:.30,
+ bob:16,
+ /* It was 90 units before device scaling — smaller than two scouts side by side. */
+ grow:1.28
+};
+
+const v41SpawnBoss=spawnBoss;
+spawnBoss=function(omega=false){
+ v41SpawnBoss(omega);
+ const b=game.boss;
+ if(!b)return;
+ b.r*=V41.grow;
+ b.v41Eye=0;
+};
+
+/* The base recomputes the resting height every frame, so this has to run after it rather than
+   patching the spawn. */
+const v41UpdateTitan=update;
+update=function(dt){
+ v41UpdateTitan(dt);
+ const b=game.boss;
+ if(!b||!game.running||game.paused)return;
+ b.y=H*V41.restY+Math.sin(b.t*.7)*V41.bob;
+ /* The eye lags the reactor rather than snapping to it. A head that tracks instantly reads as a
+    turret; one that swings late reads as something heavy deciding to look at you. */
+ const want=Math.atan2(H-(isMobile?105:72)-b.y,W/2-b.x);
+ b.v41Eye=(b.v41Eye||want)+(want-(b.v41Eye||want))*Math.min(1,dt*1.6);
+};
+
+/* ---- Presence ----
+   Drawn under the existing titan art rather than replacing it: a mass that reads as bulk, and a
+   shadow it throws down the arena. The body the art pack draws is a silhouette; what was missing
+   was the sense that the silhouette weighs something. */
+const v41DrawBoss=drawBoss;
+drawBoss=function(b,w){
+ const pulse=.5+.5*Math.sin(b.t*1.1);
+
+ ctx.save();
+ /* The bulk. A dark mass wider than the body, so the creature reads as bigger than the part of it
+    that is lit — the oldest trick there is for making something look large. */
+ ctx.globalCompositeOperation='source-over';
+ const mass=ctx.createRadialGradient(b.x,b.y+b.r*.1,b.r*.3,b.x,b.y+b.r*.1,b.r*1.7);
+ mass.addColorStop(0,'rgba(4,2,10,.92)');
+ mass.addColorStop(.55,'rgba(6,3,14,.55)');
+ mass.addColorStop(1,'rgba(6,3,14,0)');
+ ctx.fillStyle=mass;
+ ctx.beginPath();ctx.ellipse(b.x,b.y+b.r*.1,b.r*1.7,b.r*1.35,0,0,Math.PI*2);ctx.fill();
+
+ /* The shadow it throws toward the reactor. It is the only thing on screen that says the titan is
+    between the player and the light. */
+ ctx.globalAlpha=.5;
+ const cast=ctx.createLinearGradient(b.x,b.y,b.x,H);
+ cast.addColorStop(0,'rgba(2,1,6,.7)');
+ cast.addColorStop(1,'rgba(2,1,6,0)');
+ ctx.fillStyle=cast;
+ ctx.beginPath();
+ ctx.moveTo(b.x-b.r*.9,b.y);
+ ctx.lineTo(b.x+b.r*.9,b.y);
+ ctx.lineTo(b.x+b.r*2.4,H);
+ ctx.lineTo(b.x-b.r*2.4,H);
+ ctx.closePath();ctx.fill();
+ ctx.restore();
+
+ v41DrawBoss(b,w);
+
+ /* The eye. One, deliberately — a single tracking light is more unsettling than a face, and it is
+    the clearest possible statement that the thing has chosen a target. */
+ ctx.save();
+ ctx.globalCompositeOperation='lighter';
+ const ex=b.x+Math.cos(b.v41Eye||0)*b.r*.16;
+ const ey=b.y+Math.sin(b.v41Eye||0)*b.r*.16;
+ /* The first pass put white at the centre of the gradient and a white slit on top of it, and the
+    result was a friendly glowing orb — the two whites swamped the red entirely. The bloom is red
+    almost all the way in now, and the only white left is the thin line of the pupil itself. */
+ const eye=ctx.createRadialGradient(ex,ey,1,ex,ey,b.r*(.36+pulse*.06));
+ eye.addColorStop(0,'#ffb4a2');
+ eye.addColorStop(.09,'#ff3a22');
+ eye.addColorStop(.32,'rgba(196,18,10,.6)');
+ eye.addColorStop(.7,'rgba(150,10,6,.22)');
+ eye.addColorStop(1,'transparent');
+ ctx.fillStyle=eye;
+ ctx.beginPath();ctx.arc(ex,ey,b.r*(.36+pulse*.06),0,Math.PI*2);ctx.fill();
+ /* A slit, not a disc: a round glow is a lamp, a narrow one is a pupil. Rotated to face the
+    reactor so the direction it is looking is readable at a glance. */
+ ctx.globalAlpha=.9;
+ ctx.fillStyle='#ffd9cc';
+ ctx.beginPath();
+ ctx.ellipse(ex,ey,b.r*.028,b.r*(.17+pulse*.03),(b.v41Eye||0)+Math.PI/2,0,Math.PI*2);
+ ctx.fill();
+ ctx.restore();
+ ctx.globalAlpha=1;
+};
+
+/* A titan on the field holds the arena near its darkest for as long as it lives. V35 already lifts
+   dread while a boss is out; this puts a floor under it so the fight never brightens back to a
+   normal wave halfway through. */
+const v41UpdateDread=update;
+update=function(dt){
+ v41UpdateDread(dt);
+ if(game.running&&!game.paused&&game.boss){
+  game.v35Dread=Math.max(game.v35Dread||0,.55);
+ }
+};

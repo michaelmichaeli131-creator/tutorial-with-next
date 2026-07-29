@@ -1,0 +1,170 @@
+/* V42 — you could not see what you were buying.
+
+   The armory weapon card was a name, a tag, a paragraph and five level pips. Nothing on it was an
+   image. A player deciding whether to spend 2,100 credits on ARC CHAIN over 1,500 on VOID LANCE had
+   two sentences of prose to go on, in a shop for a game whose whole appeal is what the shooting
+   looks like.
+
+   The obvious fix is an icon per weapon. The better one is a *diagram of the behaviour*: what
+   separates these weapons is not how they look for one frame, it is what the shot does — one bolt,
+   three diverging bolts, a beam that goes through things, a bolt that jumps, a shell that bursts, a
+   line that drags value back. So each card draws its weapon firing, from a muzzle at the bottom,
+   in that weapon's own colour taken from the same table the arena uses. What you see in the shop is
+   what will come out of the reactor.
+
+   Drawn rather than authored as images because these have to stay in step: if a weapon's colour
+   changes in v15WeaponVfx the shop follows it automatically, which a hand-exported PNG would not. */
+
+const V42_SIZE={w:132,h:74};
+
+/* Each painter works in a 132x74 box with the muzzle at the bottom centre, so the six read as one
+   set rather than six unrelated pictures. */
+const V42_ART={
+ /* One heavy bolt straight up the middle: the weapon that does exactly one thing well. */
+ bolt(c,col,spark){
+  v42Beam(c,66,64,66,16,5,col);
+  v42Dot(c,66,16,7,col,spark);
+ },
+ /* Three diverging bolts from one muzzle — the shape says "crowd" before the tag does. */
+ spread(c,col,spark){
+  for(const dx of [-30,0,30]){
+   v42Beam(c,66,64,66+dx,20,3.4,col);
+   v42Dot(c,66+dx,20,4.6,col,spark);
+  }
+ },
+ /* A single shaft running the full height with two hostiles struck through it: pierce, drawn. */
+ lance(c,col,spark){
+  v42Beam(c,66,68,66,8,7,col);
+  c.globalAlpha=.55;
+  for(const y of [24,44]){
+   c.strokeStyle=spark;c.lineWidth=2;
+   c.beginPath();c.arc(66,y,11,0,Math.PI*2);c.stroke();
+  }
+  c.globalAlpha=1;
+  v42Dot(c,66,8,6,col,spark);
+ },
+ /* A bolt that jumps: three nodes, a kinked path, and that is the entire pitch of the weapon. */
+ arc(c,col,spark){
+  const pts=[[66,64],[40,44],[92,30],[62,12]];
+  c.strokeStyle=col;c.lineWidth=3.2;c.shadowBlur=14;c.shadowColor=col;
+  c.beginPath();c.moveTo(pts[0][0],pts[0][1]);
+  for(let i=1;i<pts.length;i++)c.lineTo(pts[i][0],pts[i][1]);
+  c.stroke();
+  c.strokeStyle=spark;c.lineWidth=1.3;c.stroke();
+  c.shadowBlur=0;
+  for(let i=1;i<pts.length;i++)v42Dot(c,pts[i][0],pts[i][1],4.4,col,spark);
+ },
+ /* A shell rising into an expanding ring: the only one of the six whose damage is an area. */
+ mortar(c,col,spark){
+  v42Beam(c,66,66,66,34,4,col);
+  c.strokeStyle=col;c.shadowBlur=16;c.shadowColor=col;
+  c.globalAlpha=.9;c.lineWidth=3.4;
+  c.beginPath();c.arc(66,26,17,0,Math.PI*2);c.stroke();
+  c.globalAlpha=.4;c.lineWidth=2;
+  c.beginPath();c.arc(66,26,26,0,Math.PI*2);c.stroke();
+  c.shadowBlur=0;c.globalAlpha=1;
+  v42Dot(c,66,26,5,col,spark);
+ },
+ /* A line out and shards coming back down it: this weapon is paid in credits, not damage. */
+ tether(c,col,spark){
+  c.strokeStyle=col;c.lineWidth=2.6;c.shadowBlur=12;c.shadowColor=col;
+  c.beginPath();c.moveTo(66,64);c.quadraticCurveTo(96,44,70,16);c.stroke();
+  c.shadowBlur=0;
+  v42Dot(c,70,16,6,col,spark);
+  c.fillStyle=spark;
+  for(const [x,y,s] of [[84,48,4],[78,34,3.2],[88,58,2.6]]){
+   c.beginPath();
+   c.moveTo(x,y-s);c.lineTo(x+s*.75,y);c.lineTo(x,y+s);c.lineTo(x-s*.75,y);
+   c.closePath();c.fill();
+  }
+ }
+};
+
+function v42Beam(c,x0,y0,x1,y1,width,col){
+ c.save();
+ c.shadowBlur=16;c.shadowColor=col;
+ c.strokeStyle=col;c.lineCap='round';
+ c.lineWidth=width;
+ c.beginPath();c.moveTo(x0,y0);c.lineTo(x1,y1);c.stroke();
+ c.restore();
+}
+
+function v42Dot(c,x,y,r,col,spark){
+ const g=c.createRadialGradient(x,y,0,x,y,r*2.1);
+ g.addColorStop(0,spark);
+ g.addColorStop(.4,col);
+ g.addColorStop(1,'transparent');
+ c.fillStyle=g;
+ c.beginPath();c.arc(x,y,r*2.1,0,Math.PI*2);c.fill();
+}
+
+/* One sprite per weapon, built once. Six small canvases cost nothing and the armory rebuilds its
+   list on every purchase, upgrade and tab switch — repainting six diagrams each time would be work
+   for no reason. */
+const v42Sprites=new Map();
+function v42Sprite(id){
+ const hit=v42Sprites.get(id);
+ if(hit)return hit;
+ const vfx=(typeof v15WeaponVfx==='object'&&v15WeaponVfx[id])||{color:'#7ee8ff',spark:'#ffffff',kind:'bolt'};
+ const paint=V42_ART[vfx.kind]||V42_ART.bolt;
+ const sprite=document.createElement('canvas');
+ const dpr=Math.min(devicePixelRatio||1,2);
+ sprite.width=Math.round(V42_SIZE.w*dpr);
+ sprite.height=Math.round(V42_SIZE.h*dpr);
+ const c=sprite.getContext('2d');
+ c.setTransform(dpr,0,0,dpr,0,0);
+ /* A muzzle to fire from, so the diagram has an origin and does not float. */
+ c.fillStyle='rgba(255,255,255,.14)';
+ c.beginPath();c.roundRect?c.roundRect(56,64,20,8,3):c.rect(56,64,20,8);c.fill();
+ paint(c,vfx.color,vfx.spark);
+ v42Sprites.set(id,sprite);
+ return sprite;
+}
+
+/* ---- Armory ---- */
+
+const v42WeaponCard=v14WeaponCard;
+v14WeaponCard=function(weapon){
+ const card=v42WeaponCard(weapon);
+ if(!card||card.querySelector('.v42-art'))return card;
+ const art=document.createElement('canvas');
+ art.className='v42-art';
+ art.width=V42_SIZE.w;
+ art.height=V42_SIZE.h;
+ const c=art.getContext('2d');
+ c.drawImage(v42Sprite(weapon.id),0,0,V42_SIZE.w,V42_SIZE.h);
+ /* Above the description, below the name: it is the answer to "what is this", so it belongs where
+    the eye lands after reading the title. */
+ const head=card.querySelector('header');
+ if(head&&head.nextSibling)card.insertBefore(art,head.nextSibling);
+ else card.insertBefore(art,card.firstChild);
+ return card;
+};
+
+/* ---- In combat ----
+   The weapon chip in the HUD carried the weapon's name and nothing else, so the connection between
+   what was bought and what is firing had to be made from memory. */
+function v42PaintChip(){
+ const chip=$('weaponChip');
+ if(!chip)return;
+ let art=chip.querySelector('.v42-chip-art');
+ if(!art){
+  art=document.createElement('canvas');
+  art.className='v42-chip-art';
+  art.width=V42_SIZE.w;
+  art.height=V42_SIZE.h;
+  chip.insertBefore(art,chip.firstChild);
+ }
+ const id=v14Save.weapon;
+ if(art.dataset.for===id)return;
+ art.dataset.for=id;
+ const c=art.getContext('2d');
+ c.clearRect(0,0,V42_SIZE.w,V42_SIZE.h);
+ c.drawImage(v42Sprite(id),0,0,V42_SIZE.w,V42_SIZE.h);
+}
+
+const v42ShowGame=showGame;
+showGame=function(){
+ v42ShowGame();
+ v42PaintChip();
+};

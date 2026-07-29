@@ -29,6 +29,7 @@ const STYLESHEETS = [
   "v20-duel.css",
   "v37-result.css",
   "v38-settings.css",
+  "v41-titan.css",
 ];
 
 export async function buildStyles(): Promise<void> {
