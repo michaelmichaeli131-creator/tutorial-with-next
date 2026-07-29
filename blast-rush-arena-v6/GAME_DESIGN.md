@@ -1,5 +1,54 @@
 # Blast Rush Arena V6 — Game and Social Design
 
+## V36 — tension is what you take away
+
+The follow-up to V35 sharpened the brief: more tension, only a trace of fright, and put it in the
+sounds and the soundtrack rather than on the screen. That is a different problem from the one V35
+solved, and the instinct it rules out is the obvious one — reaching for scarier noises.
+
+What actually makes music tense is harmony that will not resolve and a floor that will not move,
+and then **removing things**. A busy arrangement is thrilling; a sparse one over a held bass is
+unbearable in the way this game wants to be. V30's `intensity` was already an excitement curve that
+thickened the track as a run heated up. Tension needed the opposite curve, driven by V35's dread so
+the arrangement and the screen tighten together.
+
+- **The pedal.** Above dread 0.25 the sub stops following the chord and holds the tonic while the
+  harmony keeps moving above it. Two of the eight bars in the phrase then sit a minor third or a
+  tritone away from their own bass. It is the most reliable tension device in film scoring and it
+  is not remotely frightening.
+- **The chord stops arriving.** The pad's settled minor triad `[0,7,12,15]` becomes `[0,5,12,14]` —
+  a sus voicing, a chord that has not decided yet. Nothing in it is dissonant enough to alarm
+  anyone; it simply never lands.
+- **The kit empties.** Hats go first — they are pure forward motion, which is the opposite of
+  dread — dropping to eighths and then stopping. The snare loses its bright layer, the moving bass
+  line drops out under the pedal, the arp stops.
+- **A held fifth** enters above dread 0.45, two oscillators a few cents apart beating slowly, at a
+  fortieth of the mix. Most players will never consciously hear it.
+
+Read out of the scheduler over one full 32-bar form:
+
+| dread | events | kick | snare + hats | moving bass | sub | distinct bass notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0 | 1348 | 124 | 352 | 230 | 192 | **5** |
+| 0.35 | 1348 | 124 | 352 | 236 | 192 | **1** |
+| 0.8 | 708 | 124 | 72 | 68 | 192 | **1** |
+
+The track loses nearly half its events while the kick and the sub are untouched — the floor stays,
+the motion goes. The bass locks to one note at 0.35 and the thinning only begins after that, so the
+harmony tightens first and the arrangement empties later, as things actually get worse.
+
+**Two cues were rebuilt** for the same reason. Losing a life was an explosion and a diver's lock-on
+was a beep; neither is a tension sound. Tension in an interface comes from things that sound like
+systems in trouble, not like impacts. Damage is now a power-down — the reactor's own note bending
+flat a tritone and dying while the sub drops out from under it, the sound of losing something
+rather than of something arriving. The lock-on is two tones a tritone apart that overlap before the
+first has finished.
+
+**And V35's own sound was walked back.** The hush swell was a minor second grinding up out of the
+sub, which is pure fright and the wrong instrument for this brief; it is a detuned fifth now. The
+heartbeat was too loud and started at one lost life, which is a setback rather than a crisis and
+left the pulse nowhere to go — it is roughly half the level and starts at dread 0.52.
+
 ## V35 — dread
 
 The brief was tension and a little fear. The first thing worth saying is why the game had neither,

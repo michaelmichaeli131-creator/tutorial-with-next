@@ -132,22 +132,24 @@ nextWave=function(){
 
 /* ---- Sound -------------------------------------------------------------------------------- */
 
-/* A swell under the hush: two detuned sub oscillators rising a minor second, which is the interval
-   that refuses to settle. Tuned to the world root so it belongs to the arrangement rather than
-   sitting on top of it. */
+/* A swell under the hush. The first version of this was a monster-movie cue — a minor second
+   grinding up out of the sub. That is the wrong instrument for the brief: the ask is tension with
+   only a trace of fright, and a minor second in the bass is pure fright. This is a fifth instead,
+   detuned so it beats slowly and closing its filter as it rises — a system spooling up under load.
+   It makes you brace; it does not make you flinch. */
 audio.dread=function(){
  if(!this.ctx||!save.sfx)return;
  const root=typeof v34Root==='function'?v34Root():55;
  const t=this.ctx.currentTime;
  const g=this.ctx.createGain();
  g.gain.setValueAtTime(.0001,t);
- g.gain.exponentialRampToValueAtTime(.34,t+V35.hush*.75);
+ g.gain.exponentialRampToValueAtTime(.26,t+V35.hush*.75);
  g.gain.exponentialRampToValueAtTime(.0001,t+V35.hush+.5);
  const filter=this.ctx.createBiquadFilter();
  filter.type='lowpass';
  filter.frequency.setValueAtTime(220,t);
  filter.frequency.exponentialRampToValueAtTime(90,t+V35.hush);
- for(const [mult,detune] of [[1,-6],[1,7],[Math.pow(2,1/12),4]]){
+ for(const [mult,detune] of [[1,-6],[1,7],[1.4983,5]]){
   const osc=this.ctx.createOscillator();
   osc.type='sawtooth';
   osc.frequency.setValueAtTime(root*mult,t);
@@ -158,8 +160,14 @@ audio.dread=function(){
  filter.connect(g);g.connect(this.sfxGain);
 };
 
-/* The heartbeat. Two thumps, the second softer and close behind — a single thump is a drum, the
-   pair is a pulse, and the brain hears the difference immediately. */
+/* The pulse. Two thumps, the second softer and close behind — a single thump is a drum, the pair
+   reads as a heartbeat and the brain hears the difference immediately.
+
+   Deliberately kept under the arrangement rather than over it. A loud heartbeat is a horror cue and
+   the brief is tension with barely any fright, so this sits low enough that most of the time it is
+   felt as the floor tightening rather than heard as a heart. It also starts later than it used to:
+   one lost life is a setback, not a crisis, and a pulse that arrives that early has nowhere to go
+   by the time things are actually bad. */
 audio.heartbeat=function(level){
  if(!this.ctx||!save.sfx)return;
  const t=this.ctx.currentTime;
@@ -167,8 +175,8 @@ audio.heartbeat=function(level){
   const osc=this.ctx.createOscillator();
   const g=this.ctx.createGain();
   osc.type='sine';
-  osc.frequency.setValueAtTime(64,t+when);
-  osc.frequency.exponentialRampToValueAtTime(38,t+when+.13);
+  osc.frequency.setValueAtTime(58,t+when);
+  osc.frequency.exponentialRampToValueAtTime(33,t+when+.15);
   g.gain.setValueAtTime(.0001,t+when);
   g.gain.exponentialRampToValueAtTime(Math.max(.0002,gain),t+when+.012);
   g.gain.exponentialRampToValueAtTime(.0001,t+when+.17);
@@ -177,8 +185,9 @@ audio.heartbeat=function(level){
  }
 };
 
-/* Below this the pulse is not tension, it is a rattle under a game going fine. */
-const V35_PULSE_AT=.34;
+/* Below this the pulse is not tension, it is a rattle under a game going fine. Raised from .34,
+   which a single lost life reached on its own. */
+const V35_PULSE_AT=.52;
 function v35Pulse(dt){
  const dread=game.v35Dread||0;
  if(dread<V35_PULSE_AT){game.v35Heart=0;return;}
@@ -186,7 +195,7 @@ function v35Pulse(dt){
  game.v35Heart=(game.v35Heart||0)-dt;
  if(game.v35Heart>0)return;
  game.v35Heart=V35.heartLow-(V35.heartLow-V35.heartHigh)*k;
- audio.heartbeat(.1+k*.16);
+ audio.heartbeat(.05+k*.09);
 }
 
 /* The arrangement's own filter is driven by the audio layers above; dread pulls it further down
@@ -200,6 +209,56 @@ audio.update=function(g){
  /* setTargetAtTime with the smaller value wins on the same param, so this reads the layer below's
     intent and closes on top of it rather than fighting it every frame. */
  this.musicFilter.frequency.setTargetAtTime(Math.max(520,2600-dread*2100),this.ctx.currentTime,.35);
+};
+
+/* ---- The two cues that carry the strain ------------------------------------------------------
+
+   Losing a life and being marked by a diver are the only two moments the game genuinely needs the
+   player to feel in their stomach, and both were generic: an explosion and a beep. Neither is a
+   *tension* sound. Tension in an interface comes from things that sound like systems in trouble —
+   power draining, an alarm you cannot switch off — not from things that sound like impacts. */
+const v35SfxBase=audio.sfx.bind(audio);
+audio.sfx=function(name){
+ if(!this.ctx)return;
+ switch(name){
+  case 'damage':{
+   /* A power-down rather than a bang. The reactor's own note bends flat and dies while the sub
+      drops out from under it: the sound of losing something, which is what happened, instead of
+      the sound of something arriving. */
+   const root=typeof v34Root==='function'?v34Root():55;
+   this.snap(0,.26,700);
+   for(const [mult,delay,gain] of [[4,0,.3],[2,.03,.26],[1,.07,.3]]){
+    const t=this.ctx.currentTime+delay;
+    const osc=this.ctx.createOscillator();
+    const g=this.ctx.createGain();
+    osc.type='sawtooth';
+    osc.frequency.setValueAtTime(root*mult,t);
+    /* Down a tritone over the fall — the interval the ear refuses to accept as a destination. */
+    osc.frequency.exponentialRampToValueAtTime(root*mult*.7,t+.55);
+    g.gain.setValueAtTime(.0001,t);
+    g.gain.exponentialRampToValueAtTime(gain,t+.02);
+    g.gain.exponentialRampToValueAtTime(.0001,t+.62);
+    osc.connect(g);g.connect(this.sfxGain);
+    osc.start(t);osc.stop(t+.66);
+   }
+   this.tail(.02,1.1,.3,380);
+   haptic([28,22,40]);
+   return;
+  }
+  case 'warning':{
+   /* The diver's lock-on. Two tones a tritone apart, the second arriving before the first has
+      finished, so they overlap into an interval that will not resolve — the shape every alarm ever
+      designed borrows from. Short, twice, and never repeated while the same diver is committed. */
+   const root=typeof v34Root==='function'?v34Root():55;
+   for(const [mult,when] of [[8,0],[8*Math.pow(2,6/12),.075]]){
+    this.pluck(root*mult,when,.16,.14,when?.3:-.3,'square',2400,1200,6);
+   }
+   this.snap(.004,.12,2200);
+   return;
+  }
+  default:
+   return v35SfxBase(name);
+ }
 };
 
 /* ---- Screen ------------------------------------------------------------------------------- */
