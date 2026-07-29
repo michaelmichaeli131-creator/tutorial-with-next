@@ -1,5 +1,27 @@
 # Blast Rush Arena V6 — Game and Social Design
 
+## V46 — showing the board, not just the rank
+
+V45 posted the run and told you where you placed. "5th of 40" is half a hook: it says you lost
+without saying to whom or by how much. The number that makes somebody press PLAY AGAIN is the one
+immediately above theirs, and that needs the board actually visible.
+
+It sits on the social screen above the live arenas, reusing that screen's table rows so the two
+lists read as one surface. Two things are added to a row: **which one is yours**, tinted so the
+board can be read at a glance rather than searched, and **which is the lead**, whose score takes the
+gold the score readout uses everywhere else.
+
+A board that cannot load says so — "Today's board is unreachable. Your run still counts locally" —
+rather than rendering as an empty board. Those are very different facts and the daily is designed to
+work with no server at all, so the distinction has to survive into the UI.
+
+One fault the capture caught that the DOM check could not: **the score column was invisible on
+mobile.** The mobile stylesheet hides `code` inside a table row, which is right for a live arena
+where that column is the room code and the space is better spent on the name — and completely wrong
+here, where the same column is the score and the score is the entire reason the board exists. The
+row-count and text assertions passed the whole time, because the element was present and populated;
+it was `display: none`. Restored for this row type only.
+
 ## V45 — the daily board
 
 V39 built the daily arena and verified the field is identical across runs. What it could not do was

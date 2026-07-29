@@ -105,3 +105,21 @@
 /* Before the round trip lands there is nothing true to say, so it says so rather than showing a
    rank that is about to change. */
 .v45-board.pending { opacity: .55; font-style: italic; }
+
+/* The daily board rows reuse the live-arena table so the two lists on the social screen read as one
+   surface. Only two things are added: which row is yours, and which is the lead. */
+.v45-note { margin: 2px 0 10px; text-align: left; font-size: 12px; }
+/* The mobile sheet hides `code` inside a table row, because for a live arena that column is the
+   room code and the space is better spent on the name. Here the same column is the *score*, which
+   is the entire reason the board exists, so it is put back. */
+.v45-row code {
+  display: block !important;
+  font-variant-numeric: tabular-nums;
+  color: #cfe4f3;
+  font-weight: 1000;
+  font-size: 15px;
+}
+.v45-row small { display: block; margin-top: 2px; }
+.v45-row.first code { color: #ffe25e; }
+.v45-row.mine { border-color: #62e5ff88; background: rgba(98, 229, 255, .09); }
+.v45-row.mine b { color: #9ff6ff; }

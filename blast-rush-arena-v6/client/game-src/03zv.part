@@ -89,3 +89,57 @@ v39Menu=function(){
   })
   .catch(()=>{});
 };
+
+/* ---- The board itself ----
+
+   The rank line on the results screen says "5th of 40", which is half a hook: it tells you that you
+   lost without telling you to whom or by how much. The number that makes somebody press PLAY AGAIN
+   is the one immediately above theirs, and that requires actually showing the board.
+
+   It lives on the social screen next to the live arenas, because that screen is already the place
+   where you look at other people. */
+
+function v45Rows(entries,me){
+ const list=$('dailyBoardList');
+ if(!list)return;
+ if(!entries.length){
+  list.innerHTML='<p>Nobody has posted a run today. Be first.</p>';
+  return;
+ }
+ list.innerHTML='';
+ entries.slice(0,10).forEach((entry,i)=>{
+  const row=document.createElement('div');
+  /* Your own row is marked so the board can be read at a glance rather than searched. */
+  row.className='table-row v45-row'+(entry.name===me?' mine':'')+(i===0?' first':'');
+  row.innerHTML=
+   `<span><b>${escapeHtml(String(i+1))}. ${escapeHtml(entry.name)}</b>`+
+   `<small>WAVE ${escapeHtml(String(entry.wave))}</small></span>`+
+   `<code>${escapeHtml(format(entry.score))}</code>`;
+  list.append(row);
+ });
+}
+
+async function v45LoadBoard(silent=false){
+ const list=$('dailyBoardList');
+ if(!list)return;
+ if(!silent)list.innerHTML='<p class="scan-line">Reading today\u2019s board\u2026</p>';
+ try{
+  const res=await BlastNetwork.dailyBoard(v39Day());
+  v45Rows(res.entries||[],BlastNetwork.playerName);
+ }catch(e){
+  /* The daily is playable with no server at all, so a board that cannot load says so plainly
+     rather than looking like an empty board — those are very different facts. */
+  list.innerHTML='<p>Today\u2019s board is unreachable. Your run still counts locally.</p>';
+ }
+}
+
+bind('refreshDailyBtn',()=>v45LoadBoard());
+
+/* Loaded when the screen opens rather than on a timer: the board only changes when somebody
+   finishes a run, and this screen already refreshes the arena list on its own schedule. */
+const v45ShowScreen=showScreen;
+showScreen=function(id){
+ const out=v45ShowScreen(id);
+ if(id==='socialScreen')v45LoadBoard();
+ return out;
+};
