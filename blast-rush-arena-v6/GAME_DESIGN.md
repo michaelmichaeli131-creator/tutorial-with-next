@@ -1537,3 +1537,106 @@ The music is deliberately well above the sound effects in RMS terms, which is wh
 twice. If the kills now feel buried under it, `V54.bus` is the single knob, and 1.6 lands roughly
 halfway back to V52. `V54.master` and `V54.limitThreshold` should be left alone — they are protecting
 the output, not setting the balance.
+
+
+## V55 — the expensive weapons killed less than the free one
+
+Two notes: switching weapons should be felt, and an advanced weapon should kill more. Pulling the
+stats table out of the running client says both faults are real and the second is severe. Damage per
+tap, extra targets the special reaches, and how often the cooldown lets it fire, at a realistic five
+taps a second:
+
+    weapon     cost   L5 dmg/tap   extra targets   cooldown   1hp kills/s
+    pulse         0       3.0            0           0.00          5.0
+    scatter     900       1.0            6           0.24         30.0
+    lance      1500       4.0            0           0.30          5.0
+    arc        2100       1.0            6           0.28         26.4
+    siphon     2400       2.0            0           0.00          5.0
+    nova       2900       1.0            6           0.41         19.6
+
+Three faults fall out of it.
+
+**Three of the six weapons never gained damage at all.** Scatter, arc and nova sat at 1.0 through all
+five levels while charging 340, 460 and 520 credits per upgrade. A player who upgraded arc twice had
+spent 920 credits and could not tell.
+
+**Against a single target the expensive weapons were worse than the free one.** The 2,900-credit Nova
+Cannon did 1.0 damage a tap where the starter did 3.0; the 2,400-credit Shard Siphon did 2.0. The
+game was charging nearly three thousand credits for a downgrade at anything that was not a crowd.
+
+**Nova's cooldown made it a 1-damage weapon most of the time.** At level 1 it was 0.61s, so the blast
+— the entire reason to own it — fired on barely a third of taps.
+
+Every curve is rewritten so cost buys power while each weapon keeps its shape. After:
+
+    weapon     L5 dmg/tap   L5 1hp kills/s   L5 boss mult
+    pulse          3.0           5.0            2.40   (unchanged, the baseline everything else is set against)
+    scatter        2.4          32.3            1.62   (lowest single-target on purpose — 32/s on a crowd is what it sells)
+    lance          5.0           5.0            3.80   (highest single-target; the only weapon with no crowd tool at all)
+    arc            3.0          28.1            1.96
+    siphon         3.4           5.0            1.79
+    nova           4.4          29.0            2.40   (L1 cooldown 0.61 -> 0.42, L5 0.41 -> 0.25)
+
+### Why no weapon felt different
+
+One cause, and it is not the art — V42 already gave each weapon its own diagram and projectile. Every
+tactile channel in the game is a function of *what you killed*: `v16Detonate` takes its power from the
+hostile's type and whether the hit was perfect, and nothing in the freeze, camera punch, zoom, chroma,
+flash or haptic pulse depends on the weapon.
+
+Measured by killing an identical hostile with each weapon and reading the channels — the baseline was
+worse than "similar":
+
+    channel   heaviest / lightest, before
+    freeze     1.00x   IDENTICAL
+    chroma     1.00x   IDENTICAL
+    flash      1.00x   IDENTICAL
+    zoom       1.35x   (random per-hit component, not the weapon)
+    shake      1.56x   (nova only, as a side effect of its explode() call)
+
+Three of five channels were byte-identical across all six weapons. They could not convey a difference.
+
+The fix is one weight per weapon folded into `power` on the way into the detonation, so all six
+channels move together — which matters, because if only one moves the brain reads it as a glitch
+rather than as mass. Hitstop gets a second scale of its own, since duration rather than amount is what
+reads as weight there, and V16 clamps it at .1s: heavy weapons are allowed past that, fast ones pulled
+under it. Shake and haptics are set separately because they do not route through the detonation, and
+chained or splashed hits take a quarter scale so a scatter volley does not stack six shakes into one
+frame. After:
+
+    weapon      freeze(s)   zoom    chroma   shake   flash
+    scatter      0.0739    0.0255   0.346    8.45    0.086
+    pulse        0.0890    0.0284   0.480   10.25    0.120
+    arc          0.0836    0.0358   0.432    9.65    0.108
+    siphon       0.0863    0.0371   0.456    9.45    0.114
+    lance        0.1450    0.0506   0.720   11.65    0.180
+    nova         0.1600    0.0569   0.816   15.95    0.204
+
+Every channel now spans 1.9x to 2.4x between the lightest weapon and the heaviest.
+
+### Visible before you buy
+
+The armory said "Levels add raw punch and titan damage" in prose and showed five pips. Neither told
+anyone that upgrading arc added no damage whatsoever, which is how a table like the one at the top of
+this section survives unnoticed. Each card now carries its actual numbers under V42's diagram —
+damage, titan multiplier, and whichever of targets, chain, blast radius or credit rate that weapon
+has — with the gain the next level buys beside each one in green. Numbers cannot hide a flat curve.
+
+### What is measured and what is not
+
+Reliable, because it is arithmetic on the stats functions read out of the live client: the throughput
+tables above. Reliable, because it is deterministic and A/B'd by excluding the layer: the feedback
+channel measurements.
+
+Directional only: a bot run with nova at level 5, same policy and 60 seconds, reached wave 7 with V55
+against wave 4 without it, for 24% more score. That is the intended effect showing up in play, but the
+run logged only 29 and 38 taps against an expected ~360, so something about the seeded loadout is not
+driving the tap loop properly and the absolute numbers should not be trusted. Both sides share the
+anomaly, which is why the direction is worth recording and the magnitude is not.
+
+**Not established: what this does to campaign difficulty per weapon.** Stage one still clears with
+lives lost every run and one or two stars rather than three, and the gauntlet titan still scores in its
+historical 42-45k band, so nothing has obviously collapsed — but `combat.mjs` plays pulse, which is
+deliberately unchanged, so those runs do not probe the buff. Late stages with a level-5 nova or lance
+are the case to watch. Every number lives in `V55_STATS`, one function per weapon, if the ramp needs
+pulling back.
