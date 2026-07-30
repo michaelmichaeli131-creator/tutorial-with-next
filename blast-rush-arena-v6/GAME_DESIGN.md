@@ -1372,3 +1372,95 @@ direction was consistent across three measurements; the individual decibel value
 approximate.
 
 Audit, legacy, combat and the V49 bed harness all pass.
+
+
+## V53 — the heavy cues were the quiet ones
+
+V52 found the music was putting its energy below what a phone speaker can reproduce. The kill sounds
+are built from the same materials — swept lowpasses that close low, a sub swell an octave under the
+note — so the obvious next question was whether they share the problem. They do, and the pattern is
+more specific than "the sound effects are wrong".
+
+Profiled by firing each cue directly and holding the peak per band across its decay:
+
+    cue            below 400Hz   400Hz-6k   verdict
+    kill (scout)      -80.1        -43.0     ok
+    combo             -89.3        -41.2     ok
+    damage            -38.0        -46.9     8.9dB the wrong way
+    killBomb          -34.7        -45.7     11.0dB
+    killArmored       -31.0        -42.8     11.7dB
+    blast             -30.8        -45.4     14.5dB
+    hit               -48.4        -67.5     19.1dB
+
+The light cues are fine. The scout kill and the combo chain put their energy exactly where a phone can
+project it, which is presumably why the fast shooting already feels good. What fails is specifically
+**the cues built to feel heavy**, plus the shot confirmation. Each expresses weight the way weight is
+expressed on a full-range system — by going low — and on a phone that band does not exist. The
+moments meant to hit hardest arrive thinnest.
+
+### Two different fixes, because there are two different faults
+
+For a cue whose weight genuinely belongs in the sub, the low end should stay — on headphones it is
+right, and V52 made the same call about the music. What is missing is a way for that weight to survive
+a speaker that cannot produce it, and psychoacoustics supplies one: the **missing fundamental**. Given
+several adjacent harmonics of a tone, the ear reconstructs that tone's pitch even when the fundamental
+is absent entirely; it is how a telephone conveys a bass voice through a band starting at 300Hz. So
+`damage`, `blast` and the raider kill gain a quiet stack of adjacent harmonics of their own note,
+placed where a phone is efficient. Harmonics 13–16 of a 55Hz swell land at 715–880Hz and the ear fuses
+them back into 55Hz. Adjacency is the part that matters — the fundamental is derived from the *spacing*
+between partials, and the spacing is the fundamental whichever harmonics are used.
+
+Harmonics rather than a mid-range thump on purpose: a thump would be a second event, and V47 removed
+percussion from these cues deliberately. A harmonic stack of the same note is the same event heard
+through a smaller window.
+
+The shot confirmation needed the other fix. It profiled worst of everything at 19.1dB, and a harmonic
+stack was the wrong tool — trying it produced a measurement too noisy to conclude anything from. The
+cause is simpler: V49 builds it on `v34Root()*4`, which is 220Hz, so its fundamental sits in the
+200–400Hz band a phone cannot project, and a triangle's third harmonic is weak and gets attenuated as
+the filter closes to 420Hz. When a cue's fundamental is in the wrong place, move the fundamental. An
+octave up puts it at 440Hz — in the passband, still exactly in key, brighter in a way that suits shot
+confirmation on a small speaker, and one number instead of four extra oscillators on the most
+frequently scheduled cue in the game.
+
+### Measured, and what did not work
+
+A/B by moving the part aside, medians over fifteen firings each, with the spread of the two decision
+figures reported so a difference can be compared against the noise:
+
+    cue            passband before      passband after      change
+    hit            -67.5 (+-4.1)        -50.6 (+-2.2)       +16.9 dB   19.1 -> -19.9, now ok
+    blast          -45.4 (+-1.1)        -38.5 (+-1.2)        +6.9 dB   14.5 -> 6.9
+    damage         -46.9 (+-0.7)        -40.6 (+-1.1)        +6.3 dB    8.9 -> 2.7
+    killBomb       -45.7 (+-2.4)        -39.9 (+-1.8)        +5.8 dB   11.0 -> 5.4
+    killArmored    -42.8 (+-1.7)        -40.6 (+-2.9)        +2.2 dB   no real change
+    kill / combo   unchanged, as intended
+
+**The sentinel is not fixed.** Its 2.2dB is inside the spread, so it should be read as no change. The
+reason is instructive: its passband was already occupied by V47's inharmonic ring partials at 607 and
+1189Hz, so adding more harmonics there does not move the peak, while its below-400 figure is dominated
+by a 220Hz fundamental bending downward. Improving the ratio would mean reducing that low content,
+which is a design change to the species rather than a mix fix — V34 assigned the registers per
+species deliberately, and the sentinel's identity is being the low one. Left alone and recorded.
+
+Zero noise sources remain on all six species, so V47's removal of the drums is intact, and twelve
+kills in one frame still schedule 36 nodes because the residue only applies to the two kits that
+needed it and the simultaneous-voice budget is unchanged.
+
+### The instrument had to be rebuilt twice first
+
+Worth recording, because the first two versions would have produced another false claim. Sampling the
+analyser from Node at 30ms intervals missed the transient on most repetitions — per-repetition spreads
+of 50 to 65dB, which is the signature of reading silence half the time. Moving the sampling loop
+inside the page removed the IPC latency. Then the reported spread was still enormous, because it was
+the maximum across all bands and was dominated by bands that are simply *empty* for that cue: a band
+swinging between -140 and -75dB is not noise, it is silence. Reporting the spread of the two figures
+the verdict actually rests on brought it to between ±0.7 and ±4.4dB, which is finally small enough to
+compare a five-decibel change against.
+
+### What only an ear can settle
+
+Whether the harmonic stack fuses into weight or is heard as a metallic cluster on top of the cue is
+not something a spectrum can answer, and the raider's stack is the loudest of them. If it reads as a
+bell rather than as a heavier raider, `V53.gain`, `V53.boomBoost` and `V53.count` are the knobs, and
+`V53.count` down to 3 is the first thing to try.
