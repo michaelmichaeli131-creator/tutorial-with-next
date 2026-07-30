@@ -1464,3 +1464,76 @@ Whether the harmonic stack fuses into weight or is heard as a metallic cluster o
 not something a spectrum can answer, and the raider's stack is the loudest of them. If it reads as a
 bell rather than as a heavier raider, `V53.gain`, `V53.boomBoost` and `V53.count` are the knobs, and
 `V53.count` down to 3 is the first thing to try.
+
+
+## V54 — actually louder
+
+V52 fixed *where* the music sat in the spectrum, which was a real fault, and moved the bus from
+`curve*0.5` to `curve*0.9`. The note back was that it is still heard very weakly. That is a level
+request, and it gets answered as one.
+
+Three places the level was being given away, all measured rather than assumed:
+
+1. **The bus gain.** At the default slider it worked out to 0.68 and the music bus measured about
+   -28dBFS RMS. Game music normally sits nearer -18. Roughly ten decibels missing.
+2. **The master gain was 0.78.** Two decibels of headroom discarded at the final stage.
+3. **The compressor was doing nothing.** Measured gain reduction was under a tenth of a decibel
+   across a whole run. A compressor that never engages is not protecting anything, it is unused
+   headroom.
+
+And the reason the obvious fix was not simply "turn it up": **music and sound effects share one
+compressor.** Both buses feed the same `DynamicsCompressor`, so whichever gets loud enough to trigger
+reduction ducks the other. Pushing the music ten decibels into that graph would make every kill pump
+the music and the louder music flatten the kills — the two things the player is meant to hear would
+start fighting. That coupling is why leaving both quiet was the safe option, and why it had to be
+addressed before the level could be.
+
+So the music gets its own compressor first: threshold -21, ratio 3, soft knee. It lets the
+arrangement be pushed hard and stay glued while presenting a controlled level to the shared stage
+downstream. With that in place the bus goes to `curve*2.3` and the master to 0.94.
+
+### The graph had no output stage at all
+
+Raising the bus and master took the output true peak to **1.062 — hard clipping.** Caught only by
+holding the peak inside the page, because a clipped sample lasts microseconds and cannot be found by
+polling from outside.
+
+The wrong response would be to give the level back, since level is the entire request. The right one
+is the stage this graph never had: the shared compressor sits *before* the master gain, so nothing
+whatsoever was protecting the output. A limiter now sits on the last edge, after master and before the
+destination — ratio 20, 1ms attack, no knee, which is a limiter rather than a compressor: it is not
+shaping anything, only guaranteeing the last sample cannot exceed the ceiling.
+
+Two measurement corrections were needed along the way, both of the same kind as earlier mistakes in
+this file. The peak tap was on `audio.master`, which is *before* the limiter, so it reported the
+unlimited signal and would have condemned a limiter that was working. And at a -1.6dB limiter
+threshold the corrected reading was 0.977 — not clipping, but two tenths of a decibel from it, and
+Web Audio's `DynamicsCompressor` is known to overshoot on fast transients, so two tenths is not a
+margin. The threshold is -3, which costs almost no perceived loudness because it only touches peaks.
+
+### Measured
+
+    music bus RMS        original    after V52    after V54
+    menus                  -37 to -43   -36.9      -28.1
+    combat, quiet          -34.0        -28.2      -20.6
+    combat, heavy play     -34.0        -28.6      -22.4
+
+    music bus gain          0.377        0.678       1.734
+    output true peak         -            -          0.932  (-0.6 dBFS, post-limiter, no clipping)
+    shared compressor        -0.0         -0.03      -1.55 dB
+    dedicated music comp      -            -        -5.17 dB
+    output limiter            -            -        -2.10 dB
+
+**About +11.6dB on the original in combat**, and the output is verified not to clip at the final node.
+The shared compressor now moves by about 1.5dB, which is coupling but well below the level at which
+pumping is audible — that is what the dedicated music compressor bought.
+
+Audit, legacy, combat, the V49 bed harness and the V53 sound-effect profile all pass, the last of
+those confirming the rewired graph did not disturb the effects path.
+
+### If this is now too much
+
+The music is deliberately well above the sound effects in RMS terms, which is what was asked for
+twice. If the kills now feel buried under it, `V54.bus` is the single knob, and 1.6 lands roughly
+halfway back to V52. `V54.master` and `V54.limitThreshold` should be left alone — they are protecting
+the output, not setting the balance.
