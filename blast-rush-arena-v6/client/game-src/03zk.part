@@ -190,9 +190,17 @@ audio.update=function(g){
  this.sfxGain.gain.setTargetAtTime(Math.min(1,sfxLevel*.96),this.ctx.currentTime,.06);
 
  const combat=!!g.running;
+ /* V61 adds the field-pressure term. Every other input here describes the *run* -- which wave, how
+    long the combo, is there a boss -- and none of them describe the screen. Since V57 made screen
+    density something the player chooses by holding hostiles in the strike band for the multiplier,
+    that omission means the single most tense thing a player can do is inaudible: nine hostiles deep
+    in the band and an empty arena produce an identical arrangement at the same wave. The term is
+    computed in 03zzi and read here rather than inlined, so the arrangement keeps one place where
+    intensity is decided. */
  const intensity=combat?Math.min(1,
   (g.wave-1)/12+(g.combo>10?.12:0)+(g.combo>24?.14:0)
-  +(g.boss?.3:0)+(g.overdriveTime>0?.26:0)+(g.lives<=1?.16:0)):0;
+  +(g.boss?.3:0)+(g.overdriveTime>0?.26:0)+(g.lives<=1?.16:0)
+  +(g.v61Pressure||0)*.34):0;
 
  /* V36 — the arrangement under tension.
 

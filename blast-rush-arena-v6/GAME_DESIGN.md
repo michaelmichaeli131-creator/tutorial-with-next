@@ -1914,3 +1914,63 @@ specific, and occasionally wrong. Every one of them is a hypothesis until the li
 
 Audit, legacy and combat pass, and normal-wave density is untouched: still median 7 on screen with 0%
 empty under the patient policy.
+
+
+## V60 — the band nobody could see, and why
+
+V57 pays up to 4.6x for kills deep in the arena, and the entire design rests on the player being able
+to see where that starts. Captured against a populated arena, it could not: the saturation line was
+faintly readable and the band itself was invisible.
+
+The cause is a rendering mistake worth naming because it is easy to repeat. The band was drawn with
+`globalCompositeOperation='lighter'` — an additive wash, which only shows over something dark. Three
+of the four worlds put a lit city skyline or a bright planet exactly where the band sits, and adding a
+few percent of light to an already-bright cityscape produces nothing the eye can find. **It was
+legible in the empty test arena I first checked it in and invisible in the game.** Checking a visual
+change against a representative background, not a convenient one, is the lesson.
+
+Redrawn so it cannot depend on adding light:
+
+- **Darken above rather than brighten below.** Everything shallower than the band is pushed down with
+  a normal-composite dark wash, which makes the band the bright region by comparison on any world.
+- **Edges rather than fills.** A dashed entry line, a solid saturation line, and tick marks down both
+  sides — a marked zone on a floor. Edges survive a busy background; a wash does not.
+- **Say the number.** "STRIKE ×2.8" at the entry, "×4.6" at saturation. Duolingo's streak work is
+  blunt about this: an eight-word explanation of the mechanic outperformed most of the feature work
+  around it. A multiplier a player must infer from floating numbers is one most players never find.
+
+
+## V61 — the risk you are taking should be audible
+
+V57 turned screen density into a choice. Measured, a player taking the patient line sits with seven to
+ten hostiles on screen where the safe line sits at zero to one.
+
+The score heard none of it. Every input to V30's `intensity` describes the *run* — which wave, how long
+the combo has held, whether a titan is out, how many lives remain — and not one describes the screen.
+So the most dangerous thing a player can deliberately do produced exactly the same arrangement as
+standing in an empty arena on the same wave. The one moment the music most needs to lean in was the
+one moment it could not tell was happening.
+
+Pressure is not a count. Nine hostiles that just entered at the top are comfortable; four sitting on
+the reactor line are nearly a loss. So it is weighted by depth using **V57's own curve** — the same
+function that decides what a kill pays — which means the thing the music responds to and the thing the
+player is being paid for are literally the same quantity.
+
+It feeds V30's arrangement and V49's dread bed. The bed takes the *larger* of pressure and V35's
+dread rather than the sum: dread is about what you have left to lose, pressure is about what you are
+holding right now, and adding them would let a hurt player in a full arena saturate every channel at
+once and leave the bed nowhere to go.
+
+Measured separation between the two lines:
+
+    policy      field pressure (median / p90 / max)    screen empty
+    patient        0.60 / 0.70 / 0.75                      0%
+    greedy         0.07 / 0.18 / 0.24                     60%
+
+Roughly eightfold at the median. The first tuning saturated at 0.48 and never approached its own
+ceiling, because a player holding the band has a *column* of hostiles still descending and depth
+weighting correctly counts those as a third of a hostile each — seven on screen is nowhere near seven
+of pressure, and should not be. The saturation point was lowered so the patient line spans a real
+range rather than living in the bottom half of one.
+
+Audit, legacy, combat, the V49 bed harness and the arrangement dump all pass.

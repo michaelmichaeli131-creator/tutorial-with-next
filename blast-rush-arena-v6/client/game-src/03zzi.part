@@ -1,0 +1,80 @@
+/* V61 — the risk you are taking should be audible.
+
+   V57 turned screen density into a choice: hold hostiles in the strike band and they pay up to 4.6x,
+   or clear them on sight for a safe, lower score. Measured, a player taking that line sits with seven
+   to ten hostiles on screen where the safe line sits at zero to one.
+
+   The score hears none of it. Every input to V30's `intensity` describes the *run* — which wave, how
+   long the combo has held, whether a titan is out, how many lives are left — and not one of them
+   describes the screen. So the most dangerous thing a player can deliberately do produces exactly the
+   same arrangement as standing in an empty arena on the same wave. The one moment the music most
+   needs to lean in is the one moment it cannot tell is happening.
+
+   Pressure is not just a count. Nine hostiles that just entered at the top are a comfortable
+   position; four sitting on the reactor line are nearly a loss. So it is weighted by depth using
+   V57's own curve — the same function that decides what a kill pays — which means the thing the music
+   responds to and the thing the player is being paid for are literally the same quantity.
+
+   It feeds two places. V30's arrangement thickens, and V49's dread bed opens up: the clash gets
+   louder and the Risset rise climbs. Both were already driven by V35's dread, which is about how much
+   you have left to lose; this is about how much you are currently holding, which is a different kind
+   of fear and deserves its own voice. */
+
+const V61={
+ /* Where the term saturates, in depth-weighted hostiles.
+
+    Set to 7 first, on the reasoning that seven on screen is what the patient line produces. Measured,
+    that made the term top out around 0.48 and never approach its own ceiling: a player holding the
+    band has a *column* of hostiles still descending, and depth weighting correctly counts those as
+    only a third of a hostile each. Seven on screen is nowhere near seven of pressure, and it should
+    not be. Lowered so the patient line spans a real range instead of living in the bottom half of
+    it -- the separation from the greedy line was already sevenfold, this is about the term having
+    somewhere to go once a player commits harder than the test bot does. */
+ full:4.5,
+ /* Rises quickly and falls slowly. A cleared screen should feel like relief arriving rather than a
+    switch being thrown, and an arrangement that thins the instant the last hostile dies would make
+    every clear sound like the track breaking. */
+ riseRate:2.4,
+ fallRate:.85,
+ /* How much of the dread bed's opening this can drive on its own, over and above V35's dread. */
+ bedClash:.5,
+ bedRise:.42
+};
+
+function v61Live(){return game.running&&!game.paused;}
+
+const v61Update=update;
+update=function(dt){
+ v61Update(dt);
+ if(!v61Live()){game.v61Pressure=0;return;}
+ let weighted=0;
+ for(const o of game.orbs){
+  if(o.y<=0)continue;
+  /* Depth-weighted with V57's own curve: a hostile only counts as pressure to the degree that it is
+     somewhere dangerous, and that is the same curve that decides what killing it pays. A shallow
+     hostile is worth a fraction of one; one on the reactor line is worth its whole self. */
+  weighted+=.35+v57Depth(o.y)*.65;
+ }
+ const target=Math.min(1,weighted/V61.full);
+ const rate=target>(game.v61Pressure||0)?V61.riseRate:V61.fallRate;
+ game.v61Pressure=(game.v61Pressure||0)+(target-(game.v61Pressure||0))*Math.min(1,dt*rate);
+};
+
+/* The dread bed. V49 drives its clash and its Risset rise from V35's dread, which is about what you
+   have left to lose. Pressure is about what you are holding right now, and the bed should answer to
+   both -- so this takes the larger of the two rather than adding them, which would let a hurt player
+   in a full arena saturate everything at once and leave the bed with nowhere to go. */
+const v61AudioUpdate=audio.update.bind(audio);
+audio.update=function(g){
+ v61AudioUpdate(g);
+ const bed=this.v49;
+ if(!bed||!this.ctx)return;
+ const pressure=g.v61Pressure||0;
+ if(pressure<=.02)return;
+ const now=this.ctx.currentTime;
+ const dread=Math.max(0,Math.min(1,g.v35Dread||0));
+ const clash=Math.max(.05+Math.pow(dread,1.6)*.85,.05+pressure*V61.bedClash);
+ bed.clash.gain.setTargetAtTime(Math.max(.0001,clash),now,.22);
+ const rise=Math.max(0,Math.min(1,pressure*V61.bedRise+ .0));
+ if(rise>0)bed.risset.gain.setTargetAtTime(Math.max(.0001,rise*V49.rissetGain/V49.bedGain),now,.22);
+};
