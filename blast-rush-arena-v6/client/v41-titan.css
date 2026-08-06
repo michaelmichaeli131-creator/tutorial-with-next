@@ -165,3 +165,24 @@
   font-weight: 700;
   color: #6ee7a8;
 }
+
+/* V58 — the challenge verdict, on the results screen under the daily rank line. Three states: a win,
+   a gap, and "we could not reach it", because a silent failure on a friend's challenge reads as
+   nobody caring rather than as a network problem. */
+.v58-challenge:empty { display: none; }
+.v58-challenge {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #b8d4ea;
+}
+.v58-challenge b { color: #eaf6ff; }
+.v58-challenge small {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: rgba(178, 208, 235, .66);
+}
+.v58-challenge.won b { color: #6ee7a8; }
+.v58-challenge.lost b { color: #ffc46b; }
+.v58-challenge.pending { color: rgba(178, 208, 235, .62); }

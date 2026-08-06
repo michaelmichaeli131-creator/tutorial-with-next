@@ -1828,3 +1828,47 @@ what a skilled human would achieve. What the numbers establish is that a patient
 constant, `V57.pay`, if it turns out to be too strong in a human's hands.
 
 Audit, legacy and combat pass; the gauntlet titan stays in its 42–45k band.
+
+
+## V58 — the challenge loop only ever ran one way
+
+`shareChallenge()` posts a run, builds a `?challenge=CODE` link and shares it. `handleUrl()` reads the
+parameter, fetches the challenge, toasts "BEAT <NAME> • <SCORE>" and starts the run on the creator's
+seed. All of that works and always has.
+
+Nothing ever posted the result back. `BlastNetwork.submitChallenge()` sits in `net.js` with **zero
+callers anywhere in the client**, and `POST /api/challenges/:code/attempt` is fully implemented on the
+server — it stores the attempt, ranks it against the others, and returns `beatCreator` and
+`creatorScore`. That response had never once been received by anything.
+
+So the most viral mechanic in the build was a one-way link. The challenged player was never told
+whether they won; the challenger was never told anyone tried; `record.attempts` stayed permanently
+empty. Two people who each went out of their way to compete with each other both got told nothing.
+
+This needed no design justification. It was a wire that was never connected.
+
+The results screen now carries the verdict under V45's daily rank line, in three states — a win, a
+gap ("2,140 short of RIVAL"), and an honest "could not reach your friend's challenge, your run still
+counted", because a silent failure on a friend's challenge reads as nobody caring rather than as a
+network problem. Attempt count is shown only once there is somebody else to count, since "3 pilots
+have tried this run" is the line that makes a shared seed feel alive.
+
+### Verified end to end
+
+Deno is not installed in this environment, so the two endpoints were stubbed in Node to the exact
+response shape `server/main.ts` already returns, and the client half — the part that was missing —
+was driven through a real browser:
+
+    challenge link started a run: true (mode solo)
+    attempts POSTed to the server: 1  {"name":"Pilot-832","score":0,"wave":1,"perfects":0,"maxCombo":0}
+    PASS  the result is posted back exactly once
+    PASS  the posted body carries a real score
+    PASS  the player is told the outcome
+
+Both branches read correctly: *"500 short of RIVAL. They scored 500. 3 pilots have tried this run."*
+and *"You beat RIVAL. 0 to beat, and you did."*
+
+The server half is unexercised here by necessity — it was read, not run. Its contract is simple and
+already written, but the first real deploy is where it gets proven.
+
+Audit, legacy and combat pass, and the V57 band still holds median 7 on screen with 0% empty.
