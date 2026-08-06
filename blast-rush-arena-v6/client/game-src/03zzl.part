@@ -40,8 +40,14 @@
 const V64={
  /* Chance an arrival is a formation rather than a single, ramping with the wave. Never 1: a lone
     straggler between formations is what keeps the shapes feeling like events rather than the metre
-    of the game. */
- chance:(wave)=>Math.min(.78,.34+wave*.055),
+    of the game.
+
+    Raised twice, both times after counting rather than guessing. The gate below already throws away
+    most arrivals, so the arrivals that survive it are few and each one has to carry a lot: at the
+    original ramp from .34, a measured minute produced five formations against sixteen singles, and a
+    game whose arrivals are three-to-one loose hostiles has not changed its metre at all. Density is
+    controlled by the gate and the beat now, so this is free to be high. */
+ chance:(wave)=>Math.min(.92,.62+wave*.05),
  /* Formation size, likewise ramping. Five is the ceiling because a sixth member does not add a
     decision -- it is past the point where the blast falloff can plausibly reach, so it is just one
     more tap. */
@@ -61,7 +67,22 @@ const V64={
     way down read as an empty arena and brought another one, and another. Measured, that left a
     median of seven hostiles queued off-screen with nothing at all in front of the player -- the
     arena felt empty and then arrived all at once. */
- busy:2,
+ busy:3,
+ /* How long the base spawner is held after a formation lands.
+
+    Without this the shapes were drowned by the thing they were meant to replace. Measured over a
+    minute: six formations against forty single arrivals. The base loop drips one hostile roughly
+    every eight tenths of a second regardless, so while the player was reading a formation, four or
+    five unrelated singles wandered in on top of it -- which is precisely the pile of unrelated
+    chores the formations exist to get rid of, now with a shape buried in it.
+
+    Held rather than cancelled: V56's floor can still pull the timer forward if the screen actually
+    goes dead, so this can make the game quieter between events but never empty. */
+ beat:2.2,
+ /* How soon the spawner is asked again after an arrival was declined for a busy field. Short: this
+    is a "not yet", not a punishment, and V56's floor is still watching for a dead screen underneath
+    it. */
+ retry:.5,
  /* Where the formation's lowest member starts, just above the top edge. Everything else is hung off
     this, so however deep a shape is, its first hostile crosses into view immediately and the rest
     follow. The first version hung the shape off the anchor's own spawn y instead, which put a deep
@@ -131,7 +152,27 @@ spawnOrb=function(type){
     arrive as one of five. */
  if(!anchor||anchor.type==='rival')return;
 
- if(game.orbs.length>V64.busy)return;
+ /* A busy field declines the arrival outright instead of letting it in as a single.
+
+    This was the correction that mattered most, and it took a measurement to see. The first version
+    simply returned here, which reads as "no formation this time" but actually means "an unrelated
+    hostile, then". Counted over a minute: four formations and twenty-six singles. The gate was
+    firing constantly -- a formation of four leaves the field above the threshold for as long as it
+    takes to deal with, and every arrival during that window came in as one more loose chore landing
+    on top of the shape the player was still reading. The shapes were not replacing the drizzle, they
+    were floating in it.
+
+    So a busy field gets nothing at all and the spawner is asked again shortly. Formation, resolve,
+    breathe, formation -- which is the rhythm this whole part exists for, and it cannot exist while
+    something else is filling in the breathing. */
+ if(game.orbs.length>V64.busy){
+  const at=game.orbs.indexOf(anchor);
+  if(at>=0)game.orbs.splice(at,1);
+  if(game.spawnTimer!==Number.MAX_SAFE_INTEGER)game.spawnTimer=Math.max(game.spawnTimer,V64.retry);
+  return;
+ }
+ /* Past the gate and the roll fails: this one stays as it arrived, a single. Stragglers between
+    shapes are what stop the formations becoming the metronome they replaced. */
  if(rng()>=V64.chance(game.wave))return;
 
  const shape=V64.shapes[Math.floor(rng()*V64.shapes.length)];
@@ -205,4 +246,8 @@ spawnOrb=function(type){
   member.speed=anchor.speed;
   member.v64Pack=shape.id;
  }
+
+ /* Only ever pushed back, never brought forward, and never past the base loop's own "no more spawns
+    this wave" sentinel -- the same rule V56 follows in the other direction. */
+ if(game.spawnTimer!==Number.MAX_SAFE_INTEGER)game.spawnTimer=Math.max(game.spawnTimer,V64.beat);
 };

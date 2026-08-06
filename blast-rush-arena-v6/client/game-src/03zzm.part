@@ -1,0 +1,197 @@
+/* V65 — a hostile that tapping it will not solve.
+
+   V63 gave a kill an area and V64 gave arrivals a shape, and between them a formation became a
+   question: where do I break this? The honest limit of that pair is that the question is always
+   optional. Breaking a row at the centre is the best answer, but breaking it anywhere still works,
+   and a player who never notices can carry on tapping one at a time and finish the wave. An optional
+   decision is a decision most people will not make, and "you just press the monsters" would still be
+   a fair description of what they did.
+
+   So: a hostile the chain has to kill.
+
+   A sealed hostile carries two plates. A direct tap strips one -- it lands, it makes progress, it is
+   not a trick -- but it does no damage, so tapping one to death costs three taps instead of one. Any
+   blast strips both plates and kills it outright. One tap on the right neighbour, or three on this.
+
+   That is deliberately a *price*, not a wall. The literature on this is one-sided and the failure
+   mode is easy to name: an enemy that literally cannot be killed by the input the player has is a
+   puzzle the game refuses to let them fail at, and when it drifts down to the reactor because no
+   neighbour ever arrived, it does not read as "I chose badly", it reads as broken. Three taps is
+   always available, always visibly working, and always clearly the worse deal. The player is being
+   asked a question they can decline, at a cost they can see.
+
+   Sealed hostiles only arrive inside formations, and only where the sealed one has a neighbour close
+   enough for a blast to reach it. A lone sealed hostile would be three taps and no decision, which
+   is the tedium without the idea. Inside a formation it is the opposite: it is the thing that makes
+   the break point matter, because now one of the answers is wrong in a way you can see coming. */
+
+const V65={
+ /* Two, not three. Three plates means four taps against one, and at that ratio a player who has not
+    yet worked out the chain is being fined heavily for not knowing something the game has not told
+    them yet. At two the direct route costs three taps -- clearly worse, never punishing. */
+ plates:2,
+ /* Chance that a formation contains one sealed member, ramping with the wave. Only ever one: two
+    sealed members in the same formation stops being a break-point question and becomes arithmetic
+    about which half to give up on.
+
+    First set to a ramp from .12, on the reasoning that a new mechanic should arrive gently.
+    Measured over a minute of bot play that produced exactly one sealed hostile in the whole run --
+    a signature mechanic nobody meets often enough to learn is not gentle, it is absent. Formations
+    themselves are gated on a nearly clear field, so the number of chances this gets is already much
+    smaller than it looks.
+
+    The wave term is close to decoration and it is worth saying so rather than leaving a number that
+    looks like a difficulty curve and is not. Logging every formation showed almost all of them
+    arriving during wave one -- a wave takes eighteen kills to clear and a real session spends most
+    of its time in the early ones -- so the base value is what a player actually meets. It is set so
+    that roughly every second formation carries a sealed member: often enough to be a mechanic, rare
+    enough that the shape still varies. */
+ chance:(wave)=>Math.min(.7,.42+wave*.05),
+ /* From the first wave.
+
+    This was set to 2, then 3, on the ordinary reasoning that a new mechanic should wait until the
+    player has met a few formations. Both produced zero sealed hostiles across several measured
+    minutes, and logging every formation as it spawned showed why: formations only arrive into a
+    nearly clear field, and a nearly clear field is overwhelmingly a wave-one thing -- every single
+    formation in a sixty-second run was tagged wave 1, even though the run finished on wave 5. A
+    "from wave 2" gate is not a gentle introduction here, it is an off switch.
+
+    Wave one it is. The ramp on `chance` still opens quietly (about one formation in three), the
+    direct route always works, and the one-time toast explains it the first time one is on screen. */
+ fromWave:1,
+ /* Formations smaller than this are the shape's own minimum -- sealing a member of a three-hostile
+    row leaves too little for the break point to be interesting. */
+ minPack:3,
+ shell:'#ffb45e'
+};
+
+function v65Reach(o){return V63.radius*o.r+o.r*.35;}
+
+/* ---- Who gets sealed ----
+
+   Hooked above V64, so by the time the base call returns the whole formation exists and is placed:
+   its members are exactly the orbs appended during the call. Reading them that way rather than by
+   tag means this cannot be fooled by a hostile left over from an earlier formation of the same
+   shape. */
+
+const v65SpawnBase=spawnOrb;
+spawnOrb=function(type){
+ const before=game.orbs.length;
+ v65SpawnBase(type);
+ if(game.mode==='duel')return;
+ if(game.wave<V65.fromWave)return;
+ const born=game.orbs.slice(before);
+ if(born.length<V65.minPack)return;
+ if(rng()>=V65.chance(game.wave))return;
+
+ /* Only a member a blast can actually reach from somewhere else. The whole point is that the chain
+    is the cheap answer; sealing a hostile no neighbour can reach deletes the answer and leaves the
+    price. */
+ const reachable=born.filter((o)=>{
+  if(o.hp>1||o.type==='rival')return false;
+  return born.some((n)=>n!==o&&Math.hypot(n.x-o.x,n.y-o.y)<=v65Reach(n));
+ });
+ if(!reachable.length)return;
+ const pick=reachable[Math.floor(rng()*reachable.length)];
+ pick.v65Plates=V65.plates;
+};
+
+/* ---- What a tap does to it ---- */
+
+function v65Crack(o){
+ o.v65Plates--;
+ o.v65Flash=.22;
+ ring(o.x,o.y,V65.shell,o.r+10);
+ if(!save.comfort){
+  for(let i=0;i<7;i++){
+   const a=rng()*Math.PI*2;
+   game.particles.push({x:o.x+Math.cos(a)*o.r,y:o.y+Math.sin(a)*o.r,
+    vx:Math.cos(a)*200,vy:Math.sin(a)*200-40,life:.3,max:.3,r:2.2,
+    color:V65.shell,drag:.93,gravity:180});
+  }
+ }
+ audio.sfx('armor');
+ haptic(9);
+ /* A stripped plate is progress and pays a little, so the tap is not a blank. Small on purpose: if
+    stripping paid well, three taps would be a legitimate scoring line and the chain would stop being
+    the better answer. */
+ score(70,'hit');
+}
+
+const v65HitBase=hitOrb;
+hitOrb=function(o,x,y,chain=false){
+ if(o.v65Plates>0){
+  if(chain){
+   /* A blast takes the whole shell. Not "one plate per blast": the mechanic is a choice between one
+      well-placed tap and three careless ones, and a blast that only cracked it would collapse that
+      into "everything costs more", which is a difficulty change, not a decision. */
+   o.v65Plates=0;
+   o.v65Flash=.3;
+   ring(o.x,o.y,V65.shell,o.r+18);
+  }else{
+   /* Reported as a landed tap. V21 charges heat by outcome -- 7 for landing, 17 for hitting nothing,
+      12 for a ward that blocked -- and this wrapper sits above V21's, so returning early here would
+      leave the flag unset and bill an accurate tap as a miss. It is not a ward: nothing was blocked,
+      a plate came off. */
+   game.v21Landed=true;
+   v65Crack(o);
+   return;
+  }
+ }
+ return v65HitBase(o,x,y,chain);
+};
+
+/* ---- Reading it ----
+
+   Deliberately unlike V21's ward, which is a cyan hexagon *outline* that opens and closes on a
+   timer. This is a solid warm shell in segments, and it does not move -- the two states a player has
+   to tell apart at a glance are "wait for the gap" and "this one needs a blast", and giving them the
+   same shape or the same colour would make both illegible. */
+
+const v65UpdateBase=update;
+update=function(dt){
+ v65UpdateBase(dt);
+ if(!game.running||game.paused)return;
+ let seen=false;
+ for(const o of game.orbs){
+  if(o.v65Flash>0)o.v65Flash=Math.max(0,o.v65Flash-dt);
+  if(o.v65Plates>0&&o.y>0)seen=true;
+ }
+ /* Said once, ever, the first time one is actually on screen -- not in a briefing before the player
+    has seen the thing being described, and not again afterwards. V62's in-arena prompts only exist
+    on a player's very first run and a sealed hostile does not arrive until wave three, so most
+    players would otherwise meet this with no explanation at all and conclude their taps are not
+    registering. The flag lives in the save because the lesson is per player, not per run. */
+ if(seen&&!save.v65Taught){
+  save.v65Taught=1;
+  persist();
+  toast('SEALED — A BLAST OPENS IT');
+ }
+};
+
+v19OrbOverlays.push((o)=>{
+ if(!(o.v65Plates>0))return;
+ const flash=o.v65Flash||0;
+ /* Outside the body and outside its glow, at the same standoff the ward uses, so a hostile carrying
+    both does not draw one on top of the other. */
+ const rad=o.r+14;
+ const seg=Math.PI*2/V65.plates;
+ ctx.save();
+ ctx.lineCap='butt';
+ for(let i=0;i<o.v65Plates;i++){
+  /* Rotated so a two-plate shell sits left and right rather than top and bottom: the top of a
+     hostile is where its own art is busiest and where the wave bar sits behind it. */
+  const a0=-Math.PI/2+seg*i+.16;
+  const a1=a0+seg-.32;
+  ctx.beginPath();ctx.arc(o.x,o.y,rad,a0,a1);
+  ctx.strokeStyle='rgba(4,9,20,.92)';
+  ctx.lineWidth=9;
+  ctx.stroke();
+  ctx.beginPath();ctx.arc(o.x,o.y,rad,a0,a1);
+  ctx.strokeStyle=V65.shell;
+  ctx.globalAlpha=.85+flash*.15;
+  ctx.lineWidth=5;
+  ctx.stroke();
+ }
+ ctx.restore();
+});
