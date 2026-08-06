@@ -1,0 +1,64 @@
+/* V59 — the titan fights an empty room.
+
+   `02.part` gates the spawner on `if(!game.boss && game.spawnTimer<=0)`, so while a titan is alive
+   **every normal spawn is suppressed**. The boss then has to carry the entire tap-density budget on
+   its own, and it cannot: a titan is one target with a handful of weak points, against a player
+   tapping several times a second. The set-piece the whole campaign builds toward is the emptiest
+   screen in the game.
+
+   This is the same fault V56 and V57 addressed for ordinary waves, in the one place where it is most
+   visible — and it is worth being precise that it is *only* this one. The research agent also
+   reported that `spawnTimer` is set to `Number.MAX_SAFE_INTEGER` once a wave quota is met, halting
+   spawns entirely and punishing good play with silence. That is not true: `checkWave` sets
+   `objectiveDone`, awards the directive bonus and schedules `nextWave` 750ms later, and never touches
+   the spawn timer. The `MAX_SAFE_INTEGER` writes are duel-mode parking in 03y, where the schedule is
+   server-authoritative and the local spawner must not fire alongside it, and save-migration sentinels
+   in 03f. Checked before acting, and not acted on.
+
+   Adds during a titan are deliberately thin. The titan is the fight; this is texture around it, and
+   the failure mode to avoid is a boss that is really a wave with a large target in the middle of it.
+   So: a slower cadence than a normal wave, a hard ceiling on how many can be alive at once, and no
+   heavy species — the sentinel and the raider both demand enough attention to pull the player off
+   the weak points, which is the boss's own job to do. */
+
+const V59={
+ /* Fraction of the normal arrival rate.
+
+    First set to .45 on the reasoning that a titan fight wants texture rather than a second wave.
+    Measured, that left the arena empty 58% of the time against 100% before -- a real improvement but
+    still more dead air than a set-piece should have, and a peak of only two adds on screen. Raised
+    until the boss arena stops being quiet without the adds becoming the fight. */
+ rate:.8,
+ /* Hard ceiling on adds alive at once, independent of rate. Without this a player who ignores the
+    adds to focus the weak points -- which is a legitimate and skilful line -- would drown in them. */
+ cap:5,
+ /* Scouts and wraiths only. Both die to a single tap and neither has a mechanic that competes with
+    the boss for the player's attention. */
+ pool:['normal','normal','shard']
+};
+
+let v59Timer=0;
+
+const v59Update=update;
+update=function(dt){
+ v59Update(dt);
+ if(!game.running||game.paused)return;
+ /* Duels replay one server-authoritative spawn list so both arenas match exactly. Same line V21,
+    V35 and V56 drew, for the same reason. */
+ if(game.mode==='duel')return;
+ if(!game.boss){v59Timer=0;return;}
+ /* The hush is deliberate emptiness and this must not fight it. */
+ if(game.v35Hush>0)return;
+
+ let live=0;
+ for(const o of game.orbs)if(o.y>0)live++;
+ if(live>=V59.cap)return;
+
+ v59Timer-=dt;
+ if(v59Timer>0)return;
+ /* Derived from the base spawner's own cadence rather than a fixed number, so the boss arena keeps
+    following the wave ramp instead of drifting away from it as the run gets harder. */
+ const base=Math.max(.22,1.05-game.wave*.035);
+ v59Timer=base/V59.rate;
+ spawnOrb(V59.pool[Math.floor(rng()*V59.pool.length)]);
+};

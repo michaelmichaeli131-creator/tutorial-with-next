@@ -1872,3 +1872,45 @@ The server half is unexercised here by necessity — it was read, not run. Its c
 already written, but the first real deploy is where it gets proven.
 
 Audit, legacy and combat pass, and the V57 band still holds median 7 on screen with 0% empty.
+
+
+## V59 — the titan fought an empty room, and one reported hole that was not real
+
+`02.part` gates the spawner on `if(!game.boss && game.spawnTimer<=0)`, so while a titan is alive
+**every normal spawn is suppressed**. Measured with the field cleared and a titan forced onto it:
+
+    without V59    median 0 on screen, p90 0, max 0, empty 100% of the time
+    with V59       median 0 on screen, p90 2, max 3, empty 57%
+
+Max 0 is the number that matters: not "thin", not "quiet" — literally nothing spawns for the entire
+fight. The boss then has to carry the whole tap-density budget alone, and one target with a handful of
+weak points cannot do that against a player tapping several times a second. The set-piece the campaign
+builds toward was the emptiest screen in the game.
+
+Adds are deliberately thin — 80% of the normal arrival rate, a hard ceiling of five alive at once, and
+scouts and wraiths only. Both of those species die to one tap and neither competes with the boss for
+the player's attention, which is the boss's own job. The failure mode being avoided is a boss fight
+that is really a wave with a large target in the middle of it.
+
+Two caveats on the 57%, stated because the number reads worse than it is. The test clears the field
+before forcing the titan, and adds spawn above the top edge and need about twelve seconds to descend
+into view — roughly a third of the measurement window is unavoidably empty for that reason alone.
+And raising the rate from .45 to .8 moved it by one point, which says the binding constraint is
+descent time rather than arrival rate. Steady-state dead time in a real fight is lower than 57%.
+
+### The hole that was not there
+
+The same research agent also reported that `spawnTimer` is set to `Number.MAX_SAFE_INTEGER` once a
+wave quota is met, halting spawns entirely and punishing good play with silence. **That is not true,
+and it was repeated to the user before being checked, which is the mistake worth recording.**
+
+`checkWave` sets `objectiveDone`, awards the directive bonus and schedules `nextWave` 750ms later. It
+never touches the spawn timer. The `MAX_SAFE_INTEGER` writes are duel-mode parking in 03y — where the
+spawn schedule is server-authoritative and the local spawner must not fire alongside it — and
+save-migration sentinels in 03f. Verified by reading both call sites before acting on either.
+
+A research agent reading a large codebase produces claims of exactly this shape: plausible,
+specific, and occasionally wrong. Every one of them is a hypothesis until the line is read.
+
+Audit, legacy and combat pass, and normal-wave density is untouched: still median 7 on screen with 0%
+empty under the patient policy.
