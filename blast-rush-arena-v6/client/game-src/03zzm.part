@@ -67,6 +67,13 @@ const V65={
 
 function v65Reach(o){return V63.radius*o.r+o.r*.35;}
 
+/* A seam, replaced by V66. Falling back to the armoured-hostile cue is close enough to be a
+   placeholder and wrong enough to need replacing: `armor` is V47's "blocked, nothing developed"
+   ring, and a plate coming off is the opposite of nothing happening. */
+function v65Sound(kind){
+ audio.sfx('armor');
+}
+
 /* ---- Who gets sealed ----
 
    Hooked above V64, so by the time the base call returns the whole formation exists and is placed:
@@ -110,7 +117,7 @@ function v65Crack(o){
     color:V65.shell,drag:.93,gravity:180});
   }
  }
- audio.sfx('armor');
+ v65Sound('crack');
  haptic(9);
  /* A stripped plate is progress and pays a little, so the tap is not a blank. Small on purpose: if
     stripping paid well, three taps would be a legitimate scoring line and the chain would stop being
@@ -128,6 +135,7 @@ hitOrb=function(o,x,y,chain=false){
    o.v65Plates=0;
    o.v65Flash=.3;
    ring(o.x,o.y,V65.shell,o.r+18);
+   v65Sound('shatter');
   }else{
    /* Reported as a landed tap. V21 charges heat by outcome -- 7 for landing, 17 for hitting nothing,
       12 for a ward that blocked -- and this wrapper sits above V21's, so returning early here would

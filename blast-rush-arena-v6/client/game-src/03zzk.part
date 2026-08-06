@@ -108,9 +108,17 @@ function v63Reward(links){
  game.v63Chains=(game.v63Chains||0)+1;
  score(points,'chain');
  floating(v63OriginX,v63OriginY-26,`CHAIN ×${links+1}`,'#ffe27a');
- audio.sfx('blast');
+ v63Sound(links);
  if(links>=3)haptic([12,20,12]);
  else haptic(11);
+}
+
+/* A seam rather than a call, because what a cascade should sound like is an audio question and
+   belongs with the rest of the audio work -- V66 replaces this. The fallback is the reactor blast,
+   which is the wrong sound (it is the charged ability's identity, and a fixed one-second sawtooth
+   is the same whether two things died or six) but is at least a sound. */
+function v63Sound(links){
+ audio.sfx('blast');
 }
 
 const v63Begin=begin;
