@@ -1,0 +1,208 @@
+/* V64 — arrivals become events instead of drizzle.
+
+   The other half of the same play feedback: too many monsters, and the game is boring because you
+   just press them. V63 answered the second half by giving a kill an area. This answers the first,
+   and it is worth being precise about what "too many" actually meant, because simply spawning fewer
+   was not it — that was tried first and it made the arena empty 87% of the time, which is not calm,
+   it is nothing.
+
+   Hostiles have always arrived one at a time, at a random x, on a timer. Six of those over ten
+   seconds is six separate interruptions, each demanding one tap and offering no relationship to the
+   other five. That is what makes a crowd feel like a pile of chores: not the number, the *lack of
+   structure*. Six unrelated things to do is worse than one thing with six parts, even though the
+   count is identical.
+
+   So arrivals come in formations. A row, a wedge, a keystone, a column — three to five hostiles
+   entering together, all the same size, spaced against V63's blast reach so the first link always
+   connects and the second never quite does, falling at a shared speed so the shape survives the
+   descent.
+
+   What that changes:
+
+   - **One event, not four chores.** A wedge is a single thing to read and a single plan to make. The
+     screen can hold five hostiles and still ask the player for one decision, which is the opposite
+     of the arrangement that produced the complaint.
+   - **The shape is the puzzle.** V63's blast shrinks 22% per link, so a formation is never simply
+     "tap the middle and win". Break a row at the centre and both wings go, but their own blasts fall
+     short of each other and of the tail: three of four, never four. A keystone has one hostile that
+     takes the whole formation and three that take only one. Where you break the shape decides how
+     much of it goes, and each shape asks a different question.
+   - **It gives the game a rhythm.** Formation, resolve, breathe, formation. The old drizzle had one
+     dynamic level from start to finish; alternating pressure and quiet is most of what makes an
+     arcade game feel composed rather than merely busy.
+   - **It reads better.** Four dots in a recognisable shape is easier for the eye to parse than four
+     dots at random, at the same count. Part of "the game doesn't look good" is visual noise, and
+     structure is the cheapest possible fix for noise.
+
+   Held to a ceiling on purpose: a formation is only sent into a screen that is nearly clear. A pack
+   arriving on top of a pack is the pile of chores again, with extra steps. */
+
+const V64={
+ /* Chance an arrival is a formation rather than a single, ramping with the wave. Never 1: a lone
+    straggler between formations is what keeps the shapes feeling like events rather than the metre
+    of the game. */
+ chance:(wave)=>Math.min(.78,.34+wave*.055),
+ /* Formation size, likewise ramping. Five is the ceiling because a sixth member does not add a
+    decision -- it is past the point where the blast falloff can plausibly reach, so it is just one
+    more tap. */
+ size:(wave)=>Math.min(5,3+Math.floor((wave-1)/4)),
+ /* Spacing between members, derived from V63's blast reach rather than written as a number, so the
+    two can never drift apart. Members sit at 92% of the distance a first blast can reach: the first
+    link always connects, and the second -- 22% shorter -- never quite does. That is the decision the
+    formation is asking about. Hard-coding this as a constant is how the first version went wrong;
+    when the blast radius changed, the spacing did not, and the shapes stopped meaning anything. */
+ gap:(r)=>(V63.radius*r+r*.35)*.92,
+ /* Never send a formation while this many hostiles already exist. This is the actual answer to "too
+    many monsters": density is capped by refusing to stack events, not by starving the arena.
+
+    Counted across the whole field rather than only what is on screen, and that distinction turned
+    out to matter more than the number. Hostiles enter from above the top edge, so a formation is
+    invisible for its first second or so; gating on the visible count meant a formation still on its
+    way down read as an empty arena and brought another one, and another. Measured, that left a
+    median of seven hostiles queued off-screen with nothing at all in front of the player -- the
+    arena felt empty and then arrived all at once. */
+ busy:2,
+ /* Where the formation's lowest member starts, just above the top edge. Everything else is hung off
+    this, so however deep a shape is, its first hostile crosses into view immediately and the rest
+    follow. The first version hung the shape off the anchor's own spawn y instead, which put a deep
+    formation's tail five hundred pixels above the screen and left the player looking at an empty
+    arena for five seconds while it queued up out of sight. */
+ entry:-60,
+
+ /* ---- The shapes ----
+
+    Both axes are in units of `gap`, and `gap` is 92% of how far a first blast reaches. That one fact
+    is what makes these puzzles rather than decoration, so it is worth writing the three distances
+    down: a first blast reaches about 1.09 gaps, the second link about 0.87, the third about 0.70.
+    Every offset below is chosen against those numbers.
+
+      row       three abreast one gap apart, plus a tail out of reach behind them. Tap the middle and
+                both wings go -- but their own blasts fall 13% short of each other and of the tail, so
+                it is three of four, never four. The straightforward shape, and the one that teaches
+                the rule.
+      wedge     an apex with two wings set back. The wings are 0.99 gaps from the apex -- inside
+                reach -- and 1.76 from each other. Only the apex breaks it. The first version put
+                them at 1.07 gaps, which is inside reach on paper and, measured, missed: the margin
+                was thinner than the jitter in where a hostile actually ends up. A shape whose
+                intended answer works four times in five is a shape that teaches the wrong lesson.
+      keystone  four corners around one hostile sitting low of centre. The centre is within 0.83 gaps
+                of all four, so it takes the whole formation; a corner reaches the centre and nothing
+                else. One right answer worth five kills, three wrong ones worth two. This is the
+                shape the mechanic exists for.
+      column    single file, a gap apart. Each blast takes the hostile above and below and stops, so
+                a column is cut into threes wherever you break it -- the shape that rewards patience,
+                because it arrives over a couple of seconds rather than all at once.
+
+    Deliberately all no more than two gaps wide. A portrait phone is 390 points across and a hostile
+    is up to 78 across; the first version had shapes four gaps wide, which on a real screen meant the
+    spacing was squeezed to fit and four hostiles arrived as one unreadable blob. Depth is free on a
+    portrait screen, width is not. */
+ shapes:[
+  {id:'row',     at:[[-1,0],[0,0],[1,0],[0,-1.15],[0,-2.15]]},
+  {id:'wedge',   at:[[0,0],[-.88,-.45],[.88,-.45],[0,-1.15],[0,-2.15]]},
+  {id:'keystone',at:[[0,-.575],[-.6,0],[.6,0],[-.6,-1.15],[.6,-1.15]]},
+  {id:'column',  at:[[0,0],[0,-1],[0,-2],[0,-3]]}
+ ]
+};
+
+/* Members are spawned through the captured base rather than through `spawnOrb`, so every layer below
+   this one -- V21's wards and divers, V9's naming, V14's combat stats, the art variants -- applies
+   to them exactly as it would to any other hostile, while this layer does not re-enter itself and
+   have each member bring a formation of its own. The flag is belt and braces for any future layer
+   that ends up calling back in. */
+let v64Building=false;
+
+function v64Live(){
+ return game.running
+  &&!game.paused
+  /* Duels replay one server-authoritative spawn list. Adding client-side members would put two
+     players in different arenas, which is the one thing the duel design cannot survive. */
+  &&game.mode!=='duel'
+  &&!game.boss
+  &&!(game.v35Hush>0);
+}
+
+const v64SpawnBase=spawnOrb;
+spawnOrb=function(type){
+ v64SpawnBase(type);
+ if(v64Building||!v64Live())return;
+ const anchor=game.orbs.at(-1);
+ /* Rivals are a scripted duel event and titans are not in this list at all; neither should ever
+    arrive as one of five. */
+ if(!anchor||anchor.type==='rival')return;
+
+ if(game.orbs.length>V64.busy)return;
+ if(rng()>=V64.chance(game.wave))return;
+
+ const shape=V64.shapes[Math.floor(rng()*V64.shapes.length)];
+ let size=Math.min(V64.size(game.wave),shape.at.length);
+
+ /* How wide the shape is, in gap units. Needed before the gap is fixed, because a formation that
+    does not fit has to lose the gap rather than lose the spacing -- and squeezing the spacing is
+    what turns four hostiles into one unreadable blob. */
+ const bounds=(n)=>{
+  let lo=Infinity,hi=-Infinity;
+  for(let i=0;i<n;i++){lo=Math.min(lo,shape.at[i][0]);hi=Math.max(hi,shape.at[i][0]);}
+  return {lo,hi,mid:(lo+hi)/2};
+ };
+ const extent=(n)=>{const b=bounds(n);return b.hi-b.lo;};
+
+ /* The members are spawned before anything is measured, because the two things that decide the
+    layout -- how far apart they must sit and how far the blast reaches -- both depend on their
+    radii, and the base spawner rolls a different radius for every hostile.
+
+    Then they are all set to the largest of those radii. That is a deliberate loss of variety and it
+    fixes two faults at once. Visually, a 78-across hostile next to a 50-across one at a spacing
+    computed from the smaller of the two overlaps, which is exactly the blob the first screenshot
+    showed. Mechanically, blast reach scales with radius, so a mixed formation had members whose
+    blasts could not reach the neighbour that could reach them -- the shape said one thing and the
+    chain did another. A formation reads as a squad now, and every member's blast reaches exactly as
+    far as every other's. */
+ const members=[anchor];
+ v64Building=true;
+ try{
+  for(let i=1;i<size;i++){
+   v64SpawnBase(undefined);
+   const born=game.orbs.at(-1);
+   if(born&&born!==members[members.length-1])members.push(born);
+  }
+ }finally{v64Building=false;}
+ size=members.length;
+ let r=0;
+ for(const m of members)r=Math.max(r,m.r);
+ for(const m of members)m.r=r;
+
+ const want=V64.gap(r)*(isMobile?1:1.15);
+ const room=Math.max(120,W-2*(r+16));
+ /* Members are dropped rather than squeezed when a shape will not fit. Spacing IS the mechanic: four
+    hostiles with the shape intact is a better arrival than five crammed to the width of a phone. The
+    dropped ones are removed from the field, not stacked on top of the survivors. */
+ while(size>2&&extent(size)*want>room){
+  const cut=members.pop();
+  const at=game.orbs.indexOf(cut);
+  if(at>=0)game.orbs.splice(at,1);
+  size--;
+ }
+ const gap=extent(size)>0?Math.min(want,room/extent(size)):want;
+
+ /* Centred on the shape's own midpoint, not on its first slot: several of the shapes are not
+    symmetric about slot zero, and centring on the wrong point is how a formation ends up with its
+    last member pressed against the edge. */
+ const margin=r+12+extent(size)*gap/2;
+ const cx=W/2-bounds(size).mid*gap+(rng()-.5)*Math.max(0,W-margin*2);
+ let lowest=-Infinity;
+ for(let i=0;i<size;i++)lowest=Math.max(lowest,shape.at[i][1]);
+ const cy=V64.entry-lowest*gap;
+
+ for(let i=0;i<size;i++){
+  const [dx,dy]=shape.at[i];
+  const member=members[i];
+  member.x=Math.max(r+8,Math.min(W-r-8,cx+dx*gap));
+  member.y=cy+dy*gap;
+  /* A shared speed is what makes it a formation rather than five things that happened to start
+     together. V21 can still pull one member out as a diver, and that is left alone deliberately --
+     a shape that loses a member on the way down is a better read than a shape that cannot. */
+  member.speed=anchor.speed;
+  member.v64Pack=shape.id;
+ }
+};

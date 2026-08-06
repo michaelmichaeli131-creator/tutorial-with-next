@@ -37,7 +37,11 @@ const V62={
     the prompts until it clears has a second benefit that matters more: a player who has already
     worked out the verb and killed something inside two seconds never sees an instruction at all,
     which is the right outcome. Only someone who is actually stuck gets taught. */
- briefing:2.4
+ briefing:2.4,
+ /* Ceiling on the chain prompt, for a player who has not managed a cascade yet. Long enough to
+    cover a formation arriving and being dealt with, short enough that it is not still on screen
+    two formations later. */
+ teach:9
 };
 
 function v62FirstRun(){return (save.runs||0)===0;}
@@ -82,9 +86,14 @@ const V62_STEPS=[
  /* Shown from the first frame of the first run until something dies. It is the only instruction the
     game strictly needs: the verb is "tap the thing". */
  {id:'tap',text:'TAP THE MONSTERS',sub:'Stop them reaching your reactor'},
- /* Shown once they can already do that, because V57's multiplier is the least discoverable thing in
-    the game and the one that decides whether the arena is ever full. Deliberately second: a player
-    who does not yet know the verb cannot act on a scoring gradient. */
+ /* Second, because it is the one that changes what a tap IS. A kill detonates and takes its
+    neighbours with it (V63), and hostiles now arrive in formations built around that (V64) -- a
+    player who does not know it plays the old game of one tap per monster and never finds out.
+    Cleared by doing it rather than by a timer: the moment a cascade fires, the prompt has been
+    understood better than it could ever be read. */
+ {id:'chain',text:'BREAK THEM TOGETHER',sub:'A kill blasts whatever is beside it'},
+ /* Last, because V57's multiplier is a scoring gradient rather than a verb. A player who does not
+    yet know how to kill things cannot act on where it is best to kill them. */
  {id:'band',text:'KILL LOW FOR MORE',sub:'Deep in the marked zone pays up to ×4.6'}
 ];
 
@@ -114,11 +123,15 @@ update=function(dt){
  if(v62Run<V62.briefing)return;
  if(v62Shown!==v62Step){v62Shown=v62Step;v62Age=0;}
  v62Age+=dt;
- /* The first prompt clears on the first kill -- the player has demonstrated the thing, so the
-    instruction has done its job and further nagging is noise. The second clears on a timer, because
-    "aim lower" is a suggestion rather than a gate and there is nothing to demonstrate. */
+ /* The first two prompts clear on evidence -- a kill, then a cascade. The player has demonstrated
+    the thing, so the instruction has done its job and further nagging is noise. Each also clears on
+    a generous timer so a player who cannot yet manage a cascade is not stared at indefinitely by a
+    line of text; the mechanic will teach itself the first time it fires. The last one clears on the
+    timer alone, because "aim lower" is a suggestion rather than a gate and there is nothing to
+    demonstrate. */
  if(v62Step===0&&game.kills>0){v62Step=1;return;}
- if(v62Step===1&&v62Age>V62.hold+V62.fade)v62Step=2;
+ if(v62Step===1&&((game.v63Chains||0)>0||v62Age>V62.teach)){v62Step=2;return;}
+ if(v62Step===2&&v62Age>V62.hold+V62.fade)v62Step=3;
 };
 
 const v62HitOrb=hitOrb;
@@ -135,10 +148,14 @@ draw=function(){
  if(!game.running||game.paused||v62Step>=V62_STEPS.length)return;
  if(v62Run<V62.briefing)return;
  const step=V62_STEPS[v62Step];
- /* The first prompt has no timed fade -- it waits for the player. The second does. */
+ /* The first prompt has no timed fade at all -- it waits for the player, because there is nothing
+    to do until they tap something. The second fades out at its own ceiling; the third on the short
+    hold, since it is advice rather than instruction. */
  const alpha=v62Step===0
   ? 1
-  : Math.max(0,Math.min(1,(V62.hold+V62.fade-v62Age)/V62.fade));
+  : v62Step===1
+   ? Math.max(0,Math.min(1,(V62.teach-v62Age)/V62.fade))
+   : Math.max(0,Math.min(1,(V62.hold+V62.fade-v62Age)/V62.fade));
  if(alpha<=0)return;
 
  const line=typeof v57Line==='function'?v57Line():H-(isMobile?105:72);
