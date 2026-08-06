@@ -1,0 +1,158 @@
+/* V57 — the strike band: paying the player to let them live.
+
+   The pacing research reframed the empty-arena problem as a queue, and the reframing is the whole
+   insight. For any queue in steady state Little's Law gives L = λ·W — average population equals
+   arrival rate times average time in the system. The player is a server with a service rate of about
+   six taps a second, and one tap kills one hostile:
+
+       with a player     λ≈0.95/s × W≈0.2s  = L≈0.2   -> median 0 on screen, empty 79%
+       with no input     λ≈0.95/s × W≈12s   = L≈11    -> median 6, reactor overrun in 11s
+
+   Both match the measurements exactly. And it explains the ceiling on V56: V56 raises λ, and it
+   worked — dead time roughly halved, kills per second up a third, three times as many taps finding a
+   target. But λ is the wrong lever to finish the job with. To reach a median of five on screen at
+   W≈0.2s you would need λ≈25 arrivals a second, which is not a game, it is a screensaver.
+
+   **W is the lever.** A hostile lives 0.2 seconds because there is no reason on earth to leave it
+   alive for 0.3. So give it one.
+
+   Kills deep in the arena, close to the reactor, pay more — up to 2.6x — and the precision window
+   that produces a PERFECT is wide there and narrow at the top. Nothing is forbidden: a nervous
+   player clears at the top exactly as they do today and the screen looks exactly as it does today,
+   which is a legitimate, lower-scoring line. A greedy player deliberately holds six or ten hostiles
+   and sweeps them late. Population stops being something the spawner has to manufacture and becomes
+   something the player chooses, and screen density, skill expression and risk all become the same
+   dial with the player's hand on it.
+
+   This is deliberately the opposite of hidden adaptive difficulty. The literature on that is
+   unambiguous — Resident Evil 4 shipped hidden DDA, it went unnoticed for years, and generated real
+   anger the moment it was found out. The rule the research lands on is that anything which makes the
+   game *harder* must be visible and chosen, and only assistance may be invisible. So the band is
+   drawn on the arena floor, and choosing to fight inside it is the player's call.
+
+   It is also, for free, an ergonomics fix. Roughly three quarters of touches on a phone are thumb
+   touches, and the top third of a portrait screen is the hard zone that needs a grip shift. The game
+   currently spawns at the top and rewards killing at the top — the single worst band on the device.
+   The strike band moves the paying action into the easy reach zone. */
+
+const V57={
+ /* Where the band starts and where it saturates, as a fraction of the distance from the top of the
+    play area to the reactor line. Below .55 nothing changes at all, which is most of the screen. */
+ start:.55,
+ full:.86,
+ /* Peak multiplier.
+
+    First tuned at 2.6, and measured against two bot policies -- one that taps the instant anything
+    is available, one that holds fire until a hostile is deep enough to be worth the multiplier. At
+    2.6 the patient policy produced exactly the intended density (median 7 on screen against 1, empty
+    0% of the time against 34%, dwell 9.8s against 0.3s) and still *scored less*: 124,591 against
+    160,937. So the gradient existed but did not pay for itself, which makes it score inflation
+    rather than a choice -- a rational player would keep tapping on sight and the screen would stay
+    empty.
+
+    The arithmetic of why: waiting costs roughly half the kill rate, and it also slows wave
+    progression, which is itself a score multiplier. A peak of 2.6x cannot buy that back. This is set
+    so that the patient line is genuinely competitive, which is the entire point -- if greed and
+    patience score the same the band is decoration. */
+ pay:4.6,
+ /* The precision window scales the other way from the usual: hard to land a PERFECT at the top,
+    generous down in the band. This is what stops the band being purely a greed tax -- it is also
+    where the game is most readable, because the target has stopped being a distant speck. */
+ windowTop:.55,
+ windowBand:1.35
+};
+
+function v57Line(){return H-(isMobile?105:72);}
+
+/* 0 at the top of the arena, 1 deep in the band. Smoothstepped rather than linear so there is no
+   perceptible edge where the payout suddenly turns on -- a hard boundary would train the player to
+   hover exactly on it, which is a worse game than a gradient. */
+function v57Depth(y){
+ const line=v57Line();
+ if(!(line>0))return 0;
+ const t=(y/line-V57.start)/Math.max(.001,V57.full-V57.start);
+ const k=Math.max(0,Math.min(1,t));
+ return k*k*(3-2*k);
+}
+
+let v57Mult=1;
+
+/* Applied at the scoring seam rather than inside hitOrb's own arithmetic, so every points source a
+   kill can accumulate -- base, perfect, shard bonus, rival bounty, chain -- is multiplied once and
+   consistently, and no future layer that adds another bonus can accidentally escape it. */
+const v57Score=score;
+score=function(delta,event='hit'){
+ return v57Score(delta*v57Mult,event);
+};
+
+const v57HitOrb=hitOrb;
+hitOrb=function(o,x,y,chain=false){
+ const depth=v57Depth(o.y);
+ const prevMult=v57Mult;
+ const prevWindow=game.perfectWindow;
+ v57Mult=prevMult*(1+depth*(V57.pay-1));
+ /* The window is restored in the finally, so a layer above that reads perfectWindow between kills
+    still sees the player's real, pilot-modified value. */
+ game.perfectWindow=prevWindow*(V57.windowTop+depth*(V57.windowBand-V57.windowTop));
+ try{
+  return v57HitOrb(o,x,y,chain);
+ }finally{
+  v57Mult=prevMult;
+  game.perfectWindow=prevWindow;
+ }
+};
+
+/* ---- Drawing it ----
+
+   A rule the player cannot see is a rule they will resent rather than use. The band is drawn under
+   everything else in the arena -- it is floor marking, not an overlay -- and it brightens as
+   hostiles enter it, so the reward reads as "these are worth more right now" rather than as
+   decoration that happens to be there. */
+const v57Draw=drawReactor;
+drawReactor=function(){
+ const line=v57Line();
+ const top=line*V57.start;
+ const full=line*V57.full;
+ let live=0;
+ for(const o of game.orbs)if(v57Depth(o.y)>.15)live++;
+ const heat=Math.min(1,live/4);
+
+ ctx.save();
+ ctx.globalCompositeOperation='lighter';
+ const world=worlds[game.world%worlds.length];
+ ctx.fillStyle=v15Grad(ctx,`v57band|${world.accent}|${Math.round(top)}|${Math.round(line)}`,()=>{
+  const g=ctx.createLinearGradient(0,top,0,line);
+  g.addColorStop(0,'transparent');
+  g.addColorStop(.55,world.accent+'10');
+  g.addColorStop(1,world.accent+'26');
+  return g;
+ });
+ ctx.globalAlpha=.5+heat*.5;
+ ctx.fillRect(0,top,W,line-top);
+ /* The saturation line: the depth past which the payout stops climbing. Dashed, because a solid rule
+    across the arena reads as a wall the player must not cross rather than as a threshold. */
+ ctx.globalAlpha=.22+heat*.4;
+ ctx.strokeStyle=world.accent;
+ ctx.lineWidth=1.5;
+ ctx.setLineDash([14,12]);
+ ctx.beginPath();ctx.moveTo(0,full);ctx.lineTo(W,full);ctx.stroke();
+ ctx.setLineDash([]);
+ ctx.restore();
+
+ v57Draw();
+};
+
+/* The multiplier on the kill itself. V16 already floats the score above the impact, so this rides
+   alongside it rather than adding a second number to read -- and only above 1.35x, because a badge
+   on every kill is wallpaper and stops being information. */
+const v57FloatHit=hitOrb;
+hitOrb=function(o,x,y,chain=false){
+ const depth=v57Depth(o.y);
+ const hpBefore=o.hp;
+ const out=v57FloatHit(o,x,y,chain);
+ const mult=1+depth*(V57.pay-1);
+ if(!chain&&hpBefore<=1&&mult>1.35&&typeof floating==='function'){
+  floating(o.x,o.y-o.r-16,`x${mult.toFixed(1)}`,'#ffe27a');
+ }
+ return out;
+};

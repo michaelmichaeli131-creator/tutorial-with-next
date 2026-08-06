@@ -1743,3 +1743,88 @@ measurement that survives differing wave progression — most likely the daily s
 documented here as the thing that collapsed run-to-run spread from 4.5x to 1.17x, plus a harness whose
 augment handling does not consume measured ticks. `V56` is preserved in the session scratchpad rather
 than the tree, and its reasoning is above if someone wants to take it further.
+
+
+## V57 — the strike band, and why the empty arena was never a spawn-rate problem
+
+Three research agents were run: market/retention, arcade design craft, and a codebase audit. The
+design agent supplied the reframing that made everything else fall into place, and it is worth
+stating in full because it turns a vague "the game feels empty" into arithmetic.
+
+### Little's Law is the whole diagnosis
+
+For any queue in steady state, `L = λ·W` — average population equals arrival rate times average time
+in the system. The player is a server with a service rate of about six taps a second, and one tap
+kills one hostile:
+
+    with a player      λ≈0.95/s × W≈0.2s  = L≈0.2   -> median 0 on screen, empty 79%
+    with no input      λ≈0.95/s × W≈12s   = L≈11    -> median 6, reactor overrun in 11s
+
+Both match the measurements exactly, which is the point: this is not a theory about the game, it is a
+description of it.
+
+**And it explains the ceiling on V56.** V56 raises λ and it genuinely worked — dead time roughly
+halved, kills per second up a third, three times as many taps finding a target. But to reach a median
+of five on screen at W≈0.2s you would need λ≈25 arrivals a second, which is not a game. λ was never
+going to finish the job. **W is the lever, and a hostile lives 0.2 seconds because nothing in the game
+gives the player any reason to leave it alive for 0.3.**
+
+The agent also found two spawn holes worth recording independently: `spawnTimer` is set to
+`Number.MAX_SAFE_INTEGER` once a wave quota is met, so spawning halts entirely and the better a player
+performs the sooner the arena goes silent; and `if(!game.boss)` suppresses all normal spawns during a
+titan fight. Both are still open.
+
+### The strike band
+
+Kills deep in the arena, near the reactor, pay up to 4.6x, and the precision window that produces a
+PERFECT is wide down there and narrow at the top. Nothing is forbidden. A nervous player clears at the
+top exactly as before and the screen looks exactly as before — a legitimate, lower-scoring line. A
+greedy player deliberately holds a crowd and sweeps it late.
+
+Deliberately the opposite of hidden adaptive difficulty: the research on that is unambiguous —
+Resident Evil 4 shipped hidden DDA, it went unnoticed for years and generated real anger once found.
+The rule is that anything making the game *harder* must be visible and chosen, and only assistance may
+be invisible. So the band is drawn on the arena floor and brightens as hostiles enter it.
+
+It is also an ergonomics fix. Around three quarters of phone touches are thumb touches and the top
+third of a portrait screen is the hard zone needing a grip shift. The game spawned at the top and
+rewarded killing at the top — the worst band on the device. The paying action now sits in easy reach.
+
+### Measuring an incentive requires a bot that can have a preference
+
+The first measurement showed dwell time unmoved at 0.14–0.17s and looked like a flat failure. It was
+the harness: the bot taps the lowest available hostile the instant it exists, so it cannot express a
+preference and is structurally blind to any incentive to wait, however strong. A second policy was
+added that holds fire until a hostile is deep enough to be worth the multiplier, breaking that rule
+only for something about to breach.
+
+That comparison is the actual test, and at the first tuning it returned a clear negative:
+
+    peak 2.6x        score      median on screen   empty      dwell W
+    greedy bot       160,937          1             36%        0.38s
+    patient bot      124,591          7              0%        9.78s
+
+The patient line produced *exactly* the target density — median 7 against a target of 4–6, empty 0%
+against a target under 8%, dwell 9.8s against a target of 2–3s — and still scored 23% *less*. A
+gradient that does not pay for itself is score inflation, not a choice; a rational player keeps
+tapping on sight and the screen stays empty. Waiting costs roughly half the kill rate and also slows
+wave progression, which is itself a score multiplier, and 2.6x cannot buy that back.
+
+At 4.6x the incentive flips, repeatably:
+
+    peak 4.6x        score              median on screen   empty
+    greedy bot       126,990 / 121,504        0 / 1         60% / 47%
+    patient bot      158,159 / 160,355        7 / 7          0% /  0%
+
+The higher-scoring line is now also the denser one. That is the design goal stated precisely: the
+player is not told to let the arena fill, they are paid to want it to.
+
+### Honest limits
+
+The patient bot is a crude proxy for a human — it holds fire on a fixed depth threshold and taps one
+target per opportunity, so it leaves value on the table and its 0.56 kills/s is a floor rather than
+what a skilled human would achieve. What the numbers establish is that a patient line *exists* and
+*wins*; how a person actually plays it is not established here. The peak multiplier is a single
+constant, `V57.pay`, if it turns out to be too strong in a human's hands.
+
+Audit, legacy and combat pass; the gauntlet titan stays in its 42–45k band.
