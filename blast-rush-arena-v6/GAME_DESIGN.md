@@ -1640,3 +1640,78 @@ historical 42-45k band, so nothing has obviously collapsed — but `combat.mjs` 
 deliberately unchanged, so those runs do not probe the buff. Late stages with a level-5 nova or lance
 are the case to watch. Every number lives in `V55_STATS`, one function per weapon, if the ramp needs
 pulling back.
+
+
+## The arena is empty most of the time you are playing it — and a fix that did not work
+
+This started as a loose end from V55: the bot run used to check the weapon buff logged 29 taps where
+about 360 were expected, and I recorded that as untrustworthy rather than explaining it. Explaining it
+turned up something bigger, and then a mistake, and then a failed fix. All three are worth recording.
+
+### What the bot was really telling us
+
+The tap loop already counted why each tick did not tap; it just never printed it. Printed:
+
+    ticks 283  ->  taps 32  |  noTarget 249  notRunning 0  paused 0  augmentScreen 2  threw 0
+
+Not a broken harness and not dropped input: the field simply had nothing on it for 88% of the ticks.
+The same held with the weakest possible loadout, so it is not a consequence of V55's weapon buff.
+
+Measured directly, sampling the field at 10Hz for 45 seconds:
+
+    with a player tapping at 6/s    median 0 hostiles on screen, p90 1, max 2, empty 79% of the time
+    with no input at all            median 6 hostiles on screen, p90 13, max 14, empty 3%
+
+The spawner is fine. Left alone the arena fills and overruns the reactor in eleven seconds. What is
+wrong is what happens once somebody engages with it: a competent player clears each hostile as it
+arrives and then waits. Forty-two kills in forty-five seconds, four seconds in five spent looking at
+an empty screen. For a game whose entire verb is "tap the thing", that is a serious finding — every
+other improvement decorates a screen that is usually empty.
+
+### The hush was not the culprit, my harness was
+
+The first trace showed `v35Hush` pinned at 1.5 for an entire run instead of decaying over 1.5
+seconds, which looked like a serious bug in V35 — spawns are held while the hush is up. It was not.
+Setting the value by hand and watching it decay proved the decrement worked perfectly (1.5 to 0.483
+in 1013ms), and a write trap showed exactly one write raising it. The explanation was in the probe's
+own output all along: `paused: true`. **The augment screen pauses the game between waves, the harness
+was never dismissing it, and `v35Live()` is false while paused, so nothing decremented.** The harness
+had been recording a frozen, paused arena as "the arena is empty".
+
+With the harness dismissing augments, the hush decays as designed — about one second per wave advance,
+10% of a run. It is correct and is left alone. The empty-arena finding above survives the correction;
+it is measured with the fixed harness.
+
+### V56: written, measured, withdrawn
+
+The obvious fix is a floor on how empty the arena may get while somebody is playing: keep a
+wave-scaled minimum on screen, and while below it pull the spawn timer forward in proportion to the
+deficit. Strictly additive — it can only bring spawns earlier, never delay them, so it cannot slow the
+game or make a full screen fuller, and it excludes duels, hushes and titan fights.
+
+It did not work, and it is not shipped.
+
+    empty-screen time     79% -> 76%    (inside the noise)
+    kills per second     0.90 -> 0.58   (worse)
+
+The kills-per-second drop is confounded — with V56 the run reached wave 7-10 instead of 3-4, which
+changes everything downstream — but there is no reading in which it clearly helped, and shipping an
+unproven balance change would contradict the whole method of the last several sections.
+
+Two lessons about the measurement, both mine:
+
+- **"Screen empty at a 10Hz sample" is a bad metric here.** A hostile can arrive and die inside one
+  sample, so a busy player and an idle one can look identical. What matters is how often a tap the
+  player was ready to make had something to hit.
+- **That replacement metric was contaminated too.** The harness's augment-dismissal branch returns
+  early without sampling or tapping, so a build that completes more waves gets fewer measured ticks —
+  the tick counts differed fourfold between the two builds (190 against 55), which is a property of
+  my harness and not of the game.
+
+### Where this leaves it
+
+The problem statement is solid and reproducible; the fix is not found. The next attempt needs a
+measurement that survives differing wave progression — most likely the daily seed, which is already
+documented here as the thing that collapsed run-to-run spread from 4.5x to 1.17x, plus a harness whose
+augment handling does not consume measured ticks. `V56` is preserved in the session scratchpad rather
+than the tree, and its reasoning is above if someone wants to take it further.
