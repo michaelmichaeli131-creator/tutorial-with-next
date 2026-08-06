@@ -1682,7 +1682,35 @@ With the harness dismissing augments, the hush decays as designed — about one 
 10% of a run. It is correct and is left alone. The empty-arena finding above survives the correction;
 it is measured with the fixed harness.
 
-### V56: written, measured, withdrawn
+### V56: written, measured, withdrawn — and then shipped once the instrument was fixed
+
+**The withdrawal below was wrong, and the reason is worth keeping.** V56 works; what did not work was the
+harness measuring it. Two defects, both mine: the runs used solo mode, which re-randomises the spawn
+schedule every run, so the two builds were never compared on the same field; and the augment-dismissal
+branch returned before sampling or tapping, so the build that completed more waves lost more measured
+ticks. Rebuilt on the daily seed — which this file already documents as collapsing run-to-run spread
+from 4.5x to 1.17x — and with the augment click handled inside the tick rather than instead of it, the
+baseline became tight enough to measure against: taps-with-a-target 21/21/23%, kills per second
+0.75/0.77/0.80, empty 78/79/81%, wave 2 on all three runs.
+
+Against that baseline, V56 across three runs:
+
+    metric                     baseline            with V56
+    taps that had a target     21 / 21 / 23%       67 / 63 / 61%
+    kills per second           0.75 / 0.77 / 0.80  0.98 / 1.04 / 1.02
+    screen empty               78 / 79 / 81%       34 / 41 / 42%
+    kills in 45s               34 / 34 / 35        45 / 46 / 45
+    wave reached               2 / 2 / 2           3 / 3 / 5
+
+Three times as many taps find something to hit, a third more kills a second, and the dead time roughly
+halves. Every metric moves the same way, both spreads are tight, and the effect is an order of
+magnitude larger than the noise. Shipped.
+
+The original withdrawal note follows, unedited, because the mistake in it is the more useful record: a
+change can be correct and still measure as useless when the instrument cannot see it, and the reflex to
+withdraw an unproven change is right even when the change happens to be good.
+
+### V56 as first measured: written, measured, withdrawn
 
 The obvious fix is a floor on how empty the arena may get while somebody is playing: keep a
 wave-scaled minimum on screen, and while below it pull the spawn timer forward in proportion to the

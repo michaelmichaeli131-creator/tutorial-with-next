@@ -1,0 +1,75 @@
+/* V56 — four seconds out of five with nothing to tap.
+
+   Measured, playing solo at six taps a second and dismissing the augment screen properly:
+
+       with a player      median 0 hostiles on screen, p90 1, max 2, screen empty 79% of the time
+       with no input      median 6 hostiles on screen, p90 13, max 14, screen empty 3%
+
+   The spawner is not broken — left alone the arena fills up and overruns the reactor in eleven
+   seconds. The problem is what happens once someone is actually playing: a competent player clears
+   each hostile as it arrives and then waits for the next one. Forty-two kills in forty-five seconds,
+   with four seconds in five spent looking at an empty screen.
+
+   For a game whose entire verb is "tap the thing", that is the whole of the fun problem. Every other
+   improvement — the art, the weapons, the sound — decorates a screen that is usually empty.
+
+   Two things are deliberately *not* the fix.
+
+   Not a faster base spawn rate: that would make the unattended arena lethal even sooner, and the
+   no-input measurement above shows it is already lethal in eleven seconds. The game is not too easy
+   when you ignore it; it is too empty when you engage with it.
+
+   Not a hush change either. The hush was the first suspect — the trace showed it frozen at 1.5 for
+   the whole run — but that turned out to be the measurement: the augment screen pauses the game, the
+   harness was not dismissing it, and `v35Live()` is false while paused so nothing decremented. With
+   the harness fixed the hush decays exactly as designed, about one second per wave advance, and
+   accounts for 10% of the run. It is not the problem and is left alone.
+
+   The fix is a floor on how empty the arena is allowed to get while somebody is playing it. It only
+   ever pulls the next spawn *forward*, and only while the screen is below the floor, so it cannot
+   slow the game down and cannot make a full screen fuller. A player who is keeping up gets more to
+   do; a player who is drowning is already above the floor and is not touched at all. */
+
+const V56={
+ /* How many hostiles the arena tries to keep in front of the player. Grows with the wave so the
+    early game still opens gently — two on screen at wave one is a tutorial, seven by wave ten is a
+    fight — and caps so this never becomes its own difficulty curve on top of the real one. */
+ floor:(wave)=>Math.min(7,2+Math.floor((wave-1)*.55)),
+ /* How hard a deficit pulls the spawn timer down, in seconds of timer per second of real time per
+    missing hostile. At 1.6 a screen three short of the floor recovers in well under a second, which
+    is fast enough that the player never notices a gap and slow enough that hostiles arrive as a
+    stream rather than a clump. */
+ urgency:1.6,
+ /* A hostile that has not entered the play area yet does not count as something to tap. This is the
+    same y>0 test the bot's targeting uses, so the floor is measured against what a player can
+    actually reach rather than against what exists. */
+ minY:0
+};
+
+function v56Live(){
+ return game.running
+  &&!game.paused
+  /* Duels replay one server-authoritative spawn list so both players meet identical enemies at
+     identical moments. Same line V21 and V35 drew, for the same reason. */
+  &&game.mode!=='duel'
+  /* The hush is deliberate emptiness and is the one moment this must not fight. */
+  &&!(game.v35Hush>0)
+  /* A titan owns the screen and its own pacing; feeding a crowd in underneath it is a different
+     fight from the one that was designed. */
+  &&!game.boss;
+}
+
+const v56Update=update;
+update=function(dt){
+ v56Update(dt);
+ if(!v56Live())return;
+ let onScreen=0;
+ for(const o of game.orbs)if(o.y>V56.minY)onScreen++;
+ const deficit=V56.floor(game.wave)-onScreen;
+ if(deficit<=0)return;
+ /* Only ever brought forward, never pushed back: this is a floor on activity, not a replacement for
+    the spawn schedule. `MAX_SAFE_INTEGER` is the base loop's way of saying "no more spawns this
+    wave", and that has to be respected or a completed directive would keep producing hostiles. */
+ if(game.spawnTimer===Number.MAX_SAFE_INTEGER)return;
+ game.spawnTimer=Math.max(0,game.spawnTimer-dt*deficit*V56.urgency);
+};
