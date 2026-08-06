@@ -1974,3 +1974,59 @@ of pressure, and should not be. The saturation point was lowered so the patient 
 range rather than living in the bottom half of one.
 
 Audit, legacy, combat, the V49 bed harness and the arrangement dump all pass.
+
+
+## V62 — the first tap plays the game
+
+What a new player did: tap PLAY, wait 520ms, land on a menu with six mode buttons and a five-item
+bottom nav, get a modal with three cards of prose, dismiss it, pick CAMPAIGN — which does not start a
+game, it opens a stage-select screen — then tap CONTINUE. Two navigation decisions and a wall of text
+before anything happens.
+
+The research is consistent and unkind about this. Core gameplay wants to be running inside sixty
+seconds and the "aha" inside ninety; instruction wants to be under thirty seconds and *contextual*,
+taught when a mechanic first matters rather than in a pre-flight briefing; meta systems belong in
+sessions three to five. The named failure modes read as a description of this build: tap-through
+tutorials, prose that does not match what the game asks of you, and a shop shown before the player
+has any reason to want one — this game showed a first-timer twelve purchasable items against a
+300-credit wallet whose cheapest weapon costs 900.
+
+There was also nothing to hang a fix on: `save.runs` is incremented in `begin()` and never read once
+anywhere in the client.
+
+Now a save that has never seen a run goes from the launch screen straight into stage one. The menu is
+where they land *after* that run, answering questions they now have rather than asking questions they
+cannot yet have opinions about. Teaching is two lines in the arena, each shown when it is true.
+
+### Measured, from a genuinely cold save
+
+localStorage cleared entirely, and the harness is only allowed to tap monsters — no menu navigation,
+because the question is whether the game starts on its own:
+
+    PLAY became tappable      0.3s   0.3s
+    game was running          NEVER  1.3s
+    first kill                NEVER  2.5s, after one tap
+
+"NEVER" is not a failure of the old build so much as a description of it: a player who only knows how
+to tap the thing on screen never reaches the game at all.
+
+### Two mistakes worth keeping
+
+**The first hook never fired.** It wrapped `showScreen('menuScreen')`, and the launch screen turns out
+to be an *overlay* sitting on top of the menu — dismissing it reveals the menu without any screen
+transition happening. The measurement caught it immediately, showing a cold player still sat on the
+menu with the coach modal up. Rehooked onto the launch button, where listeners are additive so the
+existing handler is untouched.
+
+**The prompt drew straight through the stage briefing card.** Holding it until the briefing clears
+fixed the collision and produced a better rule than the one intended: a player who works out the verb
+and kills something inside two seconds never sees an instruction at all. Only someone actually stuck
+gets taught, which is what contextual teaching is supposed to mean.
+
+### The harnesses had to be told they are returning players
+
+`legacy` and `combat` both broke, and neither was a bug: they seed a fresh save and immediately click
+a menu button that no longer exists at that moment, because the game has started. That is the change
+working. Both now seed `blastRushV6` with `runs:1` — the base save is `Object.assign(defaults,
+parsed)`, so one field is enough — and the FTUE harness keeps clearing storage entirely so it still
+measures the genuinely cold path. Audit, legacy and combat all pass again.
