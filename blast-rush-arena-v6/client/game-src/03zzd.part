@@ -34,12 +34,21 @@ const V56={
  /* How many hostiles the arena tries to keep in front of the player. Grows with the wave so the
     early game still opens gently — two on screen at wave one is a tutorial, seven by wave ten is a
     fight — and caps so this never becomes its own difficulty curve on top of the real one. */
- floor:(wave)=>Math.min(7,2+Math.floor((wave-1)*.55)),
+ /* Cut hard after play feedback that the arena is overloaded and that the crowd makes the game less
+    interesting rather than more. That feedback is right and the fault is in how this was tuned: the
+    only thing the measuring bot could express was "did I have a target", so the number was pushed
+    until targets were always available -- which optimises for work, not for interest. A human does
+    not want more targets, they want more decisions per target.
+
+    What stays is the original purpose: never let the screen go dead. What goes is the crowd. Density
+    beyond this floor is now entirely the player's own choice through V57's strike band -- earned by
+    holding fire for the multiplier, not imposed by the spawner. */
+ floor:(wave)=>Math.min(3,1+Math.floor((wave-1)*.25)),
  /* How hard a deficit pulls the spawn timer down, in seconds of timer per second of real time per
     missing hostile. At 1.6 a screen three short of the floor recovers in well under a second, which
     is fast enough that the player never notices a gap and slow enough that hostiles arrive as a
     stream rather than a clump. */
- urgency:1.6,
+ urgency:1.1,
  /* A hostile that has not entered the play area yet does not count as something to tap. This is the
     same y>0 test the bot's targeting uses, so the floor is measured against what a player can
     actually reach rather than against what exists. */

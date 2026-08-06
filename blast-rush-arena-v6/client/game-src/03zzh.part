@@ -1,39 +1,30 @@
-/* V60 — the band you could not see.
+/* V60 — the band you could not see, then the band that was too loud.
 
-   V57 pays up to 4.6x for kills deep in the arena, and the whole design rests on the player being
-   able to see where that starts. Captured against a populated arena, it does not: the saturation line
-   is faintly readable and the band itself is invisible.
+   V57 pays up to 4.6x for kills deep in the arena, and the design rests on the player seeing where
+   that starts. Captured against a populated arena, it did not.
 
-   The cause is a straightforward rendering mistake, and it is worth naming because it is easy to
-   repeat. The band was drawn with `globalCompositeOperation='lighter'` — an additive wash. Additive
-   drawing adds light, so it is only visible over something dark. Three of the four worlds put a lit
-   city skyline or a bright planet exactly where the band sits, and adding a few percent of light to
-   an already-bright cityscape produces nothing the eye can find. The band was legible in the empty
-   test arena I first checked it in and invisible in the game.
+   The cause was a rendering mistake worth naming because it is easy to repeat: the band was drawn
+   with `globalCompositeOperation='lighter'`, an additive wash, which only shows over something dark.
+   Three of the four worlds put a lit skyline or a bright planet exactly where the band sits, and
+   adding a few percent of light to an already-bright cityscape produces nothing the eye can find. It
+   was legible in the empty test arena I checked it in and invisible in the game. Check a visual
+   change against a representative background, not a convenient one.
 
-   So the rule is redrawn to be readable regardless of what is behind it, which means it cannot rely
-   on adding light:
+   The first fix over-corrected. It added a dark wash above the band, two rules, tick marks down both
+   edges and two text labels — to a screen already carrying a wave bar, a boss bar, a combo readout,
+   two ability buttons, a weapon chip and an avatar. Play feedback was that the game does not look
+   good, and that is fair: legibility was real but it was bought with clutter, and clutter is its own
+   kind of unreadable.
 
-   1. **Darken above, not brighten below.** Everything shallower than the band is pushed down a little
-      with a normal-composite dark wash. Contrast against a bright background needs subtraction, and
-      it makes the band the bright region by comparison on any world.
-   2. **Edges rather than fills.** A labelled entry line where the payout starts, a brighter line
-      where it saturates, and tick marks down both sides — a marked zone on a floor, like a landing
-      pad. Edges survive a busy background in a way a wash never does.
-   3. **Say the number.** "STRIKE x2" at the entry, "x4.6" at saturation. The literature on Duolingo's
-      streak is blunt about this: an eight-word explanation of the mechanic was worth more than most
-      of the feature work around it. A multiplier the player has to infer from floating numbers is a
-      mechanic most players will never find.
-
-   The band still brightens as hostiles enter it, because "these are worth more right now" is the
-   moment the rule teaches itself. */
+   What is left is the part that carries the meaning. One dashed line where the payout starts, drawn
+   with normal compositing so it survives a bright background, and the number — small, at the left
+   edge, and only while hostiles are actually in the zone. At rest the arena carries no extra text at
+   all. */
 
 const V60={
- /* How far the area above the band is pushed down. Subtle: this is contrast, not a vignette, and the
-    top of the arena still has to be a place you can see and fight in. */
- dim:.28,
- tick:9,
- label:'STRIKE'
+ /* Kept as one knob in case the line needs to come back up, but the wash, the ticks and the second
+    label are gone -- see the note above. */
+ lineAlpha:.16
 };
 
 /* Replaces V57's own drawing wrapper rather than layering over it — two bands drawn on top of each
@@ -42,55 +33,40 @@ const v60DrawBase=v57Draw;
 drawReactor=function(){
  const line=v57Line();
  const top=line*V57.start;
- const full=line*V57.full;
- let live=0;
+  let live=0;
  for(const o of game.orbs)if(v57Depth(o.y)>.15)live++;
  const heat=Math.min(1,live/4);
  const world=worlds[game.world%worlds.length];
 
  ctx.save();
 
- /* 1. Everything above the band steps back. Normal composite, so it works over a lit skyline as
-       well as over empty space -- which is the entire fix. */
- ctx.fillStyle=`rgba(2,6,16,${V60.dim})`;
- ctx.fillRect(0,0,W,top);
+ /* Reduced after play feedback that the screen does not look good. The first version added a dark
+    wash, two rules, tick marks down both edges and two text labels -- to a screen that already
+    carries a wave bar, a boss bar, a combo readout, two ability buttons, a weapon chip and an
+    avatar. Legibility was real but it was bought with clutter, and clutter is itself a way of being
+    unreadable.
 
- /* 2. The zone markings. */
+    What survives is the part that carries the meaning: one line where the payout starts, and the
+    number, shown small and only while the zone is actually doing something. The dark wash, the side
+    ticks and the second label are gone. */
  ctx.strokeStyle=world.accent;
  ctx.lineCap='round';
-
- /* Entry: where the payout starts climbing. Dashed and dimmer than the saturation line, so the two
-    read as "from here" and "best here" rather than as two equal rules. */
- ctx.globalAlpha=.34+heat*.3;
- ctx.lineWidth=1.4;
- ctx.setLineDash([9,10]);
+ ctx.globalAlpha=V60.lineAlpha+heat*.34;
+ ctx.lineWidth=1.2;
+ ctx.setLineDash([7,11]);
  ctx.beginPath();ctx.moveTo(0,top);ctx.lineTo(W,top);ctx.stroke();
-
- /* Saturation: solid, brighter, the line past which nothing more is gained. */
- ctx.globalAlpha=.5+heat*.4;
- ctx.lineWidth=2;
  ctx.setLineDash([]);
- ctx.beginPath();ctx.moveTo(0,full);ctx.lineTo(W,full);ctx.stroke();
 
- /* Side ticks. Cheap, and they are what makes the region between the two lines read as one marked
-    zone instead of as two unrelated horizontal rules. */
- ctx.globalAlpha=.3+heat*.35;
- ctx.lineWidth=2;
- for(let y=top;y<=line;y+=26){
-  ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(V60.tick,y);ctx.stroke();
-  ctx.beginPath();ctx.moveTo(W-V60.tick,y);ctx.lineTo(W,y);ctx.stroke();
+ /* The number fades in only when hostiles are actually in the zone. At rest the arena carries no
+    extra text at all. */
+ if(heat>.05){
+  ctx.globalAlpha=heat*.7;
+  ctx.fillStyle=world.accent;
+  ctx.font=`800 ${isMobile?9:10}px system-ui`;
+  ctx.textAlign='left';
+  ctx.textBaseline='bottom';
+  ctx.fillText(`×${V57.pay.toFixed(1)} ZONE`,10,top-4);
  }
-
- /* 3. The number, because a multiplier nobody can read is a multiplier nobody will play for. */
- ctx.setLineDash([]);
- ctx.globalAlpha=.62+heat*.38;
- ctx.fillStyle=world.accent;
- ctx.font=`800 ${isMobile?10:11}px system-ui`;
- ctx.textAlign='left';
- ctx.textBaseline='bottom';
- ctx.fillText(`${V60.label} ×${(1+(V57.pay-1)*.5).toFixed(1)}`,V60.tick+6,top-4);
- ctx.textBaseline='top';
- ctx.fillText(`×${V57.pay.toFixed(1)}`,V60.tick+6,full+4);
  ctx.restore();
 
  v60DrawBase();
