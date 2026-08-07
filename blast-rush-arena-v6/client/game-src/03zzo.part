@@ -1,0 +1,80 @@
+/* V67 — you cannot plan for something you cannot see yet.
+
+   V63 made where you tap a decision and V64 arranged hostiles into shapes worth reading, and then
+   left the player no time to read them. Hostiles are created above the top edge and fall in, which
+   means a formation is invisible for its first second or so and then simply *is there*, already
+   descending, already needing an answer. The decision the last two parts built exists in a window
+   the player never gets to use.
+
+   That is also a fair share of what "the game doesn't look good" describes. Things that appear
+   without warning read as random even when they are not; the same arrivals, announced, read as
+   authored. Arcade games have solved this the same way for forty years — the marker at the edge of
+   the screen that says something is coming and where.
+
+   One small chevron per incoming hostile, on a line just under the HUD, at the x it will enter at.
+   It fades in as the hostile approaches and out as it crosses, so at rest the strip is empty. The
+   chevrons of a formation are spaced exactly as its members are, which means the shape is legible
+   before it arrives: three evenly spread marks is a row, two tight pairs is a keystone, one mark
+   that stays is a column. A sealed member's chevron is drawn in the shell colour, so the hardest
+   question a formation is going to ask is the first thing the player learns about it.
+
+   Not the same thing as V35's incoming silhouettes, which are worth distinguishing because they
+   look superficially like this and answer a different question. Those are atmosphere: four or six
+   shapes drifting through the haze during the hush, deliberately unshootable, at positions that have
+   nothing to do with anything real, existing to give the held breath something to hold. This is
+   information about actual hostiles at their actual x, and it runs while the arena is live.
+
+   Deliberately not a countdown bar, not a silhouette, not a name. The screen already carries a wave
+   bar, a boss bar, a combo readout, two ability buttons, a weapon chip and an avatar, and the last
+   part that added chrome to this arena had to be cut back a week later. A chevron is the least this
+   can be and still be information. */
+
+const V67={
+ /* The strip sits below the HUD block rather than at the very top of the canvas: the canvas is the
+    full screen and the wave bar, avatar and pause button are drawn over its first hundred points.
+    A marker up there would be behind them. */
+ y:()=>isMobile?124:96,
+ /* How far above the top edge a hostile starts being announced. Beyond this the warning would be
+    permanent -- something is nearly always on its way -- and a permanent warning is wallpaper. */
+ lead:230,
+ size:8,
+ /* Photographed at .62 with a squared falloff the marks were barely there -- about 0.3 alpha at the
+    distance a hostile spends most of its approach at, against a lit skyline and a planet. A warning
+    that has to be looked for is not a warning. Brighter, with a floor, so a mark is legible the
+    whole time it is up and merely brightest just before it matters. */
+ alpha:.82
+};
+
+const v67Draw=draw;
+draw=function(){
+ v67Draw();
+ if(!game.running||game.paused)return;
+
+ const world=worlds[game.world%worlds.length];
+ const y=V67.y();
+ ctx.save();
+ ctx.lineWidth=2.4;
+ ctx.lineCap='round';
+ ctx.lineJoin='round';
+ for(const o of game.orbs){
+  /* Measured against the strip, not against the top of the canvas. The canvas is the whole screen
+     and the HUD covers its first hundred points, so a hostile at y=60 exists, is on screen by the
+     arithmetic, and is behind the wave bar where nobody can see it. Cutting the marker at y=0 left
+     a gap where neither the chevron nor the hostile was visible. It runs until the hostile actually
+     reaches the line the marker is drawn on, and then hands over. */
+  const d=y-o.y;
+  if(d<=0||d>V67.lead)continue;
+  /* Brightest just before it crosses, so the strip has a rhythm rather than a constant hum, and the
+     eye is drawn at the moment the information is worth acting on. */
+  const near=1-d/V67.lead;
+  ctx.globalAlpha=V67.alpha*(.4+near*.6);
+  ctx.strokeStyle=o.v65Plates>0?V65.shell:world.accent;
+  const s=V67.size;
+  ctx.beginPath();
+  ctx.moveTo(o.x-s,y-s*.6);
+  ctx.lineTo(o.x,y+s*.6);
+  ctx.lineTo(o.x+s,y-s*.6);
+  ctx.stroke();
+ }
+ ctx.restore();
+};
