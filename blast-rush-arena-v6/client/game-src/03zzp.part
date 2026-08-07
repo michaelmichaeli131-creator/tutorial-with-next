@@ -1,0 +1,150 @@
+/* V68 — the armoury finally owns the mechanic the game is built on.
+
+   Two things have been true at once and should not have been. Play feedback asked, in as many words,
+   that switching weapons feel like a real difference and that an advanced weapon kills more. And V63
+   made the blast the centre of the game: what a tap does now is detonate, and how much of a formation
+   goes depends on how far that detonation reaches. Those two facts had nothing to do with each other.
+   Every weapon produced exactly the same blast, so the most consequential number in the arena was the
+   one number no purchase could touch.
+
+   The weapon stats already carried the vocabulary for this and were spending it on side effects. A
+   scatter volley has `splash`, a nova cannon has `aoe`, an arc chain has `chain` — three different
+   words for "this weapon works on more than one thing at a time", each wired to its own small rate-
+   limited extra. They map onto the blast directly:
+
+   The figures below are measured: one tap on the best point of a four-hostile formation, same board
+   for every weapon, weapons at level five.
+
+     PULSE DRIVER    baseline reach. Three of four on a row, a wedge and a column; the whole
+                     keystone. Its levels buy damage, so its answer to an armoured hostile is to hit
+                     it hard rather than to reach further.
+     SCATTER VOLLEY  a wider blast, growing with its splash stat. Four of four on everything by level
+                     five. The crowd weapon widens the thing that clears crowds.
+     VOID LANCE      a blast that takes one neighbour instead of everything in reach: two of four on
+                     every shape, always. A piercing lance is not an area weapon; it trades the
+                     cascade for damage that opens armour in a single tap, and plays formations by
+                     killing the hard member directly rather than by breaking the shape.
+     ARC CHAIN       extra links and a gentler falloff, so its cascades keep travelling instead of
+                     dying out. Four of four on every shape from level one -- including the column,
+                     which nothing else clears until it is fully upgraded. Reach is unchanged: it is
+                     not a bigger explosion, it is a longer one.
+     SHARD SIPHON    baseline, identical to pulse. It is the economy weapon and buys credits.
+     NOVA CANNON     much wider, with a steep falloff: everything within reach at once and then
+                     nothing. The shape-deleter, at the cost of a long recharge.
+
+   Crucially the multipliers apply *at detonation*, not to `V63.radius` itself. V64 spaces formations
+   against that constant, so if the weapon moved it the shapes would grow with the blast and nothing
+   would change. The arena stays fixed; what varies is how much of it a given weapon can take.
+
+   Where a weapon has an area stat, its blast is derived from that stat and therefore grows as the
+   weapon is levelled -- buying an upgrade visibly changes how formations come apart, which is what
+   "an advanced weapon kills more" should mean in a game whose verb is an area rather than another
+   point of damage. The three weapons with no area stat (pulse, lance, siphon) are flat by design:
+   their levels buy damage and credits, and giving them creeping reach as well would collapse the
+   whole set back into one profile. */
+
+const V68={
+ /* Reach per point of `splash`. Scatter runs 78 to 158, giving roughly 1.19x to 1.38x. */
+ splash:1/420,
+ /* Reach per point of `aoe`. Nova runs 70 to 170, giving roughly 1.32x to 1.77x -- wide enough to
+    take a whole row in one tap, which is the fantasy the weapon is sold on. */
+ aoe:1/220,
+ /* What a heavy single-target weapon gives up: its blast takes one neighbour instead of everything
+    in reach.
+
+    The first version shrank its radius to 0.78x instead, and measured, that removed the lance's
+    chain completely -- 1 of 4 on a row, a wedge and a column, against 3 or 4 for everything else.
+    The reason is structural rather than a bad number: V64 spaces formations at 92% of the blast's
+    reach, so any radius cut past about 8% drops it under one gap and the chain stops existing.
+    Radius is close to a binary switch at this spacing; a cap on victims is an actual dial. The lance
+    keeps full reach and takes the one hostile nearest the kill, which is also a better description
+    of what a piercing weapon is. */
+ lanceTargets:1,
+ /* Nova's blast is enormous, so its falloff is steepened to compensate: it takes everything within
+    reach at once and the second link goes nowhere. Without this a nova tap on a column would clear
+    the entire arena, which is not a decision, it is a button. */
+ novaFalloff:.72,
+ /* Arc's gentler falloff.
+
+    Set to 1.12 first, and measured, that bought nothing at all: arc cleared exactly as much of every
+    shape as the starter weapon. The extra links it pays for were unreachable, because reach runs out
+    before the depth cap does. At V64's one-gap spacing a second link needs to retain about 87% of
+    the first blast's radius to connect, and 0.78 x 1.12 retains 87.4% of the radius but only 96% of
+    the *catch distance* once the target's own body is accounted for -- just under. A depth bonus on
+    top of a falloff that cannot reach the next hostile is a stat that does nothing.
+
+    At 1.22 the second link connects and the third is marginal, so arc is the one weapon whose
+    cascades keep travelling. */
+ arcFalloff:1.22
+};
+
+/* Keyed by weapon id rather than inferred from the stats.
+
+   Inferring was the first attempt and it was wrong in a way worth recording, because it read as the
+   more elegant option: "a weapon with damage of 2 or more and no area stat is a heavy single-target
+   weapon, so it trades reach for punch". That is a true sentence about the lance and a false one
+   about half the armoury. Pulse gains a point of damage every two levels and the siphon every three,
+   so an upgraded starter weapon and an upgraded economy weapon both matched the rule and both quietly
+   lost 22% of their blast as a reward for being levelled up. A rule that fires on a coincidence
+   between two stats will keep finding new coincidences; the id is what actually identifies a
+   weapon. */
+const V68_BLAST={
+ pulse:()=>({radius:1,depth:0,falloff:1,max:Infinity}),
+ scatter:(c)=>({radius:1+c.splash*V68.splash,depth:0,falloff:1,max:Infinity}),
+ lance:()=>({radius:1,depth:0,falloff:1,max:V68.lanceTargets}),
+ arc:(c)=>({
+  radius:1,
+  max:Infinity,
+  /* One extra link per two points of chain, capped by V63's own ceiling. Arc runs 2 to 6, so it buys
+     one link at first and two once upgraded. */
+  depth:Math.min(V63.depthMax,Math.floor(c.chain/2)),
+  falloff:V68.arcFalloff
+ }),
+ siphon:()=>({radius:1,depth:0,falloff:1,max:Infinity}),
+ nova:(c)=>({radius:1+c.aoe*V68.aoe,depth:0,falloff:V68.novaFalloff,max:Infinity})
+};
+
+/* The equipped id at the moment the run started, captured alongside the stats the run is using.
+   `v14Save.weapon` could be read live, but it can change in the armoury mid-session and a run should
+   fight with the weapon it began with. */
+const v68Begin=begin;
+begin=function(mode='solo',seed){
+ const out=v68Begin(mode,seed);
+ game.v68Weapon=(typeof v14Save==='object'&&v14Save)?v14Save.weapon:null;
+ return out;
+};
+
+v63Power=function(){
+ const c=game.v14Combat;
+ if(!c||typeof c!=='object')return{radius:1,depth:0,falloff:1,max:Infinity};
+ const profile=V68_BLAST[game.v68Weapon];
+ if(profile)return profile(c);
+ /* A weapon this table has never heard of still gets something sensible from whichever area stat it
+    carries, rather than silently falling back to baseline. */
+ return{
+  radius:1+(c.splash>0?c.splash*V68.splash:0)+(c.aoe>0?c.aoe*V68.aoe:0),
+  depth:c.chain>0?Math.min(V63.depthMax,Math.floor(c.chain/2)):0,
+  falloff:c.aoe>0?V68.novaFalloff:c.chain>0?V68.arcFalloff:1,
+  max:Infinity
+ };
+};
+
+/* ---- Saying so ----
+
+   The armoury descriptions were written before the blast existed and describe a game where a weapon
+   is a damage profile. They are rewritten from the same table that drives the mechanic, so the copy
+   cannot drift away from what the weapon actually does -- a shop that lies about a stat is worse
+   than a shop that omits it. */
+
+const V68_BLURB={
+ pulse:'Dependable single-target driver. Baseline blast; levels add raw punch and titan damage.',
+ scatter:'Wide blast radius — takes more of a formation with every kill. Built for crowds.',
+ lance:'Heavy piercing lance. Opens armour in one tap; its blast takes one hostile, never a whole formation.',
+ arc:'Its cascades run further: extra chain links and almost no falloff between them. Cuts columns apart.',
+ siphon:'Converts kills into credits. Baseline blast, far better stage payouts.',
+ nova:'Enormous blast, then nothing — one tap takes a whole formation. Long recharge.'
+};
+
+for(const weapon of v14Weapons){
+ if(V68_BLURB[weapon.id])weapon.desc=V68_BLURB[weapon.id];
+}

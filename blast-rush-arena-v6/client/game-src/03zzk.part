@@ -51,6 +51,10 @@ const V63={
  falloff:.78,
  /* Hard cap regardless of falloff. Guards the recursion as much as the design. */
  depth:4,
+ /* The most any weapon may add to that cap. The recursion guard is sized against depth+depthMax
+    rather than depth, so a weapon that buys extra links is not silently cut off by a guard that
+    does not know about it -- and the guard still has a fixed ceiling no weapon can raise. */
+ depthMax:2,
  /* Cascade bonus per link, paid triangularly -- see v63Reward. */
  bonus:170
 };
@@ -63,8 +67,15 @@ let v63Busy=0;
 let v63Links=0;
 let v63OriginX=0,v63OriginY=0;
 
+/* A seam for the equipped weapon, replaced by V68. Returns multipliers rather than absolute values
+   on purpose: V64 spaces formations against `V63.radius` itself, so the shape of the arena must stay
+   fixed while what a given weapon does to that shape varies. A blast that grew the formation with it
+   would change nothing at all. */
+function v63Power(){return{radius:1,depth:0,falloff:1,max:Infinity};}
+
 function v63Detonate(o,depth,field){
- const R=o.r*V63.radius*Math.pow(V63.falloff,depth);
+ const power=v63Power();
+ const R=o.r*V63.radius*power.radius*Math.pow(V63.falloff*power.falloff,depth);
  const world=worlds[game.world%worlds.length];
 
  /* Always drawn, even when the blast catches nothing. A player cannot learn the reach of something
@@ -78,9 +89,20 @@ function v63Detonate(o,depth,field){
   }
  }
 
- if(depth>=V63.depth)return;
+ if(depth>=V63.depth+power.depth)return;
 
- for(const n of field){
+ /* How many neighbours one blast may take, nearest first. Unlimited by default -- the blast is a
+    circle and everything inside it goes. A weapon can narrow it (see V68's lance), which is a
+    different kind of trade from a smaller radius: at the spacing V64 uses, shrinking the radius even
+    slightly drops it below one gap and removes the chain entirely, so radius is close to a binary
+    switch. A victim cap is a dial. Sorted by distance so a capped blast takes the neighbour it is
+    actually closest to rather than whichever happens to be first in the array. */
+ const reach=power.max===Infinity?field:field
+  .filter((n)=>n!==o&&n.hp>0&&game.orbs.includes(n))
+  .sort((a,b)=>Math.hypot(a.x-o.x,a.y-o.y)-Math.hypot(b.x-o.x,b.y-o.y))
+  .slice(0,power.max);
+
+ for(const n of reach){
   if(n===o||n.hp<=0)continue;
   if(!game.orbs.includes(n))continue;
   /* The blast has to reach close to a neighbour's core, not merely graze its outline. The first
@@ -144,7 +166,7 @@ hitOrb=function(o,x,y,chain=false){
     weapon can take an armoured hostile from full health to nothing in one hit, and predicting the
     kill from `hp<=1` would silently skip the blast on exactly the strongest weapons. Whether it
     died is read afterwards, from the field itself. */
- const field=v63Busy<V63.depth?game.orbs.slice():null;
+ const field=v63Busy<V63.depth+V63.depthMax?game.orbs.slice():null;
  const wasAlive=game.orbs.includes(o);
 
  v63Busy++;
