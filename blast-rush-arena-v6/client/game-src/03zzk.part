@@ -73,6 +73,10 @@ let v63OriginX=0,v63OriginY=0;
    would change nothing at all. */
 function v63Power(){return{radius:1,depth:0,falloff:1,max:Infinity};}
 
+/* Called once per blast with the hostile that detonated and the blast's radius, for anything the
+   cascade can reach that is not in `game.orbs`. No-op here; V70 gives it to the titan. */
+function v63BlastHit(o,R){}
+
 function v63Detonate(o,depth,field){
  const power=v63Power();
  const R=o.r*V63.radius*power.radius*Math.pow(V63.falloff*power.falloff,depth);
@@ -88,6 +92,11 @@ function v63Detonate(o,depth,field){
     life:.18,max:.18,r:1.6,color:world.accent,drag:.87,gravity:0});
   }
  }
+
+ /* Anything that is not a hostile in `game.orbs` but can still be caught in a blast. A seam rather
+    than a branch, because the boss is the only such thing today and hard-coding it here would put
+    boss logic in the middle of the cascade. Replaced by V70. */
+ v63BlastHit(o,R);
 
  if(depth>=V63.depth+power.depth)return;
 
