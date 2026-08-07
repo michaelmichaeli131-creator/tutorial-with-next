@@ -88,6 +88,12 @@ v19OrbOverlays.push((o)=>{
  if(o.type!=='shard')return;
  const line=v22Line();
  if(o.y>line-40)return;
+ /* Not while the runner itself is still above the play area. The escape route was being drawn for
+    hostiles that had not entered yet, which put a dashed line down the full height of the arena with
+    nothing at the top of it -- read as a rendering artefact rather than as a runner's path, and with
+    V64's formations arriving three and four at a time there could be several at once. A line that
+    explains something has to start at the thing it is explaining. */
+ if(o.y<o.r)return;
  ctx.save();
  ctx.globalAlpha=.16+Math.sin(game.elapsed*3+o.x)*.06;
  ctx.strokeStyle='#7dffb0';
