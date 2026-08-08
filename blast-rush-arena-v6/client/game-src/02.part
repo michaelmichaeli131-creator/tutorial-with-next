@@ -7,7 +7,11 @@ function hitOrb(o,x,y,chain=false){const d=Math.hypot(x-o.x,y-o.y),perfect=d<o.r
    repeat() throws a RangeError on a negative count. Two hostiles landing on the same frame each
    call damage(), so the last life can be spent twice before finish() stops the run — and the
    throw would take the rest of that frame's HUD with it. */
-function damage(){if(game.shields>0){game.shields--;toast('PHASE SHIELD SAVED THE REACTOR');audio.sfx('shield');return;}game.lives=Math.max(0,game.lives-1);game.combo=0;game.shake=save.comfort?3:18;explode(W/2,H-(isMobile?92:75),'#ff385b',55,1.4);audio.sfx('damage');if(game.mode==='duel')BlastNetwork.score(-1500,'penalty',0,game.wave);if(game.lives<=0)finish(false);}
+/* Where the reactor and its pilot are standing. A function rather than `W/2` written out in six
+   places, so that V73 can make the pilot move without every layer that draws or flashes at the
+   reactor having to know about it. Reassigned there; this is the default and the fallback. */
+function reactorAnchorX(){return W/2;}
+function damage(){if(game.shields>0){game.shields--;toast('PHASE SHIELD SAVED THE REACTOR');audio.sfx('shield');return;}game.lives=Math.max(0,game.lives-1);game.combo=0;game.shake=save.comfort?3:18;explode(reactorAnchorX(),H-(isMobile?92:75),'#ff385b',55,1.4);audio.sfx('damage');if(game.mode==='duel')BlastNetwork.score(-1500,'penalty',0,game.wave);if(game.lives<=0)finish(false);}
 function checkWave(){if(game.boss)return;if(game.waveKills>=game.waveTarget){game.objectiveDone=true;score(5000+game.wave*800,'objective');toast('DIRECTIVE COMPLETE');haptic([12,20,20]);setTimeout(nextWave,750);}}
 function nextWave(){if(!game.running)return;game.wave++;game.world=Math.floor((game.wave-1)/4)%worlds.length;game.waveKills=0;game.waveTarget=18+game.wave*2;game.objective=['PURGE','PERFECT HUNT','CHAIN REACTION','NO DAMAGE'][game.wave%4];if(game.wave%4===0)spawnBoss(false);else if(game.wave%3===0)chooseAugment();updateHud();}
 function chooseAugment(){game.paused=true;const picks=[...AUGMENTS].sort(()=>rng()-.5).slice(0,3);$('augmentGrid').innerHTML='';for(const a of picks){const b=document.createElement('button');b.className='augment-card';b.innerHTML=`<b>${a.name}</b><p>${a.desc}</p><small>INSTALL</small>`;b.onclick=()=>{a.apply(game);showScreen(null);game.paused=false;toast(`${a.name.toUpperCase()} INSTALLED`);haptic(15);};$('augmentGrid').appendChild(b);}showScreen('augmentScreen');}

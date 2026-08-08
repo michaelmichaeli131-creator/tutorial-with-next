@@ -53,7 +53,7 @@ drawReactor=function(){
  ctx.save();
  ctx.globalCompositeOperation='lighter';
  ctx.globalAlpha=.34;
- ctx.translate(W/2,y+(isMobile?28:32));
+ ctx.translate(reactorAnchorX(),y+(isMobile?28:32));
  ctx.scale(1,.32);
  const pool=(isMobile?170:200)*breathe;
  ctx.drawImage(sprite,-pool/2,-pool/2,pool,pool);
@@ -69,7 +69,7 @@ drawReactor=function(){
  ctx.globalCompositeOperation='lighter';
  ctx.globalAlpha=.5+Math.sin(game.elapsed*2.4)*.06;
  const halo=(isMobile?150:176)*breathe;
- ctx.drawImage(sprite,W/2-halo/2,y-halo/2,halo,halo);
+ ctx.drawImage(sprite,reactorAnchorX()-halo/2,y-halo/2,halo,halo);
  ctx.restore();
 };
 

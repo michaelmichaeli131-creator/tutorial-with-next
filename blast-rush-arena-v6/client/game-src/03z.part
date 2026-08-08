@@ -305,7 +305,7 @@ drawReactor=function(){
  ctx.lineCap='round';
  ctx.strokeStyle='rgba(8,14,26,.6)';
  ctx.beginPath();
- ctx.arc(W/2,y,radius,from,from+span);
+ ctx.arc(reactorAnchorX(),y,radius,from,from+span);
  ctx.stroke();
  /* Colour carries the warning before any number could: cool blue, amber past two thirds, red
     while venting — and it pulses only while locked, so a calm run never flickers. */
@@ -314,7 +314,7 @@ drawReactor=function(){
  ctx.shadowColor=ctx.strokeStyle;
  if(locked)ctx.globalAlpha=.55+Math.sin(game.elapsed*22)*.3;
  ctx.beginPath();
- ctx.arc(W/2,y,radius,from,from+span*fill);
+ ctx.arc(reactorAnchorX(),y,radius,from,from+span*fill);
  ctx.stroke();
  ctx.restore();
 };

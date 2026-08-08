@@ -222,7 +222,7 @@ drawReactor=function(){
   ctx.strokeStyle='#ffb02e';
   ctx.setLineDash([4,5]);
   ctx.beginPath();
-  ctx.arc(W/2,y,radius,from,from+span*Math.min(1,game.v23Debt/V21_HEAT.max));
+  ctx.arc(reactorAnchorX(),y,radius,from,from+span*Math.min(1,game.v23Debt/V21_HEAT.max));
   ctx.stroke();
   ctx.restore();
  }

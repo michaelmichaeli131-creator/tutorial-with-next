@@ -1,0 +1,186 @@
+/* V73 — the pilot moves, and enemy fire can be dodged. But not the way it was asked for, and the
+   reason is worth setting out because I looked into it before building anything.
+
+   ---- Why not a movement control ----
+
+   The obvious version is a second input: drag a thumb to walk the pilot, tap to shoot. Four things
+   are against it here, and the fourth is decisive.
+
+   1. The finger is already spent. Every touch in this game is a shot, and since V63 the *position*
+      of that touch is the main decision the game asks. The mobile bullet-hell ports people cite as
+      proof that drag-to-move works on a phone -- DoDonPachi, Mushihimesama -- all make firing
+      automatic precisely so the finger is free to do nothing but move. That trade is not available
+      here: firing is the game.
+   2. Tap and drag fight each other. A drag is recognised past a threshold of a few pixels, so in a
+      game built on fast repeated taps the choice is between misreading taps as drags or delaying
+      every tap to see whether one is coming. A tap-heavy game needs the tap to be instant.
+   3. The pilot stands at the bottom centre, which is exactly where a moving thumb sits. The player
+      would be covering the thing they are dodging with.
+   4. **There is nothing to dodge.** Damage does not come from being hit. It comes from anything
+      crossing a horizontal line across the full width of the screen -- `p.y>H-95` for a shot,
+      `o.y>=line` for a hostile -- and where it crosses is not consulted. A pilot could stand
+      anywhere and take exactly the same damage. Measured, too: across ninety seconds of play the
+      arena produced 2.7 enemy shots a minute, and the two that got through crossed the line at 42%
+      and 87% of the screen width while the pilot sat at 50%.
+
+   So a movement stick would have added a second input, fought the first one, and dodged nothing.
+
+   ---- What this does instead ----
+
+   The pilot moves, and it moves on the input that already exists: it walks toward the x of your
+   last tap. Enemy fire aims at the pilot rather than at the middle of the screen, and a shot that
+   arrives away from the pilot is stopped by the reactor plating for nothing.
+
+   That makes dodging real and makes it a *consequence of where you choose to shoot*. Breaking a
+   formation on the left walks your pilot left, and the shot already in the air on the right now
+   misses. One input, two meanings, which is the same shape as every mechanic added since V63 --
+   and unlike a second thumb it costs the player no new dexterity, only a new thing to think about.
+
+   The pilot walks rather than teleports. The lag is the mechanic: a shot commits to where you were,
+   and whether you are somewhere else by the time it lands depends on where you have been aiming. */
+
+const V73={
+ /* How fast the pilot walks, in points per second. Slow enough that a dodge has to be started
+    before the shot is fired rather than after, fast enough to cross half the screen in about a
+    second and a half. */
+ speed:260,
+ /* How far from the edges the pilot may stand. It has to stay inside the band the art occupies or
+    the halo clips. */
+ margin:()=>isMobile?58:70,
+ /* How close a shot has to land to count as a hit. Roughly the width of the pilot's body: wide
+    enough that standing still is punished, narrow enough that a deliberate move saves you. */
+ hit:()=>isMobile?52:60,
+ /* Ceiling on the interval between an elite's shots.
+
+    Enemy fire was measured at 2.7 shots a minute, which is not enough for a dodge to be a mechanic
+    -- a player would go whole waves without meeting it. The base loop re-arms a shooter to 2.4-4.0
+    seconds, so clamping the timer raises the rate.
+
+    Set to 1.7 first and measured at between 8.7 and 14.7 shots a minute depending on how many
+    shooting elites the wave happened to roll -- three to five times the old rate rather than the
+    double I had assumed, because the clamp lands on every shooter at once and the elite count
+    climbs with the wave. Raised so the arena gains a mechanic rather than a hail. Affordable at all
+    only because this part also makes every shot dodgeable: before it, all fire that reached the
+    line cost a life; after it, a pilot who keeps moving takes none. */
+ fireCap:2.2,
+ /* Paid for a shot that lands clear of the pilot. Small: dodging is its own reward and the point is
+    feedback, not income. */
+ dodgeScore:260
+};
+
+function v73Line(){return H-(isMobile?95:65);}
+function v73PilotY(){return H-(isMobile?104:70);}
+
+/* Replaces the seam added to 02.part. Every layer that draws the reactor, its heat arc, the pilot
+   sprite and the damage flash reads through it, so they all move together. */
+reactorAnchorX=function(){
+ return game.v73X===undefined?W/2:game.v73X;
+};
+
+const v73Begin=begin;
+begin=function(mode='solo',seed){
+ const out=v73Begin(mode,seed);
+ game.v73X=W/2;
+ game.v73Aim=W/2;
+ return out;
+};
+
+/* ---- Walking ----
+
+   The aim point is taken from the player's tap. Hooked on the tap handler rather than on hitOrb,
+   because a tap that misses everything is still the player pointing somewhere, and a pilot that
+   only moved on successful kills would freeze exactly when the player is under pressure. */
+
+const v73Tap=v12HandleTap;
+v12HandleTap=function(clientX,clientY,event){
+ const out=v73Tap(clientX,clientY,event);
+ if(game.running&&!game.paused&&canvas){
+  const rect=canvas.getBoundingClientRect();
+  if(rect.width>0){
+   const x=(clientX-rect.left)/rect.width*W;
+   const m=V73.margin();
+   game.v73Aim=Math.max(m,Math.min(W-m,x));
+  }
+ }
+ return out;
+};
+
+/* ---- Fire that follows you ----
+
+   Shots are re-aimed as they are created rather than by rewriting the three places that create them
+   -- shooting elites, armoured ranks and the titan all push into the same array with their own
+   angle arithmetic, and a single interception keeps the rule in one place. The aim is taken at the
+   moment of firing and never updated: the shot commits, and that is what makes moving worth doing. */
+
+const v73Seen=new WeakSet();
+
+function v73Track(){
+ const target=reactorAnchorX();
+ for(const p of game.projectiles){
+  if(v73Seen.has(p))continue;
+  v73Seen.add(p);
+  const dx=target-p.x,dy=v73Line()-p.y;
+  const dist=Math.hypot(dx,dy);
+  if(!(dist>1))continue;
+  const speed=Math.hypot(p.vx,p.vy)||150;
+  p.vx=dx/dist*speed;
+  p.vy=dy/dist*speed;
+ }
+}
+
+/* ---- Landing ----
+
+   Resolved before the base loop gets to it, the same way V22 intercepts hostiles before the base
+   can charge a life for one. A shot that arrives within a body's width of the pilot costs a life
+   exactly as it always did; one that arrives anywhere else hits plating. */
+
+function v73Intercept(dt){
+ const line=v73Line();
+ const reach=V73.hit();
+ for(let i=game.projectiles.length-1;i>=0;i--){
+  const p=game.projectiles[i];
+  if(p.y+p.vy*dt*1.5<line)continue;
+  game.projectiles.splice(i,1);
+  if(Math.abs(p.x-reactorAnchorX())<=reach+p.r){
+   /* Left to the base's own damage path so shields, duel penalties and the game-over check all
+      still run through one place. */
+   damage();
+  }else{
+   ring(p.x,line-6,'#8fb6d8',20);
+   explode(p.x,line-6,'#8fb6d8',10,.4);
+   score(V73.dodgeScore,'hit');
+   audio.sfx('armor');
+   if(!save.v73Taught){
+    save.v73Taught=1;
+    persist();
+    toast('THEY AIM AT YOUR PILOT — TAP ELSEWHERE TO MOVE');
+   }
+  }
+ }
+}
+
+const v73Update=update;
+update=function(dt){
+ if(game.running&&!game.paused){
+  v73Track();
+  v73Intercept(dt);
+ }
+ v73Update(dt);
+ if(!game.running||game.paused)return;
+
+ /* Walk toward the aim point at a fixed speed rather than easing, so the time to cross a distance
+    is something the player can learn instead of a curve that is fast at first and never arrives. */
+ const m=V73.margin();
+ const want=Math.max(m,Math.min(W-m,game.v73Aim===undefined?W/2:game.v73Aim));
+ const at=game.v73X===undefined?W/2:game.v73X;
+ const step=V73.speed*dt;
+ const delta=want-at;
+ game.v73X=Math.abs(delta)<=step?want:at+Math.sign(delta)*step;
+
+ /* Shooters fire about twice as often -- see the note on fireCap. Applied as a ceiling on the timer
+    rather than by rewriting the re-arm, because the re-arm lives in the middle of V16's update loop
+    and one clamp cannot drift out of step with it. */
+ for(const o of game.orbs){
+  if(o.v16FireIn>V73.fireCap)o.v16FireIn=V73.fireCap;
+ }
+};
