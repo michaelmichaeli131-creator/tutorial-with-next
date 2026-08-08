@@ -1,0 +1,102 @@
+/* V74 — a dodge you cannot see coming is not a dodge.
+
+   V73 made enemy fire aim at the pilot and made a shot that lands clear of them cost nothing. What
+   it did not do is tell the player which shots are a problem. A projectile is a bright dot moving
+   diagonally somewhere above the arena; working out where it will cross the reactor line, and
+   whether the pilot will be standing there, is a piece of mental geometry nobody performs at five
+   taps a second. So the player either moves constantly out of superstition or ignores fire entirely
+   and finds out afterwards. Neither is a decision.
+
+   This is the same fault V67 fixed for arrivals, and the same fix: mark where the thing is going to
+   land, before it lands.
+
+   Each shot in flight is projected forward to the reactor line and a small tick is drawn at the x it
+   will cross. The tick is neutral steel if it will miss the pilot and hazard red if it will hit --
+   which is the whole of what the player needs to know, in the one place they are already looking
+   when they choose where to tap next. Red means move; anything else means carry on.
+
+   Deliberately a projection and not a warning arc, a countdown or a line drawn back to the shot. The
+   arena carries a wave bar, a boss bar, a combo readout, two ability buttons, a weapon chip, an
+   approach strip and an avatar, and the one part that added chrome here had to be cut back a week
+   later. A tick at the impact point is the least this can be and still be information. */
+
+const V74={
+ /* How long before impact a shot starts being marked. Beyond this the strip would be permanently
+    populated, and a permanent warning is wallpaper -- the same reasoning as V67's lead. */
+ lead:2.6,
+ size:9,
+ alpha:.85,
+ /* Steel for a shot that will miss. Red is V71's hazard colour, reused rather than invented: the
+    player has already learned it means "this one costs you". */
+ safe:'#8fb6d8'
+};
+
+const v74Draw=draw;
+draw=function(){
+ v74Draw();
+ if(!game.running||game.paused||!game.projectiles.length)return;
+
+ const line=v73Line();
+ const pilot=reactorAnchorX();
+ const reach=V73.hit();
+
+ ctx.save();
+ ctx.lineCap='round';
+ ctx.lineJoin='round';
+ for(const p of game.projectiles){
+  /* Only shots actually descending toward the line. A shot travelling upward or sideways will not
+     arrive, and marking one that never lands would teach the player to distrust the mark. */
+  if(!(p.vy>1)||p.y>=line)continue;
+  const eta=(line-p.y)/p.vy;
+  if(eta>V74.lead)continue;
+  const at=p.x+p.vx*eta;
+  if(at<-20||at>W+20)continue;
+
+  const near=1-eta/V74.lead;
+  const deadly=Math.abs(at-pilot)<=reach+p.r;
+  const s=V74.size*(deadly?1.35:1);
+  /* Above the line rather than on it, and over a dark backing stroke.
+
+     The first version drew the mark exactly at the impact point on the reactor line, which is where
+     the pilot stands -- and the pilot paints a 75-point halo in its own colours. Photographed, the
+     marks were there and could not be seen at all: the same fault V57's strike band had, in the same
+     part of the screen, for the same reason. V21's ward solved it by riding over a dark backing
+     stroke, and that is what this does. */
+  const y=line-22;
+  ctx.globalAlpha=V74.alpha*(.35+near*.65);
+
+  /* A chevron pointing DOWN at the place the shot will land, which is the same shape V67 uses at the
+     top of the screen for arrivals. One vocabulary: a chevron means "something is coming to this x".
+     Up there it is entering, down here it is landing. */
+  ctx.beginPath();
+  ctx.moveTo(at-s,y-s*.8);
+  ctx.lineTo(at,y);
+  ctx.lineTo(at+s,y-s*.8);
+  ctx.strokeStyle='rgba(4,9,20,.92)';
+  ctx.lineWidth=deadly?7:5.5;
+  ctx.stroke();
+  ctx.strokeStyle=deadly?V71.core:V74.safe;
+  ctx.lineWidth=deadly?3:2.2;
+  ctx.stroke();
+
+  /* Only the dangerous one gets a stem down to the line. It is the one the player has to connect to
+     a place on the floor; a stem on every mark would be a picket fence. */
+  if(deadly){
+   ctx.beginPath();
+   ctx.moveTo(at,y+2);
+   ctx.lineTo(at,line-2);
+   ctx.strokeStyle='rgba(4,9,20,.85)';
+   ctx.lineWidth=5;
+   ctx.stroke();
+   ctx.beginPath();
+   ctx.moveTo(at,y+2);
+   ctx.lineTo(at,line-2);
+   ctx.strokeStyle=V71.core;
+   ctx.lineWidth=1.8;
+   ctx.setLineDash([4,4]);
+   ctx.stroke();
+   ctx.setLineDash([]);
+  }
+ }
+ ctx.restore();
+};
