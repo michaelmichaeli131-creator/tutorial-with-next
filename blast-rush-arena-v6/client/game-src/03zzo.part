@@ -68,7 +68,10 @@ draw=function(){
      eye is drawn at the moment the information is worth acting on. */
   const near=1-d/V67.lead;
   ctx.globalAlpha=V67.alpha*(.4+near*.6);
-  ctx.strokeStyle=o.v65Plates>0?V65.shell:world.accent;
+  /* Three colours, because there are three kinds of arrival and the difference matters before it
+     lands, not after: ordinary hostile, sealed hostile that needs a blast, and a mine that must not
+     be touched at all. */
+  ctx.strokeStyle=o.v71Mine?V71.core:o.v65Plates>0?V65.shell:world.accent;
   const s=V67.size;
   ctx.beginPath();
   ctx.moveTo(o.x-s,y-s*.6);
