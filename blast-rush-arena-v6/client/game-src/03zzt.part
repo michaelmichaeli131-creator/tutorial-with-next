@@ -91,5 +91,19 @@ hitOrb=function(o,x,y,chain=false){
   half.speed=o.speed;
   half.v72Half=true;
  }
+
+ /* Said once, ever, on the first splitter a player breaks.
+
+    V65 and V71 each got a one-time toast because a mechanic that changes what a tap does has to be
+    named. This one needs it more than either, and it is the case that is easiest to overlook: a
+    sealed hostile refuses to die and a mine punishes a tap, so both announce themselves by
+    happening. A splitter looks exactly like it always did. Nothing about breaking one tells the
+    player that they chose where the halves landed, so without a line of text the rule is invisible
+    and the mechanic may as well not exist. */
+ if(!save.v72Taught){
+  save.v72Taught=1;
+  persist();
+  toast('SPLITTER — CLIP THE EDGE TO KEEP THE HALVES TOGETHER');
+ }
  return out;
 };
