@@ -116,25 +116,43 @@ const v15Creatures={
  /* VOID SCOUT — a dart with wings. Narrow body, long swept planes, everything about it says fast. */
  normal(c,o,pal,t){
   const flap=Math.sin(t*7+(o.anim||0))*.5;
+  /* The wings were the single worst-looking thing in the arena and it took a screenshot to see it.
+
+     Written first as a plane 40 units long — more than three times the width of the body — filled
+     with a gradient that ran to `transparent`. The gradient axis ended before the tip did, so the
+     outer half of each wing had no fill at all and the only thing drawn out there was a 1.2px
+     outline at 40% alpha, plus two spars. On a dark arena that reads as a large empty wireframe
+     hanging in the air *next to* a small bright body rather than as part of it, and with several
+     scouts descending together the outlines overlap into one big grey ghost across the top of the
+     screen. Photographed with the background suppressed it is unmistakable; at a glance, in play,
+     it just looks like a stray shadow.
+
+     Three changes, all of them the same idea — a wing has to be a surface:
+       - the fill reaches the tip instead of fading out before it,
+       - the plane is shorter and less deep, so the creature reads as one object,
+       - the leading edge is a defined bright line and the trailing edge is barely stroked, which
+         is how a real wing reads. A full outline is what turned this into a box. */
   for(const side of [-1,1]){
    c.save();
    c.translate(side*10,-6);
    c.rotate(side*(.3+flap));
    c.globalAlpha=.85;
    c.fillStyle=v15Grad(c,'scout-wing'+side,()=>{
+    /* Axis runs past the tip so the far end of the plane is still inside the ramp. */
     const g=c.createLinearGradient(0,0,side*34,-16);
-    g.addColorStop(0,pal.glow+'cc');
-    g.addColorStop(.55,pal.body+'55');
-    g.addColorStop(1,'transparent');
+    g.addColorStop(0,pal.glow+'dd');
+    g.addColorStop(.5,pal.body+'b0');
+    g.addColorStop(1,pal.body+'70');
     return g;
    });
-   v14Art.poly(c,[[0,-6],[side*40,-24],[side*33,2],[side*5,9]]);
+   v14Art.poly(c,[[0,-6],[side*30,-18],[side*25,3],[side*5,9]]);
    c.fill();
-   c.strokeStyle=pal.trim+'66';c.lineWidth=1.2;c.stroke();
-   /* Spars: a translucent plane with nothing in it reads as a smear. */
-   c.strokeStyle=pal.trim+'44';c.lineWidth=.9;
-   c.beginPath();c.moveTo(side*3,-3);c.lineTo(side*36,-19);c.stroke();
-   c.beginPath();c.moveTo(side*3,2);c.lineTo(side*31,0);c.stroke();
+   /* Leading edge, root to tip: the one line that carries the shape. */
+   c.strokeStyle=pal.trim+'bb';c.lineWidth=1.5;
+   c.beginPath();c.moveTo(0,-6);c.lineTo(side*30,-18);c.stroke();
+   /* One spar, not two. Two of them crossing an empty plane were most of the wireframe. */
+   c.strokeStyle=pal.trim+'3a';c.lineWidth=.9;
+   c.beginPath();c.moveTo(side*4,-1);c.lineTo(side*26,-12);c.stroke();
    c.restore();
   }
   v14Art.limb(c,-7,20,-11,32,3.5,pal.body);
