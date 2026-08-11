@@ -1,0 +1,225 @@
+/* V80 — the chrome, printed.
+
+   The canvas is a sheet of paper with flat ink on it. The chrome is still dark translucent glass:
+   16px radii, backdrop blur, cyan and violet neon, gradient fills, glow shadows. Side by side they
+   read as two different products stapled together, and the whole point of V77 is that a print
+   direction is worth nothing at ninety per cent compliance.
+
+   The print language for chrome is the same rule stated for panels instead of figures: **solid ink
+   blocks with knocked-out type, square corners, halftone meters, and nothing that blurs or glows.**
+   A panel is either the key plate with paper-coloured type punched out of it, or bare paper with a
+   heavy key rule around it. There is no third kind.
+
+   ---- Every rule here is scoped under html.v77-print ----
+
+   That scoping is load-bearing, not tidiness. V77 defaults off and the old look has to survive
+   untouched underneath, so the conversion can land one surface at a time without ever shipping the
+   half-and-half state. An unscoped rule in this file would break that guarantee permanently, and it
+   would break it silently.
+
+   ---- Broad selectors, deliberately ----
+
+   Sixteen stylesheets built this chrome over as many versions, and they share a small set of
+   building blocks: .f-plate, .panel, .chip, .v17-ability, the two button classes. Restyling those
+   six things converts almost everything, and it converts screens nobody thought to list. The
+   alternative -- enumerating every rule in sixteen files -- is how a conversion runs out of budget
+   at eighty per cent and leaves the worst possible result. `!important` is used freely and on
+   purpose: this sheet is last in the cascade and its job is to win. */
+
+html.v77-print{
+  --pk:#191411;   /* key plate */
+  --pp:#f3e9d6;   /* paper */
+  --pn:#fcf6e9;   /* knockout */
+  --pr:#de3b26;   /* hostile ink */
+  --pb:#27478f;   /* player ink */
+  --py:#f0ae22;   /* hazard */
+  background:var(--pp);
+}
+
+/* Type. A condensed grotesque from the system stack -- no font files, no CDN, because the page has
+   to stay self-contained. Heavy weight and tight tracking is most of what makes stencil type read
+   as stencil type. */
+html.v77-print body,
+html.v77-print button,
+html.v77-print input,
+html.v77-print select{
+  font-family:"Helvetica Neue",Inter,"Segoe UI",Roboto,system-ui,sans-serif !important;
+  letter-spacing:.04em;
+}
+
+/* #hud is deliberately NOT in the panel list below, and this is the one trap in this file.
+
+   It looks like a chrome container and it is not one: `styles.css` gives it `position:fixed;
+   inset:0; pointer-events:none` -- a full-screen transparent layer that only exists to position its
+   children. Painting it near-black covered the entire arena with a black rectangle at z-index 8.
+   Photographed, every frame came back with the HUD floating on pure black and no game behind it,
+   and nothing threw, because nothing was wrong except that a lid had been put on the canvas. */
+
+/* ---- Panels ------------------------------------------------------------------------------------
+   Nothing blurs, nothing glows, nothing is translucent, and nothing is round. */
+
+html.v77-print .f-plate,
+html.v77-print .chip,
+html.v77-print .panel,
+html.v77-print .v17-mission,
+html.v77-print .v17-rival,
+html.v77-print .v17-ability,
+html.v77-print #combatBar{
+  background:var(--pk) !important;
+  border:2px solid var(--pk) !important;
+  border-radius:0 !important;
+  box-shadow:none !important;
+  backdrop-filter:none !important;
+  -webkit-backdrop-filter:none !important;
+  color:var(--pn) !important;
+  text-shadow:none !important;
+}
+
+html.v77-print .panel{
+  /* The one panel kind that is paper rather than ink: a full-screen sheet, so it is read at length
+     rather than glanced at. Dark type on paper at this size is the more legible of the two. */
+  background:var(--pp) !important;
+  color:var(--pk) !important;
+  border:3px solid var(--pk) !important;
+}
+
+html.v77-print .f-plate *,
+html.v77-print .chip *,
+html.v77-print #combatBar *{
+  text-shadow:none !important;
+  box-shadow:none !important;
+}
+
+html.v77-print .eyebrow,
+html.v77-print .note,
+html.v77-print small{
+  color:var(--pk) !important;
+  opacity:.72;
+  letter-spacing:.16em !important;
+  text-transform:uppercase;
+}
+html.v77-print #combatBar small,
+html.v77-print .f-plate small,
+html.v77-print .chip small{ color:var(--pn) !important; opacity:.62; }
+
+/* ---- Meters ------------------------------------------------------------------------------------
+   Segmented ink, never a gradient bar. A smooth fill would be the one gradient left in the frame
+   and one exception is how a direction dies. */
+
+html.v77-print .f-bar,
+html.v77-print .v15-bar,
+html.v77-print progress{
+  background:var(--pn) !important;
+  border:1.5px solid var(--pk) !important;
+  border-radius:0 !important;
+  box-shadow:none !important;
+  overflow:hidden;
+}
+html.v77-print .f-bar > i,
+html.v77-print .f-bar > b{
+  background:var(--pk) !important;
+  background-image:repeating-linear-gradient(90deg,var(--pk) 0 7px,transparent 7px 9px) !important;
+  box-shadow:none !important;
+  border-radius:0 !important;
+}
+html.v77-print .f-bar span{ color:var(--pk) !important; mix-blend-mode:normal; }
+
+/* ---- The score, and V75's delta ---------------------------------------------------------------- */
+
+html.v77-print .v17-score{
+  color:var(--py) !important;
+  font-weight:900 !important;
+  letter-spacing:.01em !important;
+  text-shadow:none !important;
+}
+html.v77-print .v75-delta{
+  color:var(--pn) !important;
+  background:var(--pr);
+  padding:1px 5px;
+  text-shadow:none !important;
+  letter-spacing:.1em;
+}
+
+/* ---- Buttons ----------------------------------------------------------------------------------
+   Two kinds and no more: a primary that is a solid block of hazard ink with knocked-out type, and a
+   secondary that is bare paper inside a heavy key rule. Pressed state moves the block rather than
+   lighting it, because nothing here emits. */
+
+html.v77-print button,
+html.v77-print .primary,
+html.v77-print .secondary,
+html.v77-print .power-button,
+html.v77-print .icon-btn{
+  border-radius:0 !important;
+  box-shadow:none !important;
+  backdrop-filter:none !important;
+  -webkit-backdrop-filter:none !important;
+  text-shadow:none !important;
+  background-image:none !important;
+  letter-spacing:.12em !important;
+  text-transform:uppercase;
+}
+html.v77-print .primary{
+  background:var(--py) !important;
+  border:3px solid var(--pk) !important;
+  color:var(--pk) !important;
+  font-weight:900 !important;
+}
+html.v77-print .secondary,
+html.v77-print .back,
+html.v77-print .icon-btn{
+  background:var(--pp) !important;
+  border:3px solid var(--pk) !important;
+  color:var(--pk) !important;
+  font-weight:800 !important;
+}
+html.v77-print button:active{ transform:translate(2px,2px); }
+
+/* ---- Abilities -------------------------------------------------------------------------------- */
+
+html.v77-print .v17-ability{ border:3px solid var(--pk) !important; }
+html.v77-print .v17-ab-name{ color:var(--pn) !important; letter-spacing:.14em !important; }
+html.v77-print .v17-ab-pct{ color:var(--py) !important; text-shadow:none !important; }
+html.v77-print .v17-ab-ring,
+html.v77-print .v17-ab-art{ filter:none !important; opacity:.9; }
+
+/* ---- The toast --------------------------------------------------------------------------------
+   A stamped strip. It is the game speaking in its own voice rather than the arena's, so it is the
+   one element allowed to be pure key with knocked-out type at full contrast. */
+
+html.v77-print #toast{
+  background:var(--pk) !important;
+  color:var(--pn) !important;
+  border:0 !important;
+  border-radius:0 !important;
+  box-shadow:none !important;
+  backdrop-filter:none !important;
+  -webkit-backdrop-filter:none !important;
+  letter-spacing:.14em !important;
+  text-transform:uppercase;
+}
+
+/* ---- Results and other full screens ------------------------------------------------------------ */
+
+html.v77-print .screen{
+  background:var(--pp) !important;
+  backdrop-filter:none !important;
+  -webkit-backdrop-filter:none !important;
+}
+html.v77-print .huge,
+html.v77-print .final-score,
+html.v77-print h1,
+html.v77-print h2{
+  color:var(--pk) !important;
+  text-shadow:none !important;
+  letter-spacing:.02em !important;
+}
+html.v77-print .final-score{ color:var(--pr) !important; }
+html.v77-print .scr-title,
+html.v77-print .scr-head{ border-bottom:3px solid var(--pk); }
+
+/* Anything still trying to glow. A blanket stop rather than a list, for the same reason the
+   composite rule in V77 is enforced at the property instead of at twenty-six call sites. */
+html.v77-print .glow,
+html.v77-print [class*="glow"],
+html.v77-print [class*="neon"]{ box-shadow:none !important; filter:none !important; }

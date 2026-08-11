@@ -1,0 +1,18 @@
+/* V80 — hang the printed chrome off one class.
+
+   `v80-print.css` is scoped entirely under `html.v77-print`, so the old glass chrome survives
+   untouched underneath and the switch stays a switch. This is the two lines that set the class.
+
+   Checked every frame rather than once at startup, because `V77.on` is a plain field and the whole
+   value of it is being able to flip it live -- from a harness, from a console, from a settings
+   toggle later -- and see both looks without a reload. A className assignment that changes nothing
+   is free. */
+
+const v80Draw=draw;
+draw=function(){
+ const want=!!V77.on;
+ if(document.documentElement.classList.contains('v77-print')!==want){
+  document.documentElement.classList.toggle('v77-print',want);
+ }
+ return v80Draw();
+};
