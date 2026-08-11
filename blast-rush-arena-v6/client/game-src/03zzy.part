@@ -66,8 +66,25 @@
    at a time without ever shipping the in-between. */
 
 const V77={
- /* The master switch. Flipped on only when the arena, the creatures, the effects and the chrome
-    have all been converted -- see the note above on why partial compliance is worthless. */
+ /* The master switch, and it is OFF, which is a deliberate call rather than an unfinished one.
+
+    Four surfaces are converted and verified in the arena: this part's ground and screen, V78's
+    cast, V79's deadline, kill effect and titan, and V80's chrome. Turned on and photographed, the
+    arena is exactly what it should be.
+
+    The home screen is not. V18 gave it its own root and its own procedural canvas (`#launchArt`)
+    rather than the `.screen` / `.panel` structure every other screen uses, so it matches none of
+    the selectors that converted the rest and it is the first thing anybody sees. Three attempts to
+    reach it from CSS -- raising specificity, anchoring through body, blanking its children -- each
+    fixed part of it and left the ground black, which means something in that subtree is painting
+    the viewport from a place the stylesheet has not found yet.
+
+    So the switch stays off, because the argument this whole part is built on applies to this part:
+    a direction is worth nothing at ninety per cent, a half-converted build looks worse than either
+    of the two things it is between, and the first screen a player sees is the worst possible place
+    to be the exception. What is needed is one more pass that redraws `#launchArt` in ink and gives
+    the home screen the same structure as the rest -- not another CSS override. Everything else is
+    done and is one field away. */
  on:false,
  /* Six colours, five roles. Hue never encodes creature type: that job belongs entirely to
     silhouette, which is where the existing art is already strong. Red is "will kill you", blue is

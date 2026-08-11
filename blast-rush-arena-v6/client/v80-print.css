@@ -223,3 +223,195 @@ html.v77-print .scr-head{ border-bottom:3px solid var(--pk); }
 html.v77-print .glow,
 html.v77-print [class*="glow"],
 html.v77-print [class*="neon"]{ box-shadow:none !important; filter:none !important; }
+
+/* ---- The combo, and the portrait ---------------------------------------------------------------
+
+   Two leftovers found by photographing a live arena rather than a menu: the combo banner was still
+   neon orange over acid green, and the pilot portrait is a live canvas drawing the old glowing bust
+   into the HUD plate. */
+
+html.v77-print .v17-combo{
+  background:var(--pk) !important;
+  border:2px solid var(--pk) !important;
+  border-radius:0 !important;
+  box-shadow:none !important;
+  padding:6px 10px;
+}
+html.v77-print .v17-combo #comboBig{
+  color:var(--py) !important;
+  text-shadow:none !important;
+  filter:none !important;
+  letter-spacing:0 !important;
+}
+html.v77-print .v17-combo #comboRankBig{
+  color:var(--pn) !important;
+  text-shadow:none !important;
+  letter-spacing:.18em !important;
+}
+html.v77-print .v17-combo #comboBonus{
+  color:var(--pn) !important;
+  background:var(--pr);
+  padding:0 4px;
+  text-shadow:none !important;
+}
+
+/* The portrait is drawn by v14DrawCharacter into its own canvas with an aura and a glow, and
+   rewriting that for one 40-point thumbnail is not worth a part of its own. Reduced to a
+   single-ink stamp with a filter instead: monochrome, hard contrast, and lightened so it reads as
+   ink on the key plate rather than as a small colour photograph pasted onto a poster. */
+html.v77-print #hudPortrait{
+  filter:grayscale(1) contrast(2.4) brightness(1.55) !important;
+  mix-blend-mode:screen;
+}
+html.v77-print .f-portrait{
+  background:var(--pk) !important;
+  border-radius:0 !important;
+  box-shadow:none !important;
+}
+
+/* The countdown between waves, and anything else that leaned on a text glow to be readable. */
+html.v77-print .countdown{
+  background:var(--pp) !important;
+  color:var(--pk) !important;
+  text-shadow:none !important;
+}
+
+/* ---- Winning the cascade ------------------------------------------------------------------------
+
+   Sixteen stylesheets built this chrome and several of them set backgrounds through an id or a
+   doubled class. Being last in the cascade is not enough against higher specificity, and
+   photographed, the launch screen came back with its buttons stripped of their gradient -- proof the
+   class WAS applied -- while the screen behind them kept its old radial. Half-converted in the most
+   visible place in the product.
+
+   Specificity is raised by repeating the class rather than by reaching for ids: repeating a class is
+   the one lever that scales without inventing a selector per screen, and `background-image:none`
+   is set alongside `background-color` because most of what is being beaten is a gradient set
+   through the `background` shorthand. */
+
+html.v77-print .screen.screen.screen,
+html.v77-print .overlay.overlay.overlay{
+  background-image:none !important;
+  background-color:var(--pp) !important;
+  backdrop-filter:none !important;
+  -webkit-backdrop-filter:none !important;
+}
+html.v77-print .panel.panel.panel{
+  background-image:none !important;
+  background-color:var(--pp) !important;
+  color:var(--pk) !important;
+  border:3px solid var(--pk) !important;
+  border-radius:0 !important;
+  box-shadow:none !important;
+}
+html.v77-print .primary.primary.primary{
+  background-image:none !important;
+  background-color:var(--py) !important;
+  color:var(--pk) !important;
+}
+html.v77-print .secondary.secondary.secondary,
+html.v77-print .icon-btn.icon-btn.icon-btn,
+html.v77-print .mode-card.mode-card,
+html.v77-print .augment-card.augment-card,
+html.v77-print .result-grid.result-grid div,
+html.v77-print .table-row.table-row,
+html.v77-print .skin-card.skin-card{
+  background-image:none !important;
+  background-color:var(--pp) !important;
+  color:var(--pk) !important;
+  border:2px solid var(--pk) !important;
+  border-radius:0 !important;
+  box-shadow:none !important;
+}
+html.v77-print .f-plate.f-plate.f-plate,
+html.v77-print .chip.chip.chip{
+  background-image:none !important;
+  background-color:var(--pk) !important;
+}
+
+/* Type that was legible only because it glowed. On paper it has to be ink. */
+html.v77-print .hero h1 span{
+  background:none !important;
+  -webkit-background-clip:border-box !important;
+  color:var(--pk) !important;
+  filter:none !important;
+}
+html.v77-print .hero h1,
+html.v77-print .edition,
+html.v77-print .room-code,
+html.v77-print h3,
+html.v77-print p,
+html.v77-print label,
+html.v77-print .result-grid b,
+html.v77-print .table-row,
+html.v77-print .mode-card p{ color:var(--pk) !important; text-shadow:none !important; }
+html.v77-print .profile-strip{
+  background-image:none !important;
+  background-color:var(--pp) !important;
+  border:2px solid var(--pk) !important;
+  border-radius:0 !important;
+}
+html.v77-print .profile-strip b,
+html.v77-print .profile-card{ color:var(--pk) !important; }
+html.v77-print .skin-orb{ background:var(--pb) !important; box-shadow:none !important; }
+
+/* The two grounds under everything, which is where this conversion was actually failing.
+
+   `html.v77-print{background:...}` sets the background of the HTML element, and `styles.css` gives
+   BODY its own `background:#02040c` -- which sits on top of it and covers the whole viewport. Read
+   back from the live page, `getComputedStyle(document.body).backgroundColor` was still
+   `rgb(2,4,11)` while `document.documentElement.className` was already `v77-print`: the switch was
+   thrown, the stylesheet was loaded, the class was on the element, and every menu was still black,
+   because the one element nobody thought to name was painting over all of it.
+
+   The canvas has the same default for the same reason, and it shows for one frame before the first
+   draw and behind anything the sheet does not cover. */
+html.v77-print body{ background:var(--pp) !important; color:var(--pk) !important; }
+html.v77-print canvas{ background:var(--pp) !important; }
+
+/* ---- The launch screen -------------------------------------------------------------------------
+
+   The one surface that is neither `.screen` nor `.panel`: V18 gave the home screen its own root and
+   its own procedural canvas (`#launchArt`), so it matched none of the selectors above and stayed
+   entirely in the old glass while everything behind it converted. It is also the first thing anyone
+   sees, which makes it the worst possible place to be the exception.
+
+   The art canvas is reduced with a filter rather than redrawn. Redrawing V16's pilot bust in ink is
+   a part of its own and this is a hold, not a finish -- but a monochrome high-contrast stamp on
+   paper is in the language, and a glowing blue robot is not. */
+
+html.v77-print #launchScreen,
+html.v77-print #launchScreen > *{
+  background-image:none !important;
+  background-color:transparent !important;
+  backdrop-filter:none !important;
+  -webkit-backdrop-filter:none !important;
+  box-shadow:none !important;
+}
+/* Specificity again, and the last time this file has to reach for it: the rule that blanks the
+   children matches #launchScreen's own descendants at (1,1,0), and so did the rule meant to paint
+   the sheet, so the two were fighting at the same weight and source order decided it per property.
+   Anchoring through body wins outright and stops the argument. */
+html.v77-print body #launchScreen{
+  background-image:none !important;
+  background-color:var(--pp) !important;
+  color:var(--pk) !important;
+}
+html.v77-print #launchScreen b,
+html.v77-print #launchScreen span,
+html.v77-print #launchScreen small,
+html.v77-print #launchScreen div{ color:var(--pk) !important; text-shadow:none !important; }
+html.v77-print #launchArt{
+  filter:grayscale(1) contrast(2.2) brightness(1.5) !important;
+  mix-blend-mode:multiply;
+}
+html.v77-print .v16-cta{
+  background-image:none !important;
+  background-color:var(--py) !important;
+  color:var(--pk) !important;
+  border:3px solid var(--pk) !important;
+  border-radius:0 !important;
+  box-shadow:none !important;
+  text-shadow:none !important;
+}
+html.v77-print .v16-art{ border-radius:0 !important; }
