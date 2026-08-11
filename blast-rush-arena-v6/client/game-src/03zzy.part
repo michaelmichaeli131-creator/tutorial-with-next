@@ -212,6 +212,39 @@ function v77Bands(){
 
 addEventListener('resize',()=>{v77Cache=null;},{passive:true});
 
+/* ---- The rule, enforced rather than requested ------------------------------------------------
+
+   Additive blending appears in twenty-six source files. Converting a surface at a time and trusting
+   every future part to remember not to reach for `lighter` is how a direction dies: one glow left in
+   the frame does not read as a leftover, it reads as a mistake, and this whole conversion is worth
+   nothing at ninety per cent compliance.
+
+   So the rule is enforced at the one place every caller has to pass through. While the direction is
+   on, an additive composite mode is rewritten to `multiply` on the way in. A white-to-transparent
+   glow multiplied over paper is a no-op, which is exactly what should happen to it; a coloured one
+   becomes a flat tint, which is at worst harmless.
+
+   Deliberately a property hook on the prototype and not a lint rule or a search-and-replace across
+   twenty-six files. It is the smaller change, it is reversible with the switch, it cannot be
+   forgotten by a part written next month, and it leaves every one of those call sites correct for
+   the direction they were written for. The cost is honest and worth naming: this is a global patch
+   on a platform object, so anything else on the page drawing to a 2D canvas is affected too. On
+   this page nothing else does. */
+
+(function(){
+ const proto=typeof CanvasRenderingContext2D==='function'&&CanvasRenderingContext2D.prototype;
+ if(!proto)return;
+ const desc=Object.getOwnPropertyDescriptor(proto,'globalCompositeOperation');
+ if(!desc||!desc.set||!desc.get)return;
+ const ADDITIVE={lighter:1,screen:1,'plus-lighter':1,'color-dodge':1};
+ Object.defineProperty(proto,'globalCompositeOperation',{
+  configurable:true,
+  enumerable:desc.enumerable,
+  get(){return desc.get.call(this);},
+  set(v){desc.set.call(this,V77.on&&ADDITIVE[v]?'multiply':v);}
+ });
+})();
+
 /* ---- Ink primitives ---------------------------------------------------------------------------
 
    The whole vocabulary. Every figure in the converted game is built from these four calls and
@@ -304,9 +337,22 @@ function v77Shade(c,pts,level,sd){
    overlap between the two bands makes a violet the palette never declares, which is what
    overprinting is for. */
 
-const v77Draw=draw;
-draw=function(){
- if(!V77.on)return v77Draw();
+/* Hooked on `drawBackground` rather than on `draw`.
+
+   The first version wrapped `draw`, painted the sheet, and then called through — and the sheet was
+   never seen for a single frame. The base `draw` opens by filling the whole canvas with the world's
+   radial gradient before it calls anything, so the paper was being laid down and painted over
+   immediately. Photographed, the creatures had converted and the ground had not, which looked like
+   the switch was half-wired.
+
+   `drawBackground` runs immediately after that fill and before anything else in the frame, so an
+   override there covers the base gradient and nothing else. It also means the nebula, the additive
+   stars, the planet and `v9WorldScenery` are all skipped in one place, which is the whole of the old
+   ground. */
+
+const v77Background=drawBackground;
+drawBackground=function(w){
+ if(!V77.on)return v77Background(w);
 
  const cache=v77Bands();
 
@@ -320,11 +366,6 @@ draw=function(){
  ctx.restore();
 
  v77Registration();
-
- /* Everything the rest of the game draws lands on top of the sheet. Until the creature, effect and
-    chrome layers are converted this is a dark stack on a light ground and looks exactly as wrong as
-    that sounds -- which is what `V77.on` is for. */
- v77Draw();
 };
 
 /* Registration marks and the ink swatch strip: the marginalia of a printed sheet. Free identity --

@@ -1,0 +1,273 @@
+/* V78 — the cast, printed.
+
+   V77 laid the sheet. This puts figures on it.
+
+   The six archetypes already have genuinely distinct silhouettes — `03j.part` did that work and did
+   it well. What threw the work away was the treatment: `v15Carapace` fills each body with a gradient
+   that runs to #04060f, so every creature fades into a dark background at its own edges, and then
+   `v15Halo` pastes an additive aura back on to rescue it. The player reads the aura. The shape is
+   never seen.
+
+   So the shapes are kept and the treatment is inverted. Each creature is now:
+
+     one flat vermillion plate, one heavy key contour, one screen wedge, and nothing else.
+
+   No gradient inside a figure. No halo. No shadowBlur. The only interior modelling permitted is a
+   single `v77Shade` wedge, and the only white is bare paper punched back through the ink.
+
+   ---- Hue carries role, never identity ----
+
+   `v15Palette` gave every archetype its own hue, so hue was carrying identity while also carrying
+   threat, ownership and UI state at the same time. A six-way hue code cannot be decoded at five taps
+   a second. Here every hostile is the same ink. Red means "will cost you", blue means "yours",
+   yellow means "the line". Identity is silhouette, which is the thing a player can actually read in
+   peripheral vision — and reading these six in monochrome still tells you which is which, which is
+   the test that matters.
+
+   ---- Misregistration ----
+
+   Every figure is printed twice: the colour plate a hair off the key plate. It is the strongest
+   available cue that a frame came off a press, it costs two transforms, and it is the reason these
+   read as printed rather than as vector clip-art. `v77Path`'s deterministic per-shape jitter is the
+   other half of that — the same hand-cut edge every frame, so nothing boils.
+
+   ---- Why drawOrb is replaced whole rather than wrapped ----
+
+   `drawOrb` does not just call the creature function: it paints a cached radial halo, a cast shadow,
+   an attack tether and a gradient health bar around it, and every one of those is the thing this
+   part exists to remove. Wrapping it would draw the old treatment and then print on top of it. */
+
+const V78={
+ /* Unit space for the drawings below is roughly ±38, matching `03j.part`'s own creature space, so
+    the silhouettes carry over unchanged. A hostile's radius drives the scale. */
+ unit:34,
+ /* Ink weights. Heavier than they look right at desk size: on a phone, at speed, a thin contour is
+    the first thing to disappear. */
+ key:3.4,
+ keyHeavy:4.4
+};
+
+function v78Ring(c,x,y,r,w,col){
+ c.save();
+ c.globalCompositeOperation='multiply';
+ c.strokeStyle=col||V77.key;
+ c.lineWidth=w;
+ c.beginPath();c.arc(x,y,r,0,Math.PI*2);c.stroke();
+ c.restore();
+}
+function v78KnockDisc(c,x,y,r){
+ c.save();c.fillStyle=V77.knock;
+ c.beginPath();c.arc(x,y,r,0,Math.PI*2);c.fill();c.restore();
+}
+function v78KnockRect(c,x,y,w,h){
+ c.save();c.fillStyle=V77.knock;c.fillRect(x,y,w,h);c.restore();
+}
+function v78InkRect(c,x,y,w,h,col){
+ c.save();c.globalCompositeOperation='multiply';c.fillStyle=col;c.fillRect(x,y,w,h);c.restore();
+}
+
+/* The two plates. Colour first and offset, key second and true — the order a press lays them and
+   the order that puts the black on top where it belongs. */
+function v78Plate(c,x,y,s,colour,key){
+ c.save();c.translate(x+V77.slipX,y+V77.slipY);c.scale(s,s);colour(c);c.restore();
+ c.save();c.translate(x,y);c.scale(s,s);key(c);c.restore();
+}
+
+/* ---- The cast ---------------------------------------------------------------------------------
+
+   Each takes the context, a seed for its hand-cut edges, and the hostile ink of the current world.
+   Seeds are derived from the hostile's own identity so a given creature keeps its own cut edge for
+   its whole life rather than being re-cut every frame. */
+
+const V78_CAST={
+ /* SCOUT — a dart. Narrowest and longest silhouette in the cast, always leaning. Nothing else here
+    is thin, so "thin" is enough to identify it at the top of the screen. */
+ normal(c,sd,red){
+  const body=[[0,-32],[8,-8],[6,18],[0,30],[-6,18],[-8,-8]];
+  const wL=[[-7,-10],[-32,8],[-27,15],[-6,7]];
+  const wR=wL.map((p)=>[-p[0],p[1]]);
+  return [(cc)=>{v77Ink2(cc,wL,red,sd+1);v77Ink2(cc,wR,red,sd+2);v77Ink2(cc,body,red,sd);},
+   (cc)=>{
+    v77Shade(cc,[[0,-32],[8,-8],[6,18],[0,30]],1,sd+40);
+    v77Key(cc,wL,2.6,sd+1);v77Key(cc,wR,2.6,sd+2);v77Key(cc,body,V78.key,sd);
+    v78KnockDisc(cc,0,-12,5);v77Disc(cc,0,-12,2.4,V77.key);
+    /* Thrust as tapered triangles. A stroke cannot taper, and a taper is what makes an ink flick
+       read as a flick rather than as a stick. */
+    for(let i=0;i<3;i++){
+     const ox=(i-1)*6.5;
+     v77Ink2(cc,[[ox-1.5,29],[ox+1.5,29],[ox,29+14+i*4]],V77.key,sd+9+i,.3);
+    }
+   }];
+ },
+ /* WALKER — a wide flat slab on stumps, and the widest silhouette. Its armour is a SOLID BLACK key
+    band across the top third, so "armoured" is a value cue rather than a hue cue and survives being
+    seen out of the corner of an eye. */
+ armored(c,sd,red){
+  const shell=[[-36,-12],[-27,-25],[27,-25],[36,-12],[32,12],[-32,12]];
+  const legA=[[-27,11],[-18,11],[-15,30],[-25,30]];
+  const legB=legA.map((p)=>[p[0]+43,p[1]]);
+  return [(cc)=>{v77Ink2(cc,shell,red,sd);},
+   (cc)=>{
+    v77Ink2(cc,legA,V77.key,sd+1,.5);v77Ink2(cc,legB,V77.key,sd+2,.5);
+    v77Ink2(cc,[[-36,-12],[-27,-25],[27,-25],[36,-12],[33,-4],[-33,-4]],V77.key,sd+3);
+    v77Shade(cc,[[10,-4],[32,-4],[30,12],[8,12]],2,sd+44);
+    v77Key(cc,shell,V78.keyHeavy,sd);
+    v78KnockRect(cc,-17,1,34,5.5);
+    v78InkRect(cc,-15,2,10,3.2,V77.key);v78InkRect(cc,5,2,10,3.2,V77.key);
+    for(let i=-2;i<=2;i++)v78KnockDisc(cc,i*13,-19,2);
+   }];
+ },
+ /* BOMBER — a true circle, and the only perfectly round object on the field, so it is the one
+    creature that can be found without looking straight at it. Concentric key rings read as a
+    reticle. Its fuse tip is the single place yellow touches a creature, and there it means timer. */
+ bomb(c,sd,red){
+  return [(cc)=>{v77Disc(cc,0,0,28,red);},
+   (cc)=>{
+    v77Shade(cc,[[6,-28],[28,-14],[28,16],[8,28],[10,0]],2,sd+50);
+    v78Ring(cc,0,0,28,4.2);v78Ring(cc,0,0,18,2.2);v78Ring(cc,0,0,9.5,2.2);
+    v78KnockDisc(cc,0,0,4.6);
+    cc.save();
+    cc.globalCompositeOperation='multiply';
+    cc.strokeStyle=V77.key;cc.lineWidth=3.4;cc.lineCap='round';
+    cc.beginPath();cc.moveTo(0,-28);cc.quadraticCurveTo(11,-42,3,-50);cc.stroke();
+    cc.restore();
+    v77Disc(cc,3,-52,6,V77.yellow);v78Ring(cc,3,-52,6,2.2);
+    for(let i=0;i<3;i++){
+     const a=-1.9+i*.9;
+     v77Ink2(cc,[[3+Math.cos(a)*7,-52+Math.sin(a)*7],[3+Math.cos(a)*8,-52+Math.sin(a)*8],
+      [3+Math.cos(a)*14,-52+Math.sin(a)*14]],V77.key,sd+60+i,.3);
+    }
+   }];
+ },
+ /* SHARD — a tall narrow kite with satellites. Faceted by filling one half SOLID KEY rather than by
+    a gradient: a cut stone in this language is two flat areas meeting at a hard edge. */
+ shard(c,sd,red){
+  const main=[[0,-38],[15,-4],[0,36],[-15,-4]];
+  const dark=[[0,-38],[0,36],[-15,-4]];
+  const sat=[[0,-15],[6,0],[0,15],[-6,0]];
+  return [(cc)=>{v77Ink2(cc,main,red,sd,.6);},
+   (cc)=>{
+    v77Ink2(cc,dark,V77.key,sd+5,.6);
+    v77Key(cc,main,3.6,sd,.6);
+    v78KnockDisc(cc,4,-2,4.2);v77Disc(cc,4,-2,2,V77.key);
+    for(const [ox,oy,sc,rot] of [[-23,12,.6,.3],[22,-8,.5,-.4]]){
+     cc.save();cc.translate(ox,oy);cc.rotate(rot);cc.scale(sc,sc);
+     v77Ink2(cc,sat,red,sd+7,.5);v77Ink2(cc,[[0,-15],[0,15],[-6,0]],V77.key,sd+8,.5);
+     /* 2.6, not the 5 the mockup used. A contour weight is in the satellite's own scaled space, so
+        at 0.5 scale a five-point key line is a ten-point line on a fifteen-point shape -- printed,
+        the satellites came out as solid black blobs with no kite visible inside them. */
+     v77Key(cc,sat,2.6,sd+7,.5);
+     cc.restore();
+    }
+   }];
+ },
+ /* SPLITTER — two big round heads on a wide bottom-heavy base, with a dashed key seam down the
+    middle announcing that it comes apart. Two circles over a wide base is a silhouette nothing else
+    in the cast can be mistaken for. */
+ splitter(c,sd,red){
+  const base=[[-16,-4],[-26,12],[-20,32],[20,32],[26,12],[16,-4]];
+  return [(cc)=>{
+    v77Ink2(cc,[[-22,-8],[-11,-8],[-11,4],[-22,4]],V77.key,sd+9,.4);
+    v77Ink2(cc,[[22,-8],[11,-8],[11,4],[22,4]],V77.key,sd+10,.4);
+    v77Disc(cc,-17,-23,13,red);v77Disc(cc,17,-23,13,red);v77Ink2(cc,base,red,sd);
+   },
+   (cc)=>{
+    v77Shade(cc,[[0,-4],[26,12],[20,32],[0,32]],2,sd+55);
+    v78Ring(cc,-17,-23,13,3.6);v78Ring(cc,17,-23,13,3.6);
+    v77Key(cc,base,4,sd);
+    v78KnockDisc(cc,-17,-24,4.8);v77Disc(cc,-17,-24,2.3,V77.key);
+    v78KnockDisc(cc,17,-24,4.8);v77Disc(cc,17,-24,2.3,V77.key);
+    cc.save();
+    cc.globalCompositeOperation='multiply';
+    cc.strokeStyle=V77.key;cc.lineWidth=3;cc.setLineDash([5,4.5]);
+    cc.beginPath();cc.moveTo(0,-30);cc.lineTo(0,32);cc.stroke();
+    cc.restore();
+    v78InkRect(cc,-20,20,40,3.2,V77.key);
+   }];
+ },
+ /* RIVAL — the only humanoid, and the only figure printed on TWO colour plates. The torso window is
+    knocked out of the cape before the red goes down, so red on blue stays red; the pauldrons are the
+    one place the two inks are allowed to overprint, and there they make a violet the palette never
+    declares. One extra fill buys a boss that reads as a different class of thing. */
+ rival(c,sd,red){
+  const cape=[[-34,-8],[-24,-26],[24,-26],[34,-8],[27,34],[-27,34]];
+  const torso=[[-17,-14],[17,-14],[13,20],[-13,20]];
+  const head=[[-10,-38],[10,-38],[12,-22],[-12,-22]];
+  const pauL=[[-34,-10],[-20,-26],[-13,-12],[-28,-2]];
+  const pauR=pauL.map((p)=>[-p[0],p[1]]);
+  return [(cc)=>{
+    v77Ink2(cc,cape,V77.blue,sd);
+    cc.save();
+    cc.fillStyle=V77.paper;
+    v77Path(cc,torso,.8,sd+1);cc.fill();
+    v77Path(cc,head,.8,sd+2);cc.fill();
+    cc.restore();
+    v77Ink2(cc,torso,red,sd+1);v77Ink2(cc,head,red,sd+2);
+   },
+   (cc)=>{
+    v77Key(cc,cape,4.6,sd);v77Key(cc,torso,3.2,sd+1);v77Key(cc,head,3.4,sd+2);
+    v77Ink2(cc,pauL,V77.key,sd+4,.6);v77Ink2(cc,pauR,V77.key,sd+5,.6);
+    v78KnockRect(cc,-8,-33,16,5);
+    v78InkRect(cc,-7,-32,5,3,V77.key);v78InkRect(cc,2,-32,5,3,V77.key);
+    v78InkRect(cc,-11,-2,22,3.4,V77.key);
+    v77Ink2(cc,[[-13,20],[-4,20],[-6,36],[-15,36]],V77.key,sd+6,.5);
+    v77Ink2(cc,[[13,20],[4,20],[6,36],[15,36]],V77.key,sd+7,.5);
+   }];
+ }
+};
+
+/* ---- The orb ---------------------------------------------------------------------------------- */
+
+const v78DrawOrb=drawOrb;
+drawOrb=function(o,w){
+ if(!V77.on)return v78DrawOrb(o,w);
+ if(o.y<-o.r*2)return;
+
+ const red=v77Ink();
+ /* Derived from the hostile's own animation offset, which is assigned once at spawn, so a creature
+    keeps one hand-cut edge for its whole life. A seed from position or time would re-cut it every
+    frame and the whole cast would crawl. */
+ const sd=1+Math.floor((o.anim||0)*997)%9973;
+ const s=o.r/V78.unit;
+ const cast=(V78_CAST[o.type]||V78_CAST.normal)(ctx,sd,red);
+
+ /* Lean, kept from V15: a creature closing on the reactor tips toward it. The one piece of motion
+    in a figure that is otherwise absolutely flat, and it is the piece that says "coming for you". */
+ const attack=Math.max(0,Math.min(1,(o.y-H*.5)/(H*.42)));
+ ctx.save();
+ ctx.translate(o.x,o.y);
+ ctx.rotate(Math.sin((game.elapsed||0)*1.6+(o.anim||0))*.05+attack*.12);
+ ctx.translate(-o.x,-o.y);
+ v78Plate(ctx,o.x,o.y,s,cast[0],cast[1]);
+ ctx.restore();
+
+ /* A hit is a stamp of solid ink, not a white bloom. Nothing in this frame may be brighter than the
+    paper, so damage reads as MORE ink rather than as light. */
+ if(o.flash>0){
+  ctx.save();
+  ctx.globalAlpha=Math.min(1,o.flash);
+  v77Disc(ctx,o.x,o.y,o.r*.9,V77.key);
+  ctx.restore();
+ }
+
+ /* Health as a segmented meter: blocks of ink in a knocked-out slot. A smooth bar would be the one
+    gradient left in the frame, and one exception is how a direction dies. */
+ if(o.maxHp>1){
+  const width=Math.max(34,o.r*1.6);
+  const x=o.x-width/2,y=o.y-o.r*1.8;
+  const seg=Math.max(2,Math.min(8,o.maxHp));
+  const on=Math.ceil(Math.max(0,o.hp/o.maxHp)*seg);
+  ctx.save();
+  ctx.fillStyle=V77.knock;
+  ctx.fillRect(x-1.5,y-1.5,width+3,8);
+  ctx.globalCompositeOperation='multiply';
+  ctx.strokeStyle=V77.key;ctx.lineWidth=1.2;
+  ctx.strokeRect(x-1.5,y-1.5,width+3,8);
+  const gap=2,bw=(width-gap*(seg-1))/seg;
+  for(let i=0;i<seg;i++){
+   ctx.fillStyle=i<on?V77.key:V77.paper;
+   ctx.fillRect(x+i*(bw+gap),y,bw,5);
+  }
+  ctx.restore();
+ }
+};
