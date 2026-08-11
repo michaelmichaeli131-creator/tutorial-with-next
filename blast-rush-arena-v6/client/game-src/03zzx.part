@@ -1,0 +1,508 @@
+/* V76 — a tap that misses becomes a plan.
+
+   ---- What is actually wrong, measured ----
+
+   V56 measured a competent player at a median of ZERO hostiles on screen, with the arena empty 79%
+   of the time and a hostile living 0.2 seconds. V57 re-derived the same number from Little's Law
+   and put it plainly: a hostile lives 0.2 seconds because there is no reason on earth to leave it
+   alive for 0.3.
+
+   Both parts then treated that 79% as a hole to be filled. V56 added a spawn floor so there would
+   always be something to tap. V57 paid 4.6x for killing low so the player would wait. One
+   manufactures the crowding the owner complained about; the other pays the player to do nothing,
+   and its own tuning note admits the multiplier had to be pushed from 2.6 to 4.6 before patience
+   stopped being a trap.
+
+   The 79% is not a hole. It is the half of the loop this game has never had.
+
+   In Tetris that time is when you build the well. In Drop7 it is when you stack the board for the
+   trigger. Here it is four seconds out of five spent waiting to be handed something to react to.
+
+   ---- Why eleven versions of "make the tap smarter" missed ----
+
+   Which member of the formation, where on its body, which one is sealed, which one must not be
+   touched, how deep down the screen. Real depth, and every one of them is a qualifier on a
+   reaction. The player answers questions the spawner asked, one at a time, and every question has
+   its answer available within 200ms.
+
+   V63's own header names what is missing, in a sentence about why cascades pay triangularly:
+   "setting one up is the interesting thing the player is being asked to do." The game has never
+   let the player set one up. V64 builds the formation, V65 marks the break point, V71 marks the
+   trap, V67 announces all of it in advance; the player's whole contribution is recognition. The
+   one exception is V72's positional splitter, and its header knows it is alone.
+
+   ---- What this does ----
+
+   A tap that finds nothing no longer finds nothing. It leaves a charge on the arena, and a charge
+   is a **snare**: hostiles that drift into its ring are caught and held there, creeping instead of
+   falling. They pile up. Nothing dies.
+
+   Then you tap one of them, and every charge holding it goes off at once — killing everything all
+   of them hold, and passing the blast on to your other charges.
+
+   So the run has two moves instead of one. In the quiet you decide where the arena is going to
+   collect; when it has collected enough, you decide when to cash it in. The longer you leave it,
+   the more is in the ring and the more the ring is worth — and the closer the whole pile is to the
+   reactor line you are trying to protect.
+
+   ---- Why a snare, and not the two designs this part was built as first ----
+
+   **Build one was a proximity mine.** Plant it, wait, the first hostile to touch it goes up. It is
+   the obvious design and the measurements killed it:
+
+     6s life, point trigger:   0 charges fired out of 9 planted in 75 seconds
+     10s life, 56pt ring:      2 fired out of 15
+     and a bigger blast:       1 fired out of 6 — but that one killed SIX hostiles
+
+   and then a sweep of planting depth, which is the parameter a player actually controls:
+
+     planted 22% of the way down:  5 fired of 8, 2.0 kills each, 1.03x the reactive score
+     planted 38%:                  2 fired of 10, 3.5 kills each, 1.22x
+     planted 54%:                  0 fired of 6
+     planted 70%:                  0 fired of 12, 0.89x
+
+   No depth gives both a firing rate and a payoff, and the reason is V57's own sentence: a hostile
+   that walks into your trap is a hostile you could simply have tapped. A trap competes with the
+   thumb for the same target, and the thumb is instant.
+
+   **Build two made the charge a relay** — any blast that touched it set it off, so a tap could
+   travel the screen through a path you had laid. It rides on the thumb instead of competing with
+   it, which fixed the argument, and measured it fired four times in 55 seconds at its best depth
+   and zero at three of the four. The reason is the number V56 recorded and neither build took
+   seriously enough: **the arena is empty 74-82% of the time, with a median of ZERO hostiles on
+   screen.** Any mechanic that needs two things to be near each other will almost never fire,
+   because there is almost never a second thing.
+
+   A snare does not need two things to be near each other. It *makes* them near each other. It is
+   the only one of the three that attacks the emptiness directly instead of trying to build on top
+   of it — density stops being something the spawner manufactures (V56's floor, which is exactly
+   the crowding the owner complained about) and becomes something the player authored on purpose,
+   in the place they chose, for a payout they chose when to take.
+
+   That is also the shape the research points at from three directions at once: setup and payoff as
+   separate moves the player times (Drop7), a growing pot that is at risk while it grows (Tony
+   Hawk's balance bar), and a near miss you arranged yourself rather than one the game handed you,
+   which is the version that actually makes people press again.
+
+   ---- What it composes with ----
+
+     - V21's heat becomes the charge economy instead of a punishment. Missing used to cost 17 heat
+       and produce nothing; planting costs 12 and produces an object. The bar that used to say "you
+       were sloppy" now says "this much of the arena is committed."
+     - V63's cascade is the vehicle: a charge fires through `v63BlastHit`, the seam V63 left for
+       exactly this — "anything the cascade can reach that is not in game.orbs".
+     - V57's strike band pays its depth multiplier at the charge's own y, so laying the path low is
+       worth more and is riskier.
+     - V65's sealed hostile: a charge is a blast, so it strips both plates.
+     - V71's mine is cleared safely and pays its bonus, as a reactor blast does.
+     - V67's chevrons stop being decoration. They say where the formation is coming; that is the
+       information you lay the path with.
+     - V73's pilot still walks to your last tap, so laying a path and repositioning under fire are
+       one gesture, and where you plant is a defensive decision as well as an offensive one. */
+
+const V76={
+ /* Inert for a moment after placing. Without it a fat-thumbed near-miss on the hostile you meant
+    to tap plants a charge inside the blast you are about to cause and it is consumed in the same
+    frame, which reads as the game eating your input. */
+ arm:.32,
+ /* Long enough to lay a path across several arrivals; short enough that the arena is never a
+    museum of decisions made ten seconds ago. */
+ life:9,
+ /* Three. The player, three charges and one formation is already four things to hold in mind, and
+    past four a human stops tracking objects and starts reading texture — which is the mechanism by
+    which this game's density became noise in the first place. */
+ max:3,
+ /* Between V21's hit (7) and its miss (17). At the 34/s decay that sustains about 2.8 plants a
+    second: fast enough to lay a path, far too slow to carpet the arena. */
+ heat:12,
+ /* The ring: what it holds, and what dies when it goes off. The drawing and the rule are the same
+    number so they cannot drift apart — an earlier build drew the blast a victim would produce and
+    triggered on a much smaller circle, which promised a reach it did not have. */
+ reach:96,
+ /* How far a charge reaches to DRAW hostiles in, as opposed to how far it holds them once caught.
+
+    This is the part that makes the mechanic possible at all, and it took three failed builds to
+    see why. A ring that only holds what happens to fall into it gathers almost nothing: the arena
+    is empty most of the time and what there is arrives spread across the full width, so a 96-point
+    ring in a 390-point arena catches one hostile and waits. A charge that BENDS the wave toward
+    itself gathers regardless of where the spawner put things -- which is the difference between
+    density the player hopes for and density the player caused.
+
+    Horizontal only. Pulling on the descent as well would let a well park a wave indefinitely and
+    turn the reactor line into a formality; sideways, a hostile still arrives on schedule, it
+    simply arrives somewhere you chose. */
+ pull:215,
+ drag:150,
+ /* What is left of a held hostile's descent. Not zero: a snare that stops a hostile dead is a wall,
+    and a wall this cheap would end the game's only real threat. At 0.16 a caught hostile still
+    arrives, about six times slower — long enough to be worth waiting on, short enough that leaving
+    a full ring parked above the reactor line is a decision with a cost. */
+ hold:.16,
+ /* How many one charge holds. Above this the ring is full and further hostiles fall through it
+    untouched, which is the pressure valve: a snare that held everything would be an auto-win, and
+    the player has to be given a reason to cash in rather than to keep collecting. */
+ cap:5,
+ /* How far a blast may be from a charge and still set it off, as a multiple of that blast's own
+    radius. At 1 the rule is exactly "if the explosion touches the charge, the charge fires", which
+    is the only version a player can predict by looking. */
+ link:1,
+ /* Paid per hostile a charge destroyed, triangular for the same reason V63's cascade bonus is:
+    catching a group has to be worth disproportionately more than catching one, or the placement
+    was not a decision. */
+ plant:240,
+ /* Cyan is this game's "yours" — the pulse weapon, the reactor blast, the dodge spark. Red is
+    theirs. A charge must never be mistaken for a V71 mine, the one object on the field with the
+    opposite meaning, so the two may not share a hue. */
+ core:'#5ef2ff',
+ glow:'#e6feff'
+};
+
+/* The band a charge may occupy. Above V67's approach strip it would be behind the HUD; below the
+   reactor line it would be under the pilot's feet. Clamped rather than refused: a refusal on a
+   touchscreen reads as a dropped input, which is the lesson V21 paid for with its overheat
+   lockout. */
+function v76Band(y){
+ return Math.max(V67.y()+18,Math.min(v73Line()-20,y));
+}
+
+const v76Begin=begin;
+begin=function(mode='solo',seed){
+ const out=v76Begin(mode,seed);
+ game.v76=[];
+ game.v76Planted=0;
+ game.v76Fired=0;
+ return out;
+};
+
+/* ---- Placing ---------------------------------------------------------------------------------
+
+   Whether the tap landed is read the way V21 reads it — from what the handlers actually did,
+   rather than by repeating the hit test, which has moved twice already and would drift in a third
+   copy. `game.v21Landed` is still set when V21's wrapper returns, and a defused projectile is the
+   one case that leaves no other trace, so it is counted separately.
+
+   Wrapped outside V21 deliberately. V21 has already billed a full miss by the time control comes
+   back here, so the difference is vented rather than the heat table rewritten: 17 is still the
+   right price for a tap that produced nothing, and this is a tap that produced something. */
+
+const v76Tap=v12HandleTap;
+v12HandleTap=function(clientX,clientY,event){
+ if(!game.running||game.paused||!canvas)return v76Tap(clientX,clientY,event);
+ const rect=canvas.getBoundingClientRect();
+ const flying=game.projectiles.length;
+ const out=v76Tap(clientX,clientY,event);
+ if(!game.running||game.paused)return out;
+ /* 'blocked' is a ward: the tap hit something, it just did not get through. Truthy, so it falls
+    out here without a special case. */
+ if(game.v21Landed||game.projectiles.length<flying)return out;
+ if(game.v21Lock>0)return out;
+ if(!(rect.width>0))return out;
+ v76Place((clientX-rect.left)/rect.width*W,v76Band((clientY-rect.top)/rect.height*H));
+ return out;
+};
+
+function v76Place(x,y){
+ const list=game.v76||(game.v76=[]);
+ /* The oldest goes, visibly, rather than the new one being silently refused. A cap the player
+    cannot see spend itself is indistinguishable from a bug. */
+ while(list.length>=V76.max)v76Fizzle(list.shift());
+ /* Math.random, not rng(). `rng()` advances `game.rng`, the seeded stream the spawner draws from,
+    so a cosmetic draw on a player-input path would make two players on the same daily seed meet
+    different waves and would put a duel's two arenas out of step. */
+ list.push({x,y,arm:V76.arm,life:V76.life,max:V76.life,held:0,spin:Math.random()*Math.PI*2});
+ game.v76Planted=(game.v76Planted||0)+1;
+ /* V21 billed this as a miss on the way in. It was not one. */
+ if(typeof v21Vent==='function')v21Vent(Math.max(0,V21_HEAT.miss-V76.heat));
+ ring(x,y,V76.core,30);
+ audio.sfx('armor');
+ haptic(9);
+ if(!save.v76Taught){
+  save.v76Taught=1;
+  persist();
+  toast('TAP EMPTY GROUND TO SNARE — THEN TAP WHAT IT CAUGHT');
+ }
+}
+
+function v76Fizzle(c){
+ ring(c.x,c.y,'#6f8ba8',16);
+ for(let i=0;i<4;i++){
+  const a=Math.random()*Math.PI*2;
+  game.particles.push({x:c.x,y:c.y,vx:Math.cos(a)*26,vy:Math.sin(a)*26,
+   life:.3,max:.3,r:1.5,color:'#6f8ba8',drag:.9,gravity:0});
+ }
+}
+
+/* ---- Going off -------------------------------------------------------------------------------
+
+   A charge is removed from the array before it fires, not after. Its own blast re-enters `hitOrb`,
+   which re-enters V63's cascade, which comes back through `v63BlastHit` — a charge still in the
+   array during its own detonation finds itself and fires forever. Splicing first is the whole
+   recursion guard, and the bound on the rest is V76.max: three charges can relay at most three
+   times.
+
+   Victims are struck on the rim rather than dead centre, copying V63's own link and for its
+   reason: a hit at zero distance scores a PERFECT every time, and PERFECT is something a thumb
+   earns. */
+
+function v76Fire(c){
+ const list=game.v76;
+ if(!list)return;
+ const at=list.indexOf(c);
+ if(at<0)return;
+ list.splice(at,1);
+ game.v76Fired=(game.v76Fired||0)+1;
+
+ ring(c.x,c.y,V76.core,V76.reach);
+ ring(c.x,c.y,V76.glow,V76.reach*.45);
+ explode(c.x,c.y,V76.core,22,.9);
+ audio.sfx('blast');
+
+ const before=new Set(game.orbs);
+ /* Snapshotted before anything dies: a cascade splices and a splitter pushes, so iterating the
+    live array while it is being rewritten skips hostiles. Everything the ring holds, plus anything
+    else standing inside it — the ring is the promise, and a hostile visibly inside it that
+    survived because the cap was already met would read as a bug. */
+ const victims=game.orbs.filter((o)=>o.y>-o.r&&o.hp>0&&
+  (o.v76Held===c||Math.hypot(o.x-c.x,o.y-c.y)<=V76.reach+o.r*.35));
+ for(const o of victims){
+  if(!game.orbs.includes(o))continue;
+  hitOrb(o,o.x+o.r,o.y,true);
+ }
+
+ /* And on to the next charge. After the hostiles rather than before, so a relay path resolves
+    outward from where the player struck instead of jumping to the far end first — which is what it
+    looks like, and a chain that reads backwards reads as a glitch. */
+ v76Relay(c.x,c.y,V76.reach);
+
+ let k=0;
+ for(const n of before)if(!game.orbs.includes(n))k++;
+ if(k>0){
+  /* On top of every kill's own score and V63's cascade bonus. This is payment for the placement
+     specifically, which is the decision this part exists to create. */
+  score(V76.plant*k*(k+1)/2,'chain');
+  if(k>1)floating(c.x,c.y,`SNARE ×${k}`,V76.core);
+ }
+}
+
+/* Any armed charge the given blast touches. Unarmed ones are skipped rather than queued: the arm
+   delay exists so that the blast you are causing right now cannot consume the charge you planted
+   in the same gesture. */
+function v76Relay(x,y,R){
+ const list=game.v76;
+ if(!list||!list.length)return;
+ for(const c of list.slice()){
+  if(c.arm>0)continue;
+  /* An empty well is not consumed. Measured, the firing sizes came back as
+     [0,5,1,0,2,0,0,0,4,0,0,0,3,0,0,0,2,0,3,1] -- half of them caught nothing, because a well going
+     off took its neighbours with it whether or not those neighbours had gathered anything yet.
+     Spending a charge that has caught nothing is pure loss to the player and it is invisible: all
+     they see is their own preparation disappearing for no reason. */
+  if(!(c.held>0))continue;
+  if(Math.hypot(c.x-x,c.y-y)>R*V76.link)continue;
+  v76Fire(c);
+ }
+}
+
+/* Deliberately NOT hooked to V63's `v63BlastHit` seam, though it fits there and an earlier build
+   used it. With every blast in the game able to set a charge off, measured, ten of fifteen charges
+   fired -- and killed 0.5 hostiles each, because they were being triggered by ordinary taps that
+   happened to land nearby while the ring was still filling. A snare that anything can spring is a
+   snare that is always empty when it springs. Charges now chain only to each other. */
+
+/* ---- Holding ---------------------------------------------------------------------------------
+
+   The hold is applied by scaling whatever movement the base loop produced, rather than by writing
+   to `o.speed`. Speed is not this part's to own: V21's divers accelerate on commit, the duel's
+   gravity attack multiplies the whole field's fall rate, and V72 copies a parent's speed onto its
+   halves. Multiplying and restoring a value three other systems write to is how two of them end up
+   fighting over it and one silently wins. Scaling the delta composes with all of them and needs
+   nothing restored — a hostile that leaves a ring simply stops being scaled. */
+
+const v76Update=update;
+update=function(dt){
+ const list=game.v76;
+ const running=game.running&&!game.paused&&list&&list.length;
+ /* Positions before the base loop, for exactly the hostiles that are held. */
+ const was=running?new Map():null;
+ if(running)for(const o of game.orbs)if(o.v76Held)was.set(o,o.y);
+
+ v76Update(dt);
+
+ if(!list||!list.length||!game.running||game.paused)return;
+
+ if(was)for(const [o,y0] of was){
+  if(!game.orbs.includes(o))continue;
+  o.y=y0+(o.y-y0)*V76.hold;
+ }
+
+ /* The pull. Strongest at the centre and falling to nothing at the rim, so a well has an edge a
+    player can see rather than a cliff -- and so two wells side by side hand a hostile across
+    instead of fighting over it in a jitter. */
+ for(const o of game.orbs){
+  if(o.y<=-o.r||o.hp<=0)continue;
+  let bx=0,bw=0;
+  for(const c of list){
+   if(c.arm>0)continue;
+   const d=Math.hypot(o.x-c.x,o.y-c.y);
+   if(d>V76.pull||d<1)continue;
+   const w=1-d/V76.pull;
+   bx+=(c.x-o.x)/d*w;bw+=w;
+  }
+  if(bw>0)o.x=Math.max(o.r*.6,Math.min(W-o.r*.6,o.x+bx/bw*V76.drag*dt));
+ }
+
+ /* Re-read every frame rather than kept as a membership list: hostiles are spliced by cascades and
+    pushed by splitters, and a stored list of who is held goes stale in exactly the frames that
+    matter most. */
+ for(const o of game.orbs)o.v76Held=null;
+ for(let i=list.length-1;i>=0;i--){
+  const c=list[i];
+  if(c.arm>0){c.arm-=dt;c.held=0;continue;}
+  c.life-=dt;
+  if(c.life<=0){list.splice(i,1);v76Fizzle(c);continue;}
+  let n=0;
+  for(const o of game.orbs){
+   if(o.y<=-o.r||o.hp<=0||o.v76Held)continue;
+   if(Math.hypot(o.x-c.x,o.y-c.y)>V76.reach+o.r*.35)continue;
+   if(n>=V76.cap)break;
+   o.v76Held=c;
+   n++;
+  }
+  c.held=n;
+ }
+};
+
+/* ---- Cashing in ------------------------------------------------------------------------------
+
+   Tapping a held hostile is not a kill, it is a trigger. Every charge holding it goes off, which
+   takes the tapped hostile with it — so the player's thumb does the same thing it always did, in
+   the same place, and means something new.
+
+   Only a direct tap. A chain link arriving from someone else's blast must not detonate the ring it
+   lands in, or a single cascade would empty the whole board and there would be no timing decision
+   left to make. */
+
+const v76HitOrb=hitOrb;
+hitOrb=function(o,x,y,chain=false){
+ const c=(!chain&&game.running&&!game.paused)?o.v76Held:null;
+ if(!c)return v76HitOrb(o,x,y,chain);
+ v76Fire(c);
+ /* It usually died in that blast. If it somehow did not — a sealed elite with plates left, an
+    armoured hostile at full health — the tap still lands, as it would have. */
+ if(game.orbs.includes(o))return v76HitOrb(o,x,y,chain);
+};
+
+/* ---- Being seen ------------------------------------------------------------------------------
+
+   Tapping empty ground has done nothing at all for this game's whole life, so the first time a
+   player does it by accident the arena has to be unmistakable about what just happened — and for
+   the rest of the run the charge has to be something they can plan around at a glance while
+   looking somewhere else.
+
+   The ring is drawn permanently rather than only on arrival. V63 makes the same call for the same
+   reason — "a player cannot learn the reach of something they only see on the rare occasions it
+   works, and learning the reach is the whole skill" — and here the ring is the plan itself.
+
+   Everything rides over a dark backing stroke. The arena behind a charge is a lit planet, a nebula
+   and a skyline, and thin bright line work on that without a backing is the exact fault V57's
+   strike band and V74's impact markers each had to be rebuilt to fix. */
+
+const v76Draw=draw;
+draw=function(){
+ v76Draw();
+ const list=game.v76;
+ if(!list||!list.length||!game.running||game.paused)return;
+
+ const t=game.elapsed;
+ ctx.save();
+ ctx.lineJoin='round';
+ ctx.lineCap='round';
+
+ /* The path, drawn first so the charges sit on top of it. Two armed charges close enough to relay
+    are joined by a line, and that line is the most important thing on screen once there is more
+    than one charge: it is the difference between three markers and a route. */
+ for(let i=0;i<list.length;i++){
+  for(let j=i+1;j<list.length;j++){
+   const a=list[i],b=list[j];
+   if(a.arm>0||b.arm>0)continue;
+   if(Math.hypot(a.x-b.x,a.y-b.y)>V76.reach*2*V76.link)continue;
+   ctx.globalAlpha=.5*Math.min(1,a.life)*Math.min(1,b.life);
+   ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);
+   ctx.strokeStyle='rgba(4,9,20,.8)';ctx.lineWidth=5;ctx.stroke();
+   ctx.strokeStyle=V76.core;ctx.lineWidth=1.6;
+   ctx.setLineDash([3,7]);
+   ctx.lineDashOffset=-t*22;
+   ctx.stroke();
+   ctx.setLineDash([]);ctx.lineDashOffset=0;
+  }
+ }
+
+ for(const c of list){
+  const arming=c.arm>0;
+  const k=arming?1-c.arm/V76.arm:1;
+  /* Fades over its last second, so a charge about to expire is visibly about to expire and can be
+     spent rather than lost. */
+  const fade=arming?1:Math.min(1,c.life);
+
+  ctx.globalAlpha=(arming?.55:.3)*fade;
+  ctx.beginPath();
+  ctx.arc(c.x,c.y,V76.reach,-Math.PI/2,-Math.PI/2+(arming?Math.PI*2*k:Math.PI*2));
+  ctx.strokeStyle='rgba(4,9,20,.8)';
+  ctx.lineWidth=arming?4.5:3;
+  ctx.stroke();
+  ctx.strokeStyle=V76.core;
+  ctx.lineWidth=arming?2.2:1.5;
+  if(!arming)ctx.setLineDash([6,10]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  /* How full it is. This is the number the whole timing decision is made on, so it is drawn as the
+     ring itself filling rather than as a digit somewhere: the player is already looking at the ring
+     and must never have to read a counter to know whether it is worth taking. */
+  if(!arming&&c.held>0){
+   ctx.globalAlpha=.16*fade;
+   ctx.beginPath();
+   ctx.moveTo(c.x,c.y);
+   ctx.arc(c.x,c.y,V76.reach,-Math.PI/2,-Math.PI/2+Math.PI*2*Math.min(1,c.held/V76.cap));
+   ctx.closePath();
+   ctx.fillStyle=V76.core;
+   ctx.fill();
+   /* A tether to each catch. Without it a slowed hostile inside a ring looks like a hostile that
+      happens to be slow, and the player never learns that the ring did it. */
+   ctx.globalAlpha=.5*fade;
+   ctx.strokeStyle=V76.core;
+   ctx.lineWidth=1.4;
+   ctx.setLineDash([2,5]);
+   for(const o of game.orbs){
+    if(o.v76Held!==c)continue;
+    ctx.beginPath();ctx.moveTo(c.x,c.y);ctx.lineTo(o.x,o.y);ctx.stroke();
+   }
+   ctx.setLineDash([]);
+  }
+
+  ctx.globalAlpha=fade;
+  const r=arming?6+(1-k)*5:8;
+  ctx.beginPath();ctx.arc(c.x,c.y,r+3.5,0,Math.PI*2);
+  ctx.fillStyle='rgba(4,9,20,.85)';ctx.fill();
+  ctx.beginPath();ctx.arc(c.x,c.y,r,0,Math.PI*2);
+  ctx.strokeStyle=V76.core;ctx.lineWidth=2.2;ctx.stroke();
+  ctx.beginPath();ctx.arc(c.x,c.y,arming?2.2:3.4,0,Math.PI*2);
+  ctx.fillStyle=arming?V76.core:V76.glow;ctx.fill();
+
+  if(!arming){
+   /* Three ticks turning slowly: the cheapest thing that reads as "live" without pulsing, and at
+      three charges on screen a pulse would be a strobe. */
+   ctx.strokeStyle=V76.core;
+   ctx.lineWidth=2;
+   for(let i=0;i<3;i++){
+    const a=c.spin+t*1.1+i*Math.PI*2/3;
+    ctx.beginPath();
+    ctx.moveTo(c.x+Math.cos(a)*(r+5),c.y+Math.sin(a)*(r+5));
+    ctx.lineTo(c.x+Math.cos(a)*(r+9),c.y+Math.sin(a)*(r+9));
+    ctx.stroke();
+   }
+  }
+ }
+ ctx.restore();
+ ctx.globalAlpha=1;
+};
