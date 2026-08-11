@@ -386,7 +386,26 @@ const v76HitOrb=hitOrb;
 hitOrb=function(o,x,y,chain=false){
  const c=(!chain&&game.running&&!game.paused)?o.v76Held:null;
  if(!c)return v76HitOrb(o,x,y,chain);
+
+ /* Reported as a landed tap BEFORE the blast, not after.
+
+    V21 sets this flag inside its own `hitOrb` wrapper, which is further down the chain — so a
+    cash-in that killed its target never reached the line that sets it, and two things went wrong
+    at once, both of them punishing the exact action this part exists to reward. V21 billed the tap
+    as a complete miss at 17 heat instead of 7, and the tap wrapper at the top of this file saw an
+    unlanded tap and planted a SECOND charge on top of the one that had just gone off, spending a
+    slot and more heat for it. The measurements that justified this part were taken with that bug
+    present; it was scoring 1.75x against a reactive bot while being billed as a miss every time. */
+ game.v21Landed=true;
  v76Fire(c);
+ if(typeof v21Vent==='function')v21Vent(V21_HEAT.ventKill);
+
+ if(!save.v76Cashed){
+  save.v76Cashed=1;
+  persist();
+  toast('THE WHOLE RING WENT UP — HOLD MORE NEXT TIME');
+ }
+
  /* It usually died in that blast. If it somehow did not — a sealed elite with plates left, an
     armoured hostile at full health — the tap still lands, as it would have. */
  if(game.orbs.includes(o))return v76HitOrb(o,x,y,chain);
