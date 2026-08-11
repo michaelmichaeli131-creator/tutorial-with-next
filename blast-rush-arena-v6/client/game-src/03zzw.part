@@ -1,0 +1,297 @@
+/* V75 — the arena is not a message board.
+
+   This came out of photographing a live run rather than a posed one, and it is the most damaging
+   thing in the game's presentation by a wide margin. Two captured frames:
+
+     Wave 1, ordinary play. On screen at once: "CHAIN ×3", "SHIELDED +500" (running off the left
+     edge, the S and H cut away), "MINE", "MINE" again, "+1,715", and a DOM toast reading
+     "VENTING • HOLD FIRE". Six pieces of typography. Number of hostiles you can actually see:
+     one. The arena had become a wall of text with a game somewhere behind it.
+
+     Wave 4, the titan. Five score floats stacked over the boss -- +1,150, +482, +4,024, +482,
+     +1,150 -- covering the thing the player is supposed to be aiming at.
+
+   The floats are not a bug. Every one of them was added deliberately and each is individually
+   defensible: V15 jittered them so they would not overlap, V17 sized them by magnitude and gave
+   them an outline so they would survive any background, V69 clamped them inside the chrome and
+   aggregated a cascade into one number. Four separate corrections, all of them treating the
+   symptom. The disease is that there are thirteen distinct message types and the base renderer
+   will hold six of them on screen at 26px, in the middle of the play area, at once.
+
+   It is also, in the owner's own words, most of both complaints. "Too much load" is not only the
+   monster count -- it is six messages a second. And "the game doesn't look good" cannot be fixed
+   by an art pass while the art is underneath a paragraph.
+
+   ---- The rule ----
+
+   The play area is for the arena. Text lives in exactly two places and nowhere else:
+
+     1. **Numbers live in the HUD**, on the score readout that already exists and that the player
+        already knows where to find. It now reacts: the number kicks on every tap and a small gold
+        delta rises off it, accumulating the taps inside one window rather than spawning a fresh
+        float per kill. Nothing about a score is worth covering the arena for -- at five taps a
+        second nobody reads five numbers, they read that the number is climbing.
+
+     2. **Names live on one line**, at a fixed place under the combat bar, one at a time. A new
+        event replaces the old one instead of stacking beside it. Two mines tapped in a row are
+        one MINE, not two.
+
+   Nothing is drawn over the creatures. `game.texts` is now permanently empty, which means V15's
+   jitter, V17's magnitude sizing and V69's clamp all become dead code -- deliberately, and left in
+   place rather than deleted, because each is a correct fix for a renderer this layer no longer
+   uses and deleting them would make the history unreadable. They are all presentation: `score()`
+   banks `game.score` and sends the duel packet before it ever calls `floating`, so no gameplay,
+   economy or network behaviour passes through here.
+
+   The reward for a kill does not disappear -- it moves to where a reward belongs in an action game,
+   which is the destruction itself and a HUD that reacts, not a caption. */
+
+const V75={
+ /* Long enough to read a two-word label at a glance, short enough that the line is empty most of
+    the time. A permanently-populated line is chrome, which is what this part exists to remove. */
+ life:1.05,
+ /* How far the line rises as it arrives. Small: this is a nudge, not an entrance. */
+ rise:9,
+ /* Clearance below the combat bar. */
+ gap:17,
+ /* Used until the bar can be measured, and whenever it cannot be. */
+ fallback:()=>isMobile?156:122,
+ size:()=>isMobile?13:14,
+ gold:'#ffd469',
+ /* How long taps are gathered into one HUD delta. About three taps at the rate a player actually
+    achieves, which is the difference between a readable "+2,140" and a flicker. */
+ window:620
+};
+
+/* ---- Where the line sits -------------------------------------------------------------------
+
+   Measured off the combat bar rather than guessed at, because the bar is not a fixed height: a
+   duel adds a rival row to it and V41 adds a titan bar, and a constant that clears one clears
+   neither of the others. Throttled -- getBoundingClientRect forces layout, and this runs on a
+   player input path. */
+
+let v75Y=0,v75MeasuredAt=0;
+function v75Measure(){
+ const now=performance.now();
+ if(now-v75MeasuredAt<500&&v75Y)return;
+ v75MeasuredAt=now;
+ /* Never above V67's approach strip. Measuring the bar alone put the line at y=127 and the
+    chevrons are drawn at 124 — photographed, a CHAIN badge landed straight through the markers
+    that say where the next formation is arriving, which is the one row of the screen that must
+    stay readable. Derived from V67's own constant rather than from a number that happens to clear
+    it today. */
+ const floor=V67.y()+24;
+ const bar=$('combatBar');
+ if(!bar||!canvas){v75Y=Math.max(V75.fallback(),floor);return;}
+ const b=bar.getBoundingClientRect();
+ const c=canvas.getBoundingClientRect();
+ if(!(c.height>0)||!(b.height>0)){v75Y=Math.max(V75.fallback(),floor);return;}
+ v75Y=Math.max((b.bottom-c.top)/c.height*H+V75.gap,floor);
+}
+
+/* ---- The HUD reacts --------------------------------------------------------------------------
+
+   Web Animations rather than a class toggle: restarting a CSS animation needs the class removed,
+   a forced reflow to flush it, and the class added again, and this fires on every tap. One
+   Animation object per element, rewound, composites on its own and touches no layout. */
+
+let v75Chip=null,v75Pop=null,v75Lift=null,v75Pending=0,v75CycleAt=0,v75ChipAt=0;
+
+function v75Kick(a){ if(a){a.currentTime=0;a.play();} }
+
+/* The delta is a fixed-position element on the body, placed from the score's measured rect, and
+   NOT a child of the score.
+
+   The first version appended it inside #cbScore, which is the obvious place and is wrong: the HUD
+   writes the score through `setText`, and `setText` assigns `textContent` -- which destroys every
+   child node. The chip was being deleted a few milliseconds after it was created, on every single
+   frame the score changed, which is every frame the player is scoring. Photographed, the readout
+   was simply never there. */
+function v75PlaceChip(){
+ const el=$('cbScore');
+ if(!el||!v75Chip)return;
+ const now=performance.now();
+ if(now-v75ChipAt<500)return;
+ v75ChipAt=now;
+ const r=el.getBoundingClientRect();
+ if(!(r.width>0))return;
+ v75Chip.style.left=`${Math.round(r.left+r.width/2)}px`;
+ /* Under the score, not over it. Anchoring at the score's top and rising -- the reflex layout for
+    a damage number -- put the chip at y=-10 on a phone, because the score sits in the first row of
+    the HUD and there is no screen above it. Measured off the bottom edge, with a short travel, it
+    lands in the gap between the score row and the mission row and never covers a digit. */
+ v75Chip.style.top=`${Math.round(r.bottom+1)}px`;
+}
+
+function v75Score(n){
+ if(!(n>0))return;
+ const el=$('cbScore');
+ if(!el)return;
+ const now=performance.now();
+ const fresh=now-v75CycleAt>V75.window;
+ v75Pending=fresh?n:v75Pending+n;
+ if(fresh)v75CycleAt=now;
+
+ if(!v75Chip){
+  v75Chip=document.createElement('i');
+  v75Chip.className='v75-delta';
+  document.body.appendChild(v75Chip);
+  v75ChipAt=0;
+ }
+ v75PlaceChip();
+ v75Chip.textContent='+'+format(v75Pending);
+ if(reduceMotion)return;
+
+ /* The number kicks on every tap -- it is now the only per-tap feedback outside the arena itself,
+    so it has to answer every one of them. The delta only restarts per window, or a continuous
+    stream would re-launch it forever and it would never actually travel. */
+ if(!v75Pop)v75Pop=el.animate(
+  [{transform:'scale(1)'},{transform:'scale(1.15)',offset:.3},{transform:'scale(1)'}],
+  {duration:290,easing:'ease-out',fill:'none'});
+ else v75Kick(v75Pop);
+
+ if(fresh||!v75Lift){
+  if(!v75Lift)v75Lift=v75Chip.animate(
+   [{opacity:0,transform:'translate(-50%,9px)'},
+    {opacity:1,transform:'translate(-50%,1px)',offset:.24},
+    {opacity:1,transform:'translate(-50%,-1px)',offset:.66},
+    {opacity:0,transform:'translate(-50%,-6px)'}],
+   {duration:760,easing:'cubic-bezier(.2,.9,.3,1)',fill:'none'});
+  else v75Kick(v75Lift);
+ }
+}
+
+/* ---- The one line ----------------------------------------------------------------------------
+
+   Ranked rather than last-wins, because a single tap can raise three of these and the one that
+   matters is not the last one raised. A mine going off and an escape are the two that cost the
+   player something and they outrank everything; the per-hostile depth badge (`x2.4`) is the
+   quietest thing here and is almost always accompanied by the CHAIN line that explains it. */
+
+const V75_SCORE=/^\+[\d,]+$/;
+
+function v75Rank(s){
+ if(/MINE|ESCAPED|FEEDBACK/.test(s))return 6;
+ if(/CHAIN/i.test(s))return 5;
+ if(/DIRECTIVE/.test(s))return 4;
+ if(/◈/.test(s))return 3;
+ if(/^x[\d.]+$/i.test(s))return 1;
+ return 2;
+}
+
+function v75Event(text,color,amount){
+ v75Measure();
+ const s=String(text).toUpperCase();
+ const ev=game.v75Ev;
+ /* The same event twice running is one event with a bigger number, not two lines fighting for the
+    same 40 points of screen. This is the case the captured frame showed twice over. */
+ if(ev&&ev.life>0&&ev.text===s){ev.amount+=amount||0;ev.life=ev.max;return;}
+ game.v75Ev={text:s,color:color||'#dce9ff',amount:amount||0,life:V75.life,max:V75.life};
+}
+
+/* ---- Routing ---------------------------------------------------------------------------------
+
+   `v75Floating` is captured and deliberately never called. That bypasses every earlier wrapper of
+   `floating` in one step, which is the point: they are five layers of increasingly careful
+   arrangement of something that should not be on the canvas at all. Nothing pushes to
+   `game.texts` any more, so V17's renderer returns on its first line and V12's and V15's
+   repositioning wrappers find nothing to reposition -- all three already guard for it. */
+
+let v75Tap=null;
+const v75Floating=floating;
+floating=function(x,y,text,color='#fff'){
+ const s=String(text);
+ if(V75_SCORE.test(s)){
+  const n=Number(s.replace(/[^0-9]/g,''))||0;
+  if(v75Tap)v75Tap.amount+=n;else v75Score(n);
+  return;
+ }
+ const r=v75Rank(s);
+ if(v75Tap){
+  if(r>=v75Tap.rank){v75Tap.rank=r;v75Tap.label=s;v75Tap.color=color;}
+  return;
+ }
+ v75Event(s,color,0);
+};
+
+/* One tap is one message. The same shape V69 uses to aggregate a cascade's score, widened to cover
+   the label as well -- a cascade through a sealed elite over a mine raises a chain badge, a depth
+   badge, an elite bonus and four score floats, and the player wants to be told one thing. */
+
+const v75HitOrb=hitOrb;
+hitOrb=function(o,x,y,chain=false){
+ const top=!v75Tap;
+ if(top)v75Tap={amount:0,label:'',color:'',rank:0};
+ try{
+  return v75HitOrb(o,x,y,chain);
+ }finally{
+  if(top){
+   const t=v75Tap;
+   v75Tap=null;
+   if(t.amount>0)v75Score(t.amount);
+   if(t.label)v75Event(t.label,t.color,t.amount);
+  }
+ }
+};
+
+const v75Begin=begin;
+begin=function(mode='solo',seed){
+ const out=v75Begin(mode,seed);
+ game.v75Ev=null;
+ v75Pending=0;
+ v75CycleAt=0;
+ v75MeasuredAt=0;
+ return out;
+};
+
+const v75Update=update;
+update=function(dt){
+ v75Update(dt);
+ const ev=game.v75Ev;
+ if(ev&&ev.life>0)ev.life-=dt;
+};
+
+const v75Draw=draw;
+draw=function(){
+ v75Draw();
+ const ev=game.v75Ev;
+ if(!ev||ev.life<=0||!game.running||game.paused)return;
+
+ const k=ev.life/ev.max;
+ const age=1-k;
+ const arrive=Math.min(1,age/.10);
+ const alpha=Math.min(arrive,Math.min(1,k/.30));
+ const y=(v75Y||V75.fallback())+(1-arrive)*V75.rise;
+ const size=V75.size();
+
+ ctx.save();
+ ctx.globalAlpha=alpha;
+ ctx.textAlign='left';
+ ctx.textBaseline='middle';
+ ctx.lineJoin='round';
+ ctx.font=`900 ${size}px system-ui,sans-serif`;
+ /* Letterspacing is what makes a short all-caps label read as a label rather than as a shout. Set
+    through the canvas state so save/restore returns it, and reset anyway for older engines that
+    accept the property without tracking it. */
+ ctx.letterSpacing='1.7px';
+
+ const gold=ev.amount>0?'   +'+format(ev.amount):'';
+ const wl=ctx.measureText(ev.text).width;
+ const wg=gold?ctx.measureText(gold).width:0;
+ const x=Math.max(10,Math.min(W-10-(wl+wg),W/2-(wl+wg)/2));
+
+ /* One dark backing stroke, the same device V21's ward and V74's markers use. The arena behind
+    this line is a lit skyline and a planet, and thin type on it without a backing is the fault
+    those two parts were written to fix. */
+ ctx.lineWidth=Math.max(3.5,size*.34);
+ ctx.strokeStyle='rgba(4,8,18,.94)';
+ ctx.strokeText(ev.text,x,y);
+ if(gold)ctx.strokeText(gold,x+wl,y);
+ ctx.fillStyle=ev.color||'#dce9ff';
+ ctx.fillText(ev.text,x,y);
+ if(gold){ctx.fillStyle=V75.gold;ctx.fillText(gold,x+wl,y);}
+
+ ctx.letterSpacing='0px';
+ ctx.restore();
+ ctx.globalAlpha=1;
+};

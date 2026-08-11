@@ -1,0 +1,27 @@
+/* V75 — the score readout does the celebrating now.
+
+   Every reward number used to be drawn on the canvas, over the play area, up to six at a time.
+   They are gone; the HUD score is where a number belongs and it has to react instead of just
+   being correct. The delta rides on the score itself so the player's eye never leaves the one
+   place it already goes to read a score. */
+
+/* Fixed to the viewport and positioned from the score's measured rect, NOT parented to it: the HUD
+   writes the score with `textContent`, which deletes any child the score is carrying.
+
+   Animated by the Web Animations API rather than a keyframe, so a rapid stream of taps can rewind
+   one Animation object instead of thrashing classes and forcing a reflow per tap. At rest it is
+   invisible: the animation fills neither forwards nor backwards. */
+.v75-delta{
+  position:fixed;
+  left:50%;
+  top:0;
+  z-index:60;
+  transform:translate(-50%,0);
+  opacity:0;
+  pointer-events:none;
+  white-space:nowrap;
+  font:900 11px/1 system-ui,sans-serif;
+  letter-spacing:.06em;
+  color:#ffd469;
+  text-shadow:0 1px 2px rgba(2,6,16,.95),0 0 10px rgba(255,180,60,.45);
+}
