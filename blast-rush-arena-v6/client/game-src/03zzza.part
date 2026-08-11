@@ -1,0 +1,290 @@
+/* V79 — the arena, the deadline, and what a death looks like on paper.
+
+   V77 laid the sheet and V78 printed the cast. What is left is everything between them: the thing
+   the player is defending, the line they are defending it at, the fire coming down, and — most
+   important by a wide margin — the explosion, which a player sees several thousand times a session
+   and which is currently a radial gradient and a white flash.
+
+   ---- The kill effect: THE PLATE SPLITS ----
+
+   In a print language the most legible way to say "this is destroyed" is for the process itself to
+   fail. So a death is a registration failure: the colour plate and the key plate come apart and
+   drift, while the screen that held the tone resolves outward as a ring of dots.
+
+   Two rules make it read, and both are the opposite of the reflex:
+
+     1. **Nothing fades. Everything shrinks.** A halftone screen resolving is dots getting smaller,
+        not dots getting fainter, and it is why this stays crisp to its last frame instead of
+        dissolving into fog. Translucent ink only ever makes mud.
+     2. **Nothing is brighter than the paper.** The flash is a knockout halo drawn with `lighten`,
+        which can only lift ink off what it sweeps across. There is no white in this game; there is
+        only bare stock.
+
+   ---- The deadline ----
+
+   The reactor line has been a dashed cyan rule for the whole life of this game — the same weight
+   and the same idiom as half a dozen readouts that do not kill you. It is now printed hazard tape,
+   which is what `V77.yellow` exists for and the only thing in the palette allowed to use it. It is
+   the one element on screen that means "past here you lose", so it gets the one colour that means
+   nothing else.
+
+   ---- What is deliberately left to the base ----
+
+   `explode`'s particles still run. Under V77's composite rule they multiply instead of adding, so
+   the shower of coloured dots the base already produces lands as ink spatter — which is exactly
+   what it should be in this language, for free, and replacing it would be work spent to arrive
+   back where we started. Only the ring and the flash needed rewriting. */
+
+const V79={
+ /* Beats of the death animation, in seconds. Short: this fires several times a second at a good
+    combo, and anything long enough to admire is long enough to obscure the next arrival. */
+ life:.46,
+ /* Dots in the key shockwave, and in the colour one behind it. */
+ keyDots:14,
+ inkDots:10,
+ /* How far the two plates travel apart, as a fraction of the blast radius. */
+ split:.62,
+ tape:26
+};
+
+const v79Bursts=[];
+
+const v79Explode=explode;
+explode=function(x,y,color,count,power){
+ const out=v79Explode(x,y,color,count,power);
+ if(V77.on){
+  /* Capped rather than queued. A cascade can fire eight of these inside one frame and eight
+     overlapping shockwaves is a grey disc, not eight deaths. The oldest go. */
+  /* Three, not six, and half the radius the first build used. Photographed during a boss fight,
+     six overlapping shockwaves at 46 points each stacked into one black donut two hundred points
+     across that covered the boss completely. A death has to be legible as a death; six of them at
+     once have to remain legible as six deaths. */
+  while(v79Bursts.length>=3)v79Bursts.shift();
+  v79Bursts.push({x,y,t:0,r:14+(power||1)*11,seed:1+Math.floor(Math.random()*9000)});
+ }
+ return out;
+};
+
+const v79Update=update;
+update=function(dt){
+ v79Update(dt);
+ for(let i=v79Bursts.length-1;i>=0;i--){
+  v79Bursts[i].t+=dt;
+  if(v79Bursts[i].t>=V79.life)v79Bursts.splice(i,1);
+ }
+};
+
+function v79DrawBursts(){
+ const red=v77Ink();
+ for(const b of v79Bursts){
+  const t=Math.min(1,b.t/V79.life);
+  const R=b.r*(1+t*1.5);
+
+  /* 1. The knockout halo, swept ahead of the wave. `lighten` and not `source-over`: it may only
+     brighten what it crosses, so it lifts ink off a creature rather than painting a pale smear
+     over one. This is the only additive-family mode the direction permits, and it is permitted
+     because its ceiling is the colour of the paper. */
+  if(t<.36){
+   ctx.save();
+   ctx.globalCompositeOperation='lighten';
+   ctx.strokeStyle=V77.knock;
+   ctx.lineWidth=10*(1-t/.36);
+   ctx.beginPath();ctx.arc(b.x,b.y,R*1.05,0,Math.PI*2);ctx.stroke();
+   ctx.restore();
+  }
+
+  /* 2. The halftone shockwave — the signature. Dots on two rings, shrinking rather than fading. */
+  ctx.save();
+  ctx.globalCompositeOperation='multiply';
+  v77Seeded(b.seed);
+  const dr=R*.24*Math.pow(1-t,.75);
+  ctx.fillStyle=V77.key;
+  for(let i=0;i<V79.keyDots;i++){
+   const a=i/V79.keyDots*Math.PI*2+b.seed;
+   ctx.beginPath();
+   ctx.arc(b.x+Math.cos(a)*R,b.y+Math.sin(a)*R,Math.max(.4,dr*(.6+v77Rnd()*.7)),0,Math.PI*2);
+   ctx.fill();
+  }
+  ctx.fillStyle=red;
+  for(let i=0;i<V79.inkDots;i++){
+   const a=i/V79.inkDots*Math.PI*2-b.seed;
+   const rr=R*1.34;
+   ctx.beginPath();
+   ctx.arc(b.x+Math.cos(a)*rr,b.y+Math.sin(a)*rr,Math.max(.3,dr*.62*(.6+v77Rnd()*.7)),0,Math.PI*2);
+   ctx.fill();
+  }
+
+  /* 3. The two plates, drifting apart and shrinking. Registration failure as a death. */
+  const off=R*V79.split*t;
+  const s=(1-t)*b.r*.5;
+  if(s>1){
+   const blob=(cx,cy,col,sd)=>{
+    const pts=[];
+    v77Seeded(sd);
+    for(let i=0;i<10;i++){
+     const a=i/10*Math.PI*2;
+     const rad=s*(.7+v77Rnd()*.5);
+     pts.push([cx+Math.cos(a)*rad,cy+Math.sin(a)*rad]);
+    }
+    v77Ink2(ctx,pts,col,sd,.6);
+   };
+   blob(b.x-off*.6,b.y-off*.3,red,b.seed+3);
+   blob(b.x+off*.6,b.y+off*.3,V77.key,b.seed+4);
+  }
+  ctx.restore();
+ }
+}
+
+/* ---- The deadline ------------------------------------------------------------------------------
+
+   Hazard tape, printed. Yellow and key on the diagonal, which is the one piece of signage every
+   human on earth already reads as "do not cross" without being taught. */
+
+function v79Tape(){
+ const y=v73Line();
+ const h=13;
+ ctx.save();
+ ctx.globalCompositeOperation='multiply';
+ ctx.fillStyle=V77.yellow;
+ ctx.fillRect(0,y-h/2,W,h);
+ ctx.beginPath();
+ ctx.rect(0,y-h/2,W,h);
+ ctx.clip();
+ ctx.fillStyle=V77.key;
+ for(let x=-h;x<W+h*2;x+=V79.tape){
+  v77Path(ctx,[[x,y+h],[x+h,y-h],[x+h+V79.tape*.5,y-h],[x+V79.tape*.5,y+h]],.5,900+x);
+  ctx.fill();
+ }
+ ctx.restore();
+ ctx.save();
+ ctx.globalCompositeOperation='multiply';
+ ctx.strokeStyle=V77.key;
+ ctx.lineWidth=1.6;
+ ctx.beginPath();ctx.moveTo(0,y-h/2);ctx.lineTo(W,y-h/2);ctx.stroke();
+ ctx.beginPath();ctx.moveTo(0,y+h/2);ctx.lineTo(W,y+h/2);ctx.stroke();
+ ctx.restore();
+}
+
+/* A key silhouette along the horizon. `drawBackground` is replaced by V77, which took V26's skyline
+   with it — and a floor band with nothing standing on it has no scale. One flat black cut-out gives
+   the sheet a horizon for four fills. */
+function v79Skyline(){
+ const base=v73Line()-13;
+ ctx.save();
+ ctx.globalCompositeOperation='multiply';
+ ctx.fillStyle=V77.key;
+ v77Seeded(4400+game.world*37);
+ let x=-10;
+ while(x<W+10){
+  const w=16+v77Rnd()*30;
+  const h=18+v77Rnd()*54;
+  ctx.fillRect(x,base-h,w,h);
+  x+=w+2+v77Rnd()*10;
+ }
+ ctx.restore();
+}
+
+/* ---- Reactor, pilot, fire ---------------------------------------------------------------------- */
+
+const v79Reactor=drawReactor;
+drawReactor=function(){
+ if(!V77.on)return v79Reactor();
+ ctx.globalAlpha=1;
+ v79Skyline();
+ v79Tape();
+
+ /* The thing being defended, in the player's ink. Flat, keyed, and the only blue mass on the sheet
+    apart from the floor — so "mine" and "theirs" is answered by hue before shape is even read. */
+ const x=reactorAnchorX(),y=H-(isMobile?96:62);
+ const body=[[-26,-30],[26,-30],[34,-2],[22,26],[-22,26],[-34,-2]];
+ v77Ink2(ctx,body.map((p)=>[p[0]+x+V77.slipX,p[1]+y+V77.slipY]),V77.blue,7001);
+ v77Key(ctx,body.map((p)=>[p[0]+x,p[1]+y]),4.4,7001);
+ v77Shade(ctx,[[8,-30],[26,-30],[34,-2],[22,26],[10,26]].map((p)=>[p[0]+x,p[1]+y]),2,7002);
+ ctx.save();
+ ctx.fillStyle=V77.knock;
+ ctx.fillRect(x-15,y-16,30,7);
+ ctx.restore();
+ ctx.save();
+ ctx.globalCompositeOperation='multiply';
+ ctx.fillStyle=V77.key;
+ ctx.fillRect(x-13,y-15,11,5);
+ ctx.fillRect(x+2,y-15,11,5);
+ ctx.restore();
+ v77Disc(ctx,x,y+8,7,V77.key);
+};
+
+const v79Projectile=drawProjectile;
+drawProjectile=function(p){
+ if(!V77.on)return v79Projectile(p);
+ /* Solid, keyed, and with a short tail drawn as a triangle so direction is readable at a glance.
+    Enemy fire is hostile ink: on this sheet, red is the only thing that costs you anything. */
+ const red=v77Ink();
+ const sp=Math.hypot(p.vx||0,p.vy||0)||1;
+ const tx=-(p.vx||0)/sp,ty=-(p.vy||0)/sp;
+ v77Ink2(ctx,[[p.x+ty*p.r*.7,p.y-tx*p.r*.7],[p.x-ty*p.r*.7,p.y+tx*p.r*.7],
+  [p.x+tx*p.r*4.2,p.y+ty*p.r*4.2]],red,8100+Math.round(p.x),.4);
+ v77Disc(ctx,p.x,p.y,p.r+2,red);
+ ctx.save();
+ ctx.globalCompositeOperation='multiply';
+ ctx.strokeStyle=V77.key;ctx.lineWidth=2.4;
+ ctx.beginPath();ctx.arc(p.x,p.y,p.r+2,0,Math.PI*2);ctx.stroke();
+ ctx.restore();
+};
+
+/* ---- The titan ----------------------------------------------------------------------------------
+
+   A boss has to read as a different class of thing, not as a large hostile. It is the one figure
+   printed as a solid key mass with the colour showing only through its openings — the inverse of
+   every other creature on the sheet, which is a red mass with black on top. */
+
+const v79Boss=drawBoss;
+drawBoss=function(b,w){
+ if(!V77.on)return v79Boss(b,w);
+ const red=v77Ink();
+ const R=b.r;
+ const hull=[[-R,-R*.5],[-R*.7,-R],[R*.7,-R],[R,-R*.5],[R*.82,R*.55],[0,R],[-R*.82,R*.55]];
+ ctx.save();
+ /* Forced, not assumed. `drawBoss` and `drawReactor` are called from the middle of the base draw,
+    which leaves globalAlpha wherever its last loop put it -- photographed, the titan's key plate
+    came out mid-grey instead of near-black for exactly that reason. */
+ ctx.globalAlpha=1;
+ ctx.translate(b.x,b.y);
+ v77Ink2(ctx,hull.map((p)=>[p[0]+V77.slipX,p[1]+V77.slipY]),red,9001,1.4);
+ v77Ink2(ctx,hull,V77.key,9001,1.4);
+ /* Openings knocked back to paper, then flooded with ink: the colour only ever appears where the
+    hull is breached, which is also where the player is meant to aim. */
+ for(let i=0;i<3;i++){
+  const yy=-R*.4+i*R*.42;
+  ctx.save();ctx.fillStyle=V77.knock;ctx.fillRect(-R*.55,yy,R*1.1,R*.16);ctx.restore();
+  ctx.save();ctx.globalCompositeOperation='multiply';ctx.fillStyle=red;
+  ctx.fillRect(-R*.55,yy,R*1.1*Math.max(0,b.hp/b.maxHp),R*.16);ctx.restore();
+ }
+ ctx.restore();
+
+ /* Weak points: knocked-out discs ringed in key, which is the loudest thing this palette can do
+    without inventing a colour. */
+ for(const weak of b.weak){
+  if(!weak.alive)continue;
+  const x=b.x+Math.cos(weak.a+b.t*.6)*(b.r+36);
+  const y=b.y+Math.sin(weak.a+b.t*.6)*(b.r*.65+28);
+  const r=isMobile?17:15;
+  ctx.save();ctx.fillStyle=V77.knock;
+  ctx.beginPath();ctx.arc(x,y,r+3,0,Math.PI*2);ctx.fill();ctx.restore();
+  v77Disc(ctx,x,y,r*.5,V77.yellow);
+  ctx.save();
+  ctx.globalCompositeOperation='multiply';
+  ctx.strokeStyle=V77.key;ctx.lineWidth=3;
+  ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(x-r-6,y);ctx.lineTo(x+r+6,y);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(x,y-r-6);ctx.lineTo(x,y+r+6);ctx.stroke();
+  ctx.restore();
+ }
+};
+
+const v79Draw=draw;
+draw=function(){
+ v79Draw();
+ if(!V77.on||!v79Bursts.length)return;
+ ctx.globalAlpha=1;
+ v79DrawBursts();
+};
