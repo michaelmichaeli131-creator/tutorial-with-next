@@ -401,9 +401,22 @@ html.v77-print #launchScreen b,
 html.v77-print #launchScreen span,
 html.v77-print #launchScreen small,
 html.v77-print #launchScreen div{ color:var(--pk) !important; text-shadow:none !important; }
+/* Inverted, and this is the whole reason the home screen resisted three earlier attempts.
+
+   `#launchArt` is a full-screen canvas and V16 draws the old pilot bust into it light-on-dark.
+   Multiplying that over paper multiplies by the canvas's own near-black ground, so the entire
+   viewport came out black -- while every element under it computed to `rgb(243,233,214)` and every
+   selector was matching correctly. The stylesheet was right the whole time and the blend mode was
+   eating it.
+
+   Inverting first turns the dark ground light and the bright figure dark, which is exactly what
+   multiply then wants: a dark mark on a light field, printed onto the sheet. A monochrome stamp of
+   the old bust rather than a redraw -- V16's art in ink is a part of its own -- but it is in the
+   language, and a glowing blue robot is not. */
 html.v77-print #launchArt{
-  filter:grayscale(1) contrast(2.2) brightness(1.5) !important;
+  filter:grayscale(1) invert(1) contrast(1.45) brightness(1.06) !important;
   mix-blend-mode:multiply;
+  opacity:.92;
 }
 html.v77-print .v16-cta{
   background-image:none !important;
@@ -415,3 +428,68 @@ html.v77-print .v16-cta{
   text-shadow:none !important;
 }
 html.v77-print .v16-art{ border-radius:0 !important; }
+
+/* The remaining pieces of the home screen. `.v16-badge` is the PILOT / STAGE / CREDITS row and it
+   is a descendant rather than a child, so the blanket that cleared `#launchScreen > *` never
+   reached it; the vignette is a full-screen radial that has no meaning on paper. */
+
+html.v77-print .v16-badge{
+  background-image:none !important;
+  background-color:var(--pk) !important;
+  color:var(--pn) !important;
+  border:2px solid var(--pk) !important;
+  border-radius:0 !important;
+  box-shadow:none !important;
+}
+html.v77-print .v16-badge small{ color:var(--pn) !important; opacity:.6; }
+html.v77-print .v16-badge.gold b{ color:var(--py) !important; }
+html.v77-print .v16-vignette{ display:none !important; }
+html.v77-print .v16-ribbon{
+  background-image:none !important;
+  background-color:var(--pk) !important;
+  color:var(--pn) !important;
+  border-radius:0 !important;
+  box-shadow:none !important;
+}
+
+/* The status rule under the CTA was a cyan-to-magenta gradient -- the last piece of the old palette
+   anywhere on this screen. */
+html.v77-print .v16-launch-foot > *:not(.v16-cta):not(.v16-badges){
+  background-image:none !important;
+  background-color:var(--pk) !important;
+}
+
+/* Badge and ribbon type, at a specificity that beats the blanket ink-colour rule for
+   `#launchScreen` descendants above. Photographed without this, the three badges came out as solid
+   black bars with black type inside them -- a rule written to make text readable on paper made it
+   invisible on the one part of that screen that is ink. */
+html.v77-print #launchScreen .v16-badge,
+html.v77-print #launchScreen .v16-badge *,
+html.v77-print #launchScreen .v16-ribbon,
+html.v77-print #launchScreen .v16-ribbon *{ color:var(--pn) !important; }
+html.v77-print #launchScreen .v16-badge.gold b{ color:var(--py) !important; }
+
+/* Whatever is left in the footer painting a gradient, including pseudo-elements. */
+html.v77-print .v16-launch-foot *,
+html.v77-print .v16-launch-foot *::before,
+html.v77-print .v16-launch-foot *::after{ background-image:none !important; }
+
+/* Any pilot bust drawn into a canvas inside a menu, by the same inversion the home screen needed:
+   V14 draws them light-on-dark, so multiply alone paints a black rectangle. `#game` is deliberately
+   not caught here -- it is a direct child of body, not of a screen, and it prints itself. */
+html.v77-print .screen canvas,
+html.v77-print .panel canvas{
+  filter:grayscale(1) invert(1) contrast(1.4) brightness(1.04) !important;
+  mix-blend-mode:multiply;
+}
+
+/* The bottom nav was the last place cyan survived. */
+html.v77-print [class*="nav"]{
+  background-image:none !important;
+  background-color:var(--pk) !important;
+  border-radius:0 !important;
+  box-shadow:none !important;
+}
+html.v77-print [class*="nav"] *{ color:var(--pn) !important; text-shadow:none !important; }
+html.v77-print [class*="nav"] .active,
+html.v77-print [class*="nav"] [aria-selected="true"]{ color:var(--py) !important; }

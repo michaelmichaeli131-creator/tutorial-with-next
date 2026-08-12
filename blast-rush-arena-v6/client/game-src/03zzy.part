@@ -85,7 +85,7 @@ const V77={
     to be the exception. What is needed is one more pass that redraws `#launchArt` in ink and gives
     the home screen the same structure as the rest -- not another CSS override. Everything else is
     done and is one field away. */
- on:false,
+ on:true,
  /* Six colours, five roles. Hue never encodes creature type: that job belongs entirely to
     silhouette, which is where the existing art is already strong. Red is "will kill you", blue is
     "yours", yellow is "the line". A code a player can read in 80ms. */
