@@ -146,6 +146,24 @@ const V76={
     radius. At 1 the rule is exactly "if the explosion touches the charge, the charge fires", which
     is the only version a player can predict by looking. */
  link:1,
+ /* How many caught before a well reads as worth taking.
+
+    Not a balance number -- the numbers were swept and the sweep found nothing to change. Three
+    configurations across nine runs (max 3-5, life 5.5-12, pull 215-280) landed inside each other's
+    run-to-run variance on score, firing rate and catch size alike, and the reactive baseline alone
+    swung from 50k to 246k on the same seed. The one direction that DID separate was the wrong one:
+    five short-lived wells planted on 48% of taps against 13%, fired seven times against two, and
+    caught 2.25 each against 3.5 -- for half the score, consistently. Planting more makes each well
+    fire younger and emptier and spends a tap that would otherwise have been a kill.
+
+    So the research target of "35-55% of taps on empty ground" is the wrong target for this
+    mechanic. It came from a proposal where a charge was cheap and single-use; a snare is meant to
+    accumulate, and the number that matters is what one ring is holding when you take it.
+
+    Which means the lever is not a constant at all. It is that a player cannot SEE what a ring is
+    holding: the fill arc was drawn at 16% alpha behind a lit planet. This is the threshold at
+    which the ring stops whispering. */
+ ripe:3,
  /* Paid per hostile a charge destroyed, triangular for the same reason V63's cascade bonus is:
     catching a group has to be worth disproportionately more than catching one, or the placement
     was not a decision. */
@@ -368,6 +386,14 @@ update=function(dt){
    o.v76Held=c;
    n++;
   }
+  /* Said once per well, the first time it is worth taking. The player's eyes are on the descending
+     wave, not on a ring at the bottom of the arena, and a state that only exists visually is a
+     state that gets missed by the person it was drawn for. */
+  if(n>=V76.ripe&&!c.rang){
+   c.rang=1;
+   audio.sfx('shield');
+   haptic(14);
+  }
   c.held=n;
  }
 };
@@ -463,15 +489,24 @@ draw=function(){
      spent rather than lost. */
   const fade=arming?1:Math.min(1,c.life);
 
-  ctx.globalAlpha=(arming?.55:.3)*fade;
+  /* Ripe: holding enough to be worth taking. A ring that is merely live and a ring that is worth
+     a tap are the same decision the whole mechanic asks the player to make, so they must not look
+     alike. Live is a thin dashed circle; ripe is a solid one, brighter and heavier. */
+  const ripe=!arming&&c.held>=V76.ripe;
+  /* Dying: the last second and a half, blinking, so a full ring is spent rather than lost. Fading
+     out quietly is what a thing does when it does not matter. */
+  const dying=!arming&&c.life<1.5;
+  const blink=dying?.45+.55*Math.abs(Math.sin(t*9)):1;
+
+  ctx.globalAlpha=(arming?.55:ripe?.62:.34)*fade*blink;
   ctx.beginPath();
   ctx.arc(c.x,c.y,V76.reach,-Math.PI/2,-Math.PI/2+(arming?Math.PI*2*k:Math.PI*2));
   ctx.strokeStyle='rgba(4,9,20,.8)';
-  ctx.lineWidth=arming?4.5:3;
+  ctx.lineWidth=arming?4.5:ripe?5:3;
   ctx.stroke();
   ctx.strokeStyle=V76.core;
-  ctx.lineWidth=arming?2.2:1.5;
-  if(!arming)ctx.setLineDash([6,10]);
+  ctx.lineWidth=arming?2.2:ripe?2.8:1.5;
+  if(!arming&&!ripe)ctx.setLineDash([6,10]);
   ctx.stroke();
   ctx.setLineDash([]);
 
@@ -479,13 +514,26 @@ draw=function(){
      ring itself filling rather than as a digit somewhere: the player is already looking at the ring
      and must never have to read a counter to know whether it is worth taking. */
   if(!arming&&c.held>0){
-   ctx.globalAlpha=.16*fade;
+   /* A gauge on the rim, not a disc.
+
+      The first version filled the wedge solid. Photographed with two rings full, it covered a third
+      of the arena in translucent cyan and hid the hostiles inside them -- which is the exact fault
+      V75 and V81 were written to remove, reintroduced by the readout meant to fix a different one.
+      A band just inside the ring says the same thing, scales the same way, and covers nothing the
+      player needs to see. */
+   ctx.globalAlpha=(.55+.35*Math.min(1,c.held/V76.cap))*fade*blink;
    ctx.beginPath();
-   ctx.moveTo(c.x,c.y);
-   ctx.arc(c.x,c.y,V76.reach,-Math.PI/2,-Math.PI/2+Math.PI*2*Math.min(1,c.held/V76.cap));
-   ctx.closePath();
-   ctx.fillStyle=V76.core;
-   ctx.fill();
+   ctx.arc(c.x,c.y,V76.reach-6,-Math.PI/2,-Math.PI/2+Math.PI*2*Math.min(1,c.held/V76.cap));
+   ctx.strokeStyle='rgba(4,9,20,.55)';
+   ctx.lineWidth=9;
+   ctx.stroke();
+   /* One cyan, always. `glow` is near-white and using it for the ripe state made three full rings
+      read as white hoops rather than as the player's own colour -- ripeness is already carried by
+      weight, by the ring going solid, and by the ticks speeding up. Colour is identity here, not
+      state. */
+   ctx.strokeStyle=V76.core;
+   ctx.lineWidth=6;
+   ctx.stroke();
    /* A tether to each catch. Without it a slowed hostile inside a ring looks like a hostile that
       happens to be slow, and the player never learns that the ring did it. */
    ctx.globalAlpha=.5*fade;
@@ -510,11 +558,13 @@ draw=function(){
 
   if(!arming){
    /* Three ticks turning slowly: the cheapest thing that reads as "live" without pulsing, and at
-      three charges on screen a pulse would be a strobe. */
+      three charges on screen a pulse would be a strobe. They turn faster once the ring is ripe,
+      which is motion carrying the same message as the weight and the brightness -- three cues for
+      one state, because this is the state the player has to notice while looking somewhere else. */
    ctx.strokeStyle=V76.core;
-   ctx.lineWidth=2;
+   ctx.lineWidth=ripe?2.6:2;
    for(let i=0;i<3;i++){
-    const a=c.spin+t*1.1+i*Math.PI*2/3;
+    const a=c.spin+t*(ripe?3.4:1.1)+i*Math.PI*2/3;
     ctx.beginPath();
     ctx.moveTo(c.x+Math.cos(a)*(r+5),c.y+Math.sin(a)*(r+5));
     ctx.lineTo(c.x+Math.cos(a)*(r+9),c.y+Math.sin(a)*(r+9));
