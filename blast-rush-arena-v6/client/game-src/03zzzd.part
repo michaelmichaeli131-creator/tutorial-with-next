@@ -1,0 +1,229 @@
+/* V82 — points do not count until you bank them.
+
+   ---- What is wrong with the score ----
+
+   Eleven channels resolve simultaneously into one number: base kill, perfect, combo, V57's depth
+   band, Overdrive, an augment multiplier, V63's cascade bonus, shard kills, mine clears, rival
+   cores, V22's escape penalty and V24's directive streak. A player cannot construct a narrative out
+   of eleven simultaneous voices, and the one channel that is supposed to BE the narrative is the
+   weakest thing on the list: the combo caps at 1 + min(50,combo)*.02 — a maximum of two times —
+   decays after 3.1 seconds of inactivity, and is displayed under a ladder of labels reading
+   RAMPAGE, GODLIKE and BEYOND GODLIKE. The label promises an order of magnitude the formula does
+   not honour, and it is maximised by doing the same thing without stopping.
+
+   ---- What makes a score feel like a story ----
+
+   Three properties, and the combo has none of them.
+
+   Separation, so the player can see which factor they are building — Balatro's whole vocabulary is
+   two quantities that meet at the end of a hand. Risk while it grows — Tony Hawk's balance bar,
+   where the value is not that the number is large but that the process of getting there was a
+   struggle, and every extra trick is a decision to keep pushing or cash in. And a penalty on
+   repetition — THPS docks a quarter for repeating a trick, which forces variety; this game's combo
+   does the exact opposite and rewards uninterrupted sameness.
+
+   ---- The pool ----
+
+   Points go into a pool instead of the score. The pool carries a multiplier. It banks into the
+   score at the end of a wave, and anything that reaches the reactor burns it — half on the first
+   leak of a wave, all of it on the second.
+
+   So a run has a rhythm it has never had: build, then cash. Every hostile you let drift toward the
+   line is now a wager against everything you have built this wave, which is the same decision the
+   wells already ask in the small and the run has never asked in the large.
+
+   The multiplier grows on cascades, and **a cascade of the same size twice running pays a quarter**.
+   That is the anti-repetition rule, and it means the multiplier climbs on *variety of arrangement* —
+   which is precisely the skill the wells were built to teach.
+
+   ---- What this deliberately does not do ----
+
+   **Solo and campaign only.** A duel is a head-to-head score comparison decided server-side, and a
+   rule that can zero a player's score on one leak turns that comparison into a coin flip. Same line
+   V21, V56 and V64 all draw: prove it where the score is nobody else's business first.
+
+   **The combo multiplier is left in the scoring maths.** Removing it is a balance change worth its
+   own measurement, and it is not what was wrong — what was wrong is that a two-times multiplier was
+   wearing a label reading GODLIKE. The ladder is gone; the arithmetic can go later, on evidence.
+
+   ---- Where it is shown ----
+
+   In the combo readout's own slot, because that is the readout it replaces and the player already
+   knows where to look. Two numbers rather than one: what is at risk, and what it is worth. The
+   score itself shows banked plus pool, so it still climbs while you play and visibly DROPS when you
+   leak — which is the whole point, and a score that can fall is the only honest way to draw a bar
+   that is at risk. */
+
+const V82={
+ /* How much one cascade adds to the multiplier, and what a repeat of the same size pays instead. */
+ step:.14,
+ repeat:.25,
+ /* Ceiling. Without one a long clean wave produces a number that dwarfs every other channel and the
+    game becomes about not leaking rather than about playing. */
+ max:6,
+ /* What a leak costs. Half, then everything -- the first leak of a wave is a scare and the second
+    is the bill. Zeroing on the first would make a single unlucky arrival feel arbitrary rather than
+    dramatic, which is the difference between tension and punishment. */
+ firstLeak:.5,
+ pool:'#ffd469',
+ risk:'#ff6a7f'
+};
+
+function v82Live(){return game.running&&game.mode!=='duel';}
+
+const v82Begin=begin;
+begin=function(mode='solo',seed){
+ const out=v82Begin(mode,seed);
+ game.v82Pool=0;
+ game.v82Mult=1;
+ game.v82Leaks=0;
+ game.v82Last=-1;
+ game.v82Banked=0;
+ return out;
+};
+
+/* ---- Into the pool -----------------------------------------------------------------------------
+
+   Wrapped rather than rewritten. `score()` applies the augment multiplier and Overdrive, banks the
+   raw delta, sends the duel packet and raises the float, in that order -- so the delta is read back
+   out of `game.score` afterwards and moved. Reimplementing the first two lines here would put two
+   copies of the economy in the tree, and the one in this file would be the one that drifts. */
+
+const v82Score=score;
+score=function(delta,event='hit'){
+ if(!v82Live())return v82Score(delta,event);
+ const before=game.score;
+ const out=v82Score(delta,event);
+ const got=game.score-before;
+ if(got>0){
+  game.score=before;
+  game.v82Pool=(game.v82Pool||0)+got;
+ }
+ return out;
+};
+
+/* The multiplier climbs on cascades, and a cascade the same size as the last one pays a quarter.
+   Hooked on V63's reward rather than on `score`, because that is the one place a cascade reports
+   its own size -- and size is what "the same trick twice" has to mean here. */
+
+const v82Reward=v63Reward;
+v63Reward=function(links){
+ const out=v82Reward(links);
+ if(!v82Live())return out;
+ const size=links+1;
+ const repeat=size===game.v82Last;
+ game.v82Mult=Math.min(V82.max,(game.v82Mult||1)+V82.step*(repeat?V82.repeat:1));
+ game.v82Last=size;
+ return out;
+};
+
+/* ---- Banking and burning ----------------------------------------------------------------------- */
+
+function v82Bank(reason){
+ const pool=game.v82Pool||0;
+ if(pool<=0){game.v82Mult=1;game.v82Leaks=0;game.v82Last=-1;return 0;}
+ const paid=Math.round(pool*(game.v82Mult||1));
+ game.score+=paid;
+ game.v82Pool=0;
+ game.v82Mult=1;
+ game.v82Leaks=0;
+ game.v82Last=-1;
+ game.v82Banked=paid;
+ if(reason!=='over'){
+  floating(W*.5,H*.4,`BANKED ×${(paid/Math.max(1,pool)).toFixed(1)}`,V82.pool);
+  audio.sfx('perfect');
+  haptic([14,18,14]);
+ }
+ return paid;
+}
+
+function v82Burn(){
+ const pool=game.v82Pool||0;
+ if(pool<=0)return;
+ game.v82Leaks=(game.v82Leaks||0)+1;
+ const lost=game.v82Leaks>=2?pool:Math.round(pool*V82.firstLeak);
+ game.v82Pool=pool-lost;
+ /* The multiplier survives the first leak and dies with the pool on the second. Losing both at
+    once on a single arrival is what makes a leak read as arbitrary. */
+ if(game.v82Leaks>=2){game.v82Mult=1;game.v82Last=-1;}
+ floating(W*.5,H*.42,`POOL LOST −${format(lost)}`,V82.risk);
+ audio.sfx('warning');
+}
+
+const v82NextWave=nextWave;
+nextWave=function(){
+ const before=game.wave;
+ const out=v82NextWave();
+ if(v82Live()&&game.wave!==before)v82Bank('wave');
+ return out;
+};
+
+const v82Damage=damage;
+damage=function(){
+ /* Everything happens BEFORE calling down, and that ordering is the whole of this wrapper.
+
+    `damage()` calls `finish(false)` itself on the fatal hit, and `finish` is what reads
+    `game.score` into the results screen. Burning and banking afterwards would have been correct
+    arithmetic delivered too late to be seen: the player would watch the run end on a number that
+    did not include the wave they had just spent building.
+
+    The shield branch is replicated rather than detected, because a shielded hit is not a leak and
+    there is no way to ask afterwards which of the two happened. It is one line and it has not
+    moved since 02.part was written. */
+ if(!v82Live()||game.shields>0)return v82Damage();
+ v82Burn();
+ /* Whatever survived that leak is paid out rather than vanishing with the run. A results screen
+    reporting less than the player watched themselves earn reads as a bug, however defensible the
+    rule that produced it. */
+ if(game.lives<=1)v82Bank('over');
+ return v82Damage();
+};
+
+/* ---- The readout -------------------------------------------------------------------------------
+
+   The combo banner's own slot, rewritten after V17 has filled it. Reusing the element rather than
+   adding one is the point: this readout replaces that one, it belongs in the same place, and the
+   rank ladder that promised GODLIKE for a two-times multiplier goes with it. */
+
+const v82Hud=updateHud;
+updateHud=function(){
+ const out=v82Hud();
+ const banner=$('comboBanner');
+ if(!banner)return out;
+ if(!v82Live()){return out;}
+
+ const pool=Math.round(game.v82Pool||0);
+ const mult=game.v82Mult||1;
+ banner.classList.toggle('hidden',pool<=0);
+ if(pool>0){
+  /* The caption too. It is a static <small>COMBO</small> in the markup, and leaving it while the
+     three numbers under it changed meaning would have been the worst of both: a readout that says
+     one thing and shows another. Rewritten here rather than in index.html so the whole change stays
+     switchable with this part -- in a duel, where the pool does not run, V17's combo readout is
+     still the thing in this slot and still needs its own caption. */
+  const cap=banner.querySelector('small');
+  if(cap)setText(cap,'POOL');
+  setText('comboBig',format(pool));
+  setText('comboRankBig',game.v82Leaks>0?'ONE MORE LEAK':'AT RISK');
+  setText('comboBonus','×'+mult.toFixed(1));
+  banner.classList.toggle('peak',mult>=3);
+ }
+ /* Banked plus pool, so the number still climbs while a wave is being played and visibly falls when
+    it is leaked. A pool drawn as at-risk beside a score that never moves is a claim the screen does
+    not back up. */
+ setText('cbScore',format(game.score+Math.round(pool*mult)));
+ return out;
+};
+
+/* Said once, on the first bank. The rule changes what a point is, and nothing else on screen
+   explains it. */
+const v82BankTaught=v82Bank;
+v82Bank=function(reason){
+ const paid=v82BankTaught(reason);
+ if(paid>0&&!save.v82Taught){
+  save.v82Taught=1;
+  persist();
+  toast('WAVE CLEARED — THE POOL IS YOURS NOW');
+ }
+ return paid;
+};
