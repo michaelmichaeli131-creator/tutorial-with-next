@@ -1,0 +1,153 @@
+/* V85 — what a kill looks like.
+
+   The most-repeated image in the game by an order of magnitude. At three kills a second a player
+   sees this several thousand times a session, and it is currently: a shower of round dots, one
+   expanding circle, and a white wash over the whole screen.
+
+   Three things are wrong with that, and the third is the one that costs the most.
+
+   **Round dots are not debris.** Every particle in `explode` is `ctx.arc` — the same mark for a
+   creature coming apart, a mine going off and a shot being defused. Debris has direction and it has
+   a long axis; a circle has neither, so a burst of them reads as fog rather than as something
+   breaking.
+
+   **One ring is a bubble, two rings are a crack.** A single expanding circle at a constant width
+   reads as a shockwave in a diagram. What reads as an impact is a fast thin ring that outruns a
+   slower thick one — the eye gets the sequence, and the sequence is what makes it feel like force
+   rather than like an animation playing.
+
+   **A full-screen white wash on every kill is fatigue.** `explode` raises `game.flash` on every
+   call, so at a good combo the entire arena is being lightened several times a second. It is doing
+   the opposite of its job: a flash that happens constantly stops marking anything, and it washes
+   out the silhouettes V81 was written to make readable. Kept for the moments that deserve it —
+   a cascade, a titan, a reactor blast — and cut to almost nothing for a single kill.
+
+   Everything here is additive and stays additive: V81 removed glow from BODIES so that shapes could
+   be read. An explosion is not a body. It is light, it lasts a third of a second, and it is the one
+   place in this arena where glow is the correct answer. */
+
+const V85={
+ /* Shards per kill, scaled by the blast's own power. Few: this fires several times a second and a
+    dozen shards each is the fog the round dots already were. */
+ shards:5,
+ life:.34,
+ /* How long and how thin. A shard is a triangle because a stroke cannot taper, and a taper is what
+    separates a piece of debris from a stick. */
+ len:26,
+ wide:4.2,
+ /* The crack: a thin fast ring ahead of the existing slow one. */
+ crackLife:.2,
+ crackSpeed:5.2,
+ /* What is left of the base's full-screen flash on an ordinary kill. */
+ flashCut:.18
+};
+
+const v85Shards=[];
+const v85Cracks=[];
+
+const v85Explode=explode;
+explode=function(x,y,color,count,power){
+ const flashBefore=game.flash;
+ const out=v85Explode(x,y,color,count,power);
+ if(!game.running||save.comfort)return out;
+
+ const p=power||1;
+ /* The base raises game.flash on every call. Anything that happens several times a second cannot
+    also be the thing that marks a moment, so an ordinary kill keeps a sixth of it and a cascade or
+    a titan -- which arrive with power well above 1 -- keeps all of it. */
+ if(p<=1)game.flash=flashBefore+(game.flash-flashBefore)*V85.flashCut;
+
+ const n=Math.max(3,Math.round(V85.shards*Math.min(2,p)));
+ const spin=Math.random()*Math.PI*2;
+ for(let i=0;i<n;i++){
+  /* Spread evenly around a random start rather than randomly. Random angles clump, and a clump on
+     one side reads as the creature having been hit from the other -- a direction the blast did not
+     actually have. */
+  const a=spin+i/n*Math.PI*2+(Math.random()-.5)*.5;
+  const speed=(150+Math.random()*260)*p;
+  v85Shards.push({x,y,vx:Math.cos(a)*speed,vy:Math.sin(a)*speed,a,t:0,
+   max:V85.life*(.7+Math.random()*.6),color,scale:.6+Math.random()*.7});
+ }
+ while(v85Shards.length>90)v85Shards.shift();
+ v85Cracks.push({x,y,t:0,r:10*p,color});
+ while(v85Cracks.length>8)v85Cracks.shift();
+ return out;
+};
+
+const v85Update=update;
+update=function(dt){
+ v85Update(dt);
+ for(let i=v85Shards.length-1;i>=0;i--){
+  const s=v85Shards[i];
+  s.t+=dt;
+  if(s.t>=s.max){v85Shards.splice(i,1);continue;}
+  s.x+=s.vx*dt;s.y+=s.vy*dt;
+  s.vx*=.93;s.vy=s.vy*.93+220*dt;
+  s.a=Math.atan2(s.vy,s.vx);
+ }
+ for(let i=v85Cracks.length-1;i>=0;i--){
+  v85Cracks[i].t+=dt;
+  if(v85Cracks[i].t>=V85.crackLife)v85Cracks.splice(i,1);
+ }
+};
+
+const v85Draw=draw;
+draw=function(){
+ const out=v85Draw();
+ if(!v85Shards.length&&!v85Cracks.length)return out;
+
+ ctx.save();
+ ctx.globalCompositeOperation='lighter';
+
+ /* The crack: thin, fast, and gone before the base's ring has finished. It is the leading edge, so
+    it has to arrive first and leave first or the two read as one thick ring. */
+ for(const c of v85Cracks){
+  const k=c.t/V85.crackLife;
+  ctx.globalAlpha=(1-k)*.85;
+  ctx.strokeStyle=c.color;
+  ctx.lineWidth=Math.max(.8,2.6*(1-k));
+  ctx.beginPath();
+  ctx.arc(c.x,c.y,c.r+c.r*V85.crackSpeed*k,0,Math.PI*2);
+  ctx.stroke();
+ }
+
+ /* Shards, drawn along their own direction of travel. Two triangles each -- a bright core and a
+    darker trailing half -- so a piece has a front and a back at a size where nothing else could. */
+ ctx.lineJoin='round';
+ for(const s of v85Shards){
+  const k=s.t/s.max;
+  const fade=1-k;
+  const len=V85.len*s.scale*fade;
+  const wide=V85.wide*s.scale*fade;
+  ctx.save();
+  ctx.translate(s.x,s.y);
+  ctx.rotate(s.a);
+  ctx.globalAlpha=Math.min(1,fade*1.6);
+  ctx.fillStyle=s.color;
+  ctx.beginPath();
+  ctx.moveTo(len*.55,0);
+  ctx.lineTo(-len*.45,wide);
+  ctx.lineTo(-len*.45,-wide);
+  ctx.closePath();
+  ctx.fill();
+  ctx.globalAlpha=Math.min(1,fade*fade*2.2);
+  ctx.fillStyle='#ffffff';
+  ctx.beginPath();
+  ctx.moveTo(len*.55,0);
+  ctx.lineTo(-len*.05,wide*.45);
+  ctx.lineTo(-len*.05,-wide*.45);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+ }
+ ctx.restore();
+ ctx.globalAlpha=1;
+ return out;
+};
+
+const v85Begin=begin;
+begin=function(mode='solo',seed){
+ v85Shards.length=0;
+ v85Cracks.length=0;
+ return v85Begin(mode,seed);
+};
