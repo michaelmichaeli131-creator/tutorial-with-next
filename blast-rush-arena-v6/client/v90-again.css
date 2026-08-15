@@ -1,0 +1,85 @@
+/* V90 — the pinned retry.
+
+   Measured before it was built: the primary button's y position moved between 484 and 509 across
+   three consecutive solo runs on the same phone in the same mode, because it sits in a flex row at
+   the bottom of a panel whose height depends on how many lines the verdict wrapped to. This file's
+   entire job is to make that number a constant.
+
+   Fixed to the viewport rather than to the panel, so no amount of content above it can push it. */
+
+#v90Bar {
+  position: fixed;
+  z-index: 40;
+  left: 0;
+  right: 0;
+  /* Above the home-indicator strip on a phone, and never off the bottom of a browser with chrome. */
+  bottom: max(14px, env(safe-area-inset-bottom, 0px));
+  display: none;
+  justify-content: center;
+  padding: 0 14px;
+  pointer-events: none;
+}
+
+/* The one rule that makes this appear. V13's showScreen stamps the active screen onto the body, so
+   no layer has to remember to show or hide the bar -- including the layers that will be written
+   after this one. */
+body[data-screen="resultScreen"] #v90Bar { display: flex; }
+
+#v90Again {
+  width: min(520px, 100%);
+  /* Fixed height, not min-height: a caption that wraps to two lines on a narrow phone must not move
+     the top edge of the button, which is the edge the thumb aims at. */
+  height: 74px;
+  padding: 0 18px;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  box-shadow: 0 -2px 34px #ff9b2844, 0 14px 40px #000a;
+}
+
+#v90Again b {
+  font-size: 21px;
+  font-weight: 1000;
+  letter-spacing: .12em;
+}
+
+/* The reason to press it, on the button itself. Quiet enough that the word above it still reads
+   first, present enough that it is read at all -- it is the only place the mark is stated. */
+#v90Again small {
+  font-size: 10.5px;
+  font-weight: 900;
+  letter-spacing: .1em;
+  line-height: 1.25;
+  text-align: center;
+  opacity: .78;
+}
+
+#v90Again small:empty { display: none; }
+
+/* Beating the field is the one moment on this screen worth a colour change, and it is a different
+   colour from the button's ordinary state so it is legible as an event rather than as decoration. */
+#v90Bar.v90-beaten #v90Again {
+  background: linear-gradient(180deg, #7ef3d2, #23c9a0);
+  color: #032018;
+  box-shadow: 0 -2px 38px #35e6bb55, 0 14px 40px #000a;
+}
+
+/* The row keeps HOME, CHALLENGE A FRIEND and the escape hatch. Its copies of the three primaries go,
+   because two buttons that do the same thing is a worse problem than one that moves. Hidden rather
+   than removed: every existing layer still toggles their `hidden` class and reads their state, and
+   the bar itself decides what to forward to by reading exactly that class. */
+#resultScreen .button-row > #againBtn,
+#resultScreen .button-row > #nextStageBtn,
+#resultScreen .button-row > #rematchBtn { display: none; }
+
+/* Room for the bar under the panel, so nothing in the results content ends up behind it. */
+#resultScreen .panel { padding-bottom: 104px; }
+
+@media (max-width: 800px), (pointer: coarse) {
+  #v90Again { height: 70px; }
+  #v90Again b { font-size: 19px; }
+  #resultScreen .panel { padding-bottom: 96px; }
+}

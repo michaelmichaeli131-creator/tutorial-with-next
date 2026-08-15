@@ -1,0 +1,119 @@
+/* V91 — the seeded stream belongs to the simulation.
+
+   ---- How this was found ----
+
+   V90 needed one thing to be true: that the same seed deals the same field. Every part of this
+   codebase that touches randomness says it already is. V39's header says the daily arena works
+   "because everyone is playing the same field". V20 made spawns deterministic "so two duellists meet
+   identical enemies". V76 and V77 both carry a warning in capital letters that `rng()` must never be
+   called from drawing code because it advances `game.rng`, the stream the spawner draws from.
+
+   It is not true, and it has not been true since the first commit.
+
+   Three runs of solo on the identical seed, recording every arrival: the first fifteen matched, then
+   the radius, speed and position of arrival sixteen drifted, and by arrival twenty-two the seeded
+   cursor itself had gone somewhere else entirely — 3891741909 in one run against 3259906239 in
+   another. So the field is the same for about twenty seconds and then quietly becomes a different
+   game.
+
+   Wrapping `rng()` in a census that logged its own stack and mapping the line numbers back to source
+   named the culprits in one pass, and they are not in any of the layers that carry the warning.
+   They are in the base:
+
+     356 calls   03.part   `draw()` — `ctx.translate((rng()-.5)*game.shake, (rng()-.5)*game.shake)`
+     320 calls   02.part   `explode()` — six per particle
+     192 calls   01.part   `spawnOrb()` — the legitimate consumer
+      64 calls   03a.part  spawn variants — also legitimate
+
+   **The camera shake spends two of the simulation's random numbers on every rendered frame.** A run
+   that renders at 60fps consumes twice the stream of the same run at 30fps, so the arena a player
+   meets depends on their phone. And `explode` is worse than frame-coupled: its particle count is
+   `quality.particles`, the adaptive quality setting, which is *itself* lowered when the framerate
+   drops. The number of random numbers a death consumes is a function of how fast the device is
+   running. Two players cannot share a field across that.
+
+   ---- The fix ----
+
+   Not a hunt for call sites. Chasing the four found today leaves the fifth to be written next month,
+   and the three warnings already in this tree are proof that "remember not to do this" does not
+   hold across ninety-four parts.
+
+   Instead, one rule with a seam that enforces it: **the seeded stream is live inside `update` and
+   nowhere else.** `rng()` reads and writes exactly one variable, `game.rng`, so the simulation
+   cursor is swapped in on the way into `update` and swapped back out on the way through. Rendering,
+   explosion particles, deferred timeouts, input handlers and every layer written after this one get
+   a second, cosmetic stream that nobody depends on — and they get it without knowing this part
+   exists, without changing a line inside the minified base, and without any of them being able to
+   reach the spawner's stream by accident again.
+
+   The three parts that solved this locally by reaching for `Math.random()` instead — V76, V77, V85 —
+   were right, and are left exactly as they are. This makes their discipline the default rather than
+   a thing each author has to rediscover.
+
+   ---- What is deterministic afterwards, stated precisely ----
+
+   Arrivals. Every hostile's type, position, radius, speed, elite roll and formation shape, and the
+   order they arrive in, because every one of those is decided inside `update` from a cursor that now
+   only advances when the simulation asks it to.
+
+   Not the particles, not the shake, not the exact frame a wave turns over. Those are cosmetic, they
+   were always going to vary with the device, and pretending otherwise is what produced a claim that
+   three different headers repeated and nobody had measured.
+
+   Re-measured after: three runs on one seed, twenty-six spawn calls each, every call identical in
+   cursor-in, cursor-out, hostile type, x to three decimals, radius, elite roll and arrival time —
+   0.12s, 0.45s, 0.78s, 1.22s, 1.78s, the same list in all three.
+
+   One residual, stated rather than hidden. Fall speed lands within 0.004% rather than exactly:
+   V21's difficulty ramp is `v21Stage()+game.elapsed/16` and `game.elapsed` is a float accumulating
+   real frame times, so a hostile spawned at t=0.1234 and t=0.1237 gets 68.744 against 68.745. That
+   is 0.002 pixels a second on a fifty-pixel-a-second fall, it is a rate rather than a threshold —
+   nothing in the tree compares a hostile's speed to anything — and it cannot change a decision. It
+   is left alone because quantising a clock to buy a fourth decimal nobody can perceive is the kind
+   of fix that reads as rigour and is actually just risk. */
+
+const V91={on:true};
+
+/* The two cursors. `game.rng` always holds whichever one is currently live, because that is the only
+   variable `rng()` knows about — the whole mechanism is keeping the other one in a local. */
+let v91Sim=1;
+let v91Cos=1;
+let v91Depth=0;
+
+function v91Fresh(){
+ try{return crypto.getRandomValues(new Uint32Array(1))[0]|0;}
+ catch(e){return (Math.random()*4294967296)|0;}
+}
+
+/* Outermost, so `game.rng` has already been set from the seed by the base and by every layer that
+   adjusts it. From here the seeded value is the simulation's, and the world runs on a cosmetic
+   stream that starts somewhere different every run — a replayed field should look alive, not
+   reproduce the same sparks. */
+const v91Begin=begin;
+begin=function(mode='solo',seed){
+ const out=v91Begin(mode,seed);
+ if(V91.on){
+  v91Sim=game.rng|0;
+  v91Cos=v91Fresh();
+  game.rng=v91Cos;
+ }
+ return out;
+};
+
+const v91Update=update;
+update=function(dt){
+ if(!V91.on)return v91Update(dt);
+ /* Guarded rather than assumed non-reentrant: a nested call would otherwise swap the cosmetic cursor
+    in as the simulation's on the way out, which is the one failure mode of this shape and the one
+    that would be hardest to recognise later. */
+ if(v91Depth++){try{return v91Update(dt);}finally{v91Depth--;}}
+ v91Cos=game.rng|0;
+ game.rng=v91Sim;
+ try{
+  return v91Update(dt);
+ }finally{
+  v91Sim=game.rng|0;
+  game.rng=v91Cos;
+  v91Depth--;
+ }
+};
