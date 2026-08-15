@@ -1,0 +1,216 @@
+/* V87 — maps: the campaign becomes a place you travel through, and the cast changes when you leave.
+
+   ---- What a map is, and what it deliberately is not ----
+
+   A map is **a cast plus a list of stages**. It is not a new rule set.
+
+   That is the whole architectural decision and it is worth stating plainly, because the tempting
+   version — every map brings new mechanics — is how a game ends up with four incompatible halves
+   and a test matrix nobody can hold. Every system built in this tree works on `o.type`, and the
+   six types are the vocabulary the whole game speaks: V63 sizes a blast from `o.r`, V64 spaces a
+   formation against it, V65 seals a member, V72 splits on `type==='splitter'`, V76 gathers whatever
+   is in a ring, V83 refunds on cascade size. **Change the art and the roster and every one of them
+   keeps working without being told a map exists.** Change the rules and every one of them needs a
+   compatibility clause.
+
+   So: same six roles, six different creatures wearing them, a different sequence of stages, a
+   different sky. A player crossing into map two meets a cast they have never seen and a game they
+   already know how to play — which is the version that reads as a new place rather than as a new
+   tutorial.
+
+   ---- How the swap works ----
+
+   `v14StageBlueprints` and `v15Creatures` / `v15Palette` are the two tables the rest of the game
+   reads from, and both are objects rather than values. So a map change **rewrites them in place**
+   rather than adding a layer of indirection to every call site. `v14StageCount`, `v14Stage`,
+   `v14StageUnlocked`, the stage list, the armory preview and the campaign HUD all keep reading
+   exactly what they read before and none of them need to know.
+
+   The price of that is that every map has the same number of stages. That is a real constraint and
+   it is a good one: fifteen nodes is a shape a player learns once, and a map that was nine long
+   would read as the game running out rather than as a different place.
+
+   ---- Progress ----
+
+   `v14Save.unlocked` is a single number and now has to mean "how far into THIS map". Per-map
+   progress is kept beside it and swapped in and out on a map change, so the existing save format,
+   its migration, its clamps and its star and best-score tables are all untouched. A save from
+   before this part loads as a player standing in map one exactly where they left off, which is the
+   only acceptable answer for anyone already playing. */
+
+const V87={
+ /* Which map the player is standing in, 0-based. Stored per profile, not per run. */
+ key:'blastRushMapV87'
+};
+
+/* ---- The rosters -------------------------------------------------------------------------------
+
+   Captured, not authored. Map one's cast is whatever the art parts have already built by the time
+   this runs -- V15's creatures, V19's silhouette additions, V48's palette shift and V81's
+   convergence all land before this file, so snapshotting here means map one is the game as it
+   already is rather than a second copy of it that can drift. */
+
+const V87_ROSTERS=[
+ {
+  id:'legion',
+  name:'THE LEGION',
+  creatures:Object.assign({},v15Creatures),
+  palette:JSON.parse(JSON.stringify(v15Palette))
+ }
+];
+
+/* Map two's roster is index 1 and there is no index 1 yet -- `v87Install` falls back to the legion,
+   so the second map is playable today with the first map's cast while its own is drawn. That is
+   deliberate sequencing rather than an omission: the machinery is provable end to end before any of
+   the art exists, and the art lands into a slot that is already being read. */
+
+/* ---- The maps ----------------------------------------------------------------------------------
+
+   Map one is the fifteen stages that already exist, captured the same way and for the same reason.
+   Map two is a different sequence of the same kinds: it opens where map one ended in pressure
+   rather than where map one opened, leans on survival and hazards rather than on raw purge counts,
+   and puts its first titan later so the new cast has room to be learned before it is fought. */
+
+const V87_MAPS=[
+ {
+  id:'reach',
+  name:'THE OUTER REACH',
+  subtitle:'WHERE THE LEGION HOLDS',
+  roster:0,
+  stages:v14StageBlueprints.slice()
+ },
+ {
+  id:'bloom',
+  name:'THE BLOOM',
+  subtitle:'SOMETHING GREW OUT HERE',
+  roster:1,
+  stages:[
+   {name:'FIRST BLOOM',world:0,kind:'purge',target:18,brief:'Something new is growing in the dark. Cut it back.'},
+   {name:'SPORE DRIFT',world:0,kind:'survive',duration:40,hazards:['fog'],brief:'Hold forty seconds inside the spore cloud.'},
+   {name:'SEED VAULT',world:0,kind:'elite',target:10,brief:'Armoured seed-carriers. Break the shell first.',pool:['armored','armored','normal','bomb']},
+   {name:'ROOT NETWORK',world:0,kind:'purge',target:24,hazards:['gravity'],brief:'The roots pull everything down faster.'},
+   {name:'THE GARDENER',world:0,kind:'boss',brief:'Something tends this place. It has noticed you.'},
+   {name:'POLLEN STORM',world:1,kind:'survive',duration:50,hazards:['meteor'],brief:'Fifty seconds under falling pollen. Keep the line.'},
+   {name:'CUTTING WORK',world:1,kind:'perfect',target:16,brief:'Sixteen clean cuts. Nothing ragged.'},
+   {name:'THICKET',world:1,kind:'purge',target:30,hazards:['fog','gravity'],brief:'Blind and heavy. Read the shapes.'},
+   {name:'THE SPLITTER GROVE',world:1,kind:'elite',target:14,brief:'They come apart when you touch them. Choose where.',pool:['splitter','splitter','normal','shard']},
+   {name:'HEARTWOOD',world:1,kind:'boss',brief:'The grove has a centre, and the centre is awake.'},
+   {name:'ASH SEASON',world:2,kind:'survive',duration:60,hazards:['emp','swarm'],brief:'A full minute while your powers cut out.'},
+   {name:'BURNING ROWS',world:2,kind:'purge',target:36,hazards:['meteor'],brief:'The rows are alight and still coming.'},
+   {name:'LAST HARVEST',world:2,kind:'perfect',target:22,hazards:['emp'],brief:'Twenty-two perfect strikes through the pulses.'},
+   {name:'SEEDFALL',world:3,kind:'elite',target:16,hazards:['gravity','swarm'],brief:'Everything it has left, falling at once.',pool:['bomb','armored','splitter','shard']},
+   {name:'THE BLOOM ITSELF',world:3,kind:'gauntlet',target:2,hazards:['swarm'],brief:'Two hearts. Neither of them yours.'}
+  ]
+ }
+];
+
+/* Every map is the same length, for the reason in the header. Stated as a check rather than a
+   comment so a map added later cannot quietly break `v14StageCount`, which the stage list, the
+   unlock clamp and the save migration all read. */
+for(const map of V87_MAPS){
+ while(map.stages.length<v14StageCount)map.stages.push(map.stages[map.stages.length-1]);
+ map.stages.length=v14StageCount;
+}
+
+/* ---- Progress, per map -------------------------------------------------------------------------
+
+   Kept beside the V14 save rather than inside it. V14's own migration validates and clamps a fixed
+   set of fields, and adding one would mean touching a function whose entire purpose is to be the
+   thing that never loses a player's progress. A separate key that is allowed to be missing is the
+   smaller risk: absent, it reads as "map one, wherever V14 says you are", which is exactly what a
+   save from before this part should mean. */
+
+function v87Read(){
+ try{
+  const raw=JSON.parse(localStorage.getItem(V87.key)||'null');
+  if(!raw||typeof raw!=='object')return {map:0,progress:{}};
+  const map=Math.max(0,Math.min(V87_MAPS.length-1,raw.map|0));
+  return {map,progress:raw.progress&&typeof raw.progress==='object'?raw.progress:{}};
+ }catch{
+  return {map:0,progress:{}};
+ }
+}
+
+let v87State=v87Read();
+
+function v87Write(){
+ try{localStorage.setItem(V87.key,JSON.stringify(v87State));}catch{}
+}
+
+function v87Map(){return V87_MAPS[v87State.map]||V87_MAPS[0];}
+function v87Roster(){return V87_ROSTERS[v87Map().roster]||V87_ROSTERS[0];}
+
+/* ---- Installing a map --------------------------------------------------------------------------
+
+   Three tables rewritten in place, and the player's position swapped over. Deliberately not a
+   "reload the page with a different config": a map change happens between runs, in front of the
+   player, and it has to be something the game does rather than something that happens to it. */
+
+function v87Install(index,announce){
+ const to=Math.max(0,Math.min(V87_MAPS.length-1,index|0));
+ const from=v87State.map;
+
+ /* Bank where the player had got to in the map they are leaving. */
+ v87State.progress[from]={unlocked:v14Save.unlocked,lastStage:v14Save.lastStage};
+ v87State.map=to;
+ const kept=v87State.progress[to]||{unlocked:1,lastStage:1};
+ v14Save.unlocked=Math.max(1,Math.min(v14StageCount,kept.unlocked|0||1));
+ v14Save.lastStage=Math.max(1,Math.min(v14Save.unlocked,kept.lastStage|0||1));
+ v87Write();
+ v14Persist();
+
+ const map=V87_MAPS[to];
+ const roster=V87_ROSTERS[map.roster]||V87_ROSTERS[0];
+
+ /* The stage table, rewritten in place so `v14StageCount` and every reader of it stay valid. */
+ v14StageBlueprints.length=0;
+ for(const s of map.stages)v14StageBlueprints.push(s);
+
+ /* The cast. Assigned rather than replaced for the same reason -- `v15Creatures` is captured by
+    name in half a dozen places and a fresh object would leave them all pointing at the old one. */
+ Object.assign(v15Creatures,roster.creatures);
+ for(const key of Object.keys(roster.palette))Object.assign(v15Palette[key],roster.palette[key]);
+
+ /* V81 caches converged colours per world; a new palette invalidates every one of them. */
+ if(typeof v81SkinCache!=='undefined'){v81SkinCache=null;v81SkinWorld=-1;}
+
+ if(announce&&typeof toast==='function')toast(`${map.name} — ${map.subtitle}`);
+ if(typeof v14RenderStages==='function')v14RenderStages();
+ return map;
+}
+
+/* ---- Crossing over -----------------------------------------------------------------------------
+
+   Clearing the last node of a map opens the next one. Hooked on V14's own record-a-clear rather
+   than on the stage list, because that is the one place a clear is known to have actually happened
+   and it is where `unlocked` is advanced. */
+
+const v87Record=v14RecordStage;
+v14RecordStage=function(index,stars,scoreValue){
+ const out=v87Record(index,stars,scoreValue);
+ if(index>=v14StageCount&&v87State.map<V87_MAPS.length-1){
+  const next=V87_MAPS[v87State.map+1];
+  v87State.progress[v87State.map]={unlocked:v14Save.unlocked,lastStage:v14Save.lastStage};
+  v87State.mapCleared=true;
+  v87Write();
+  if(typeof toast==='function')toast(`${next.name} UNLOCKED`);
+ }
+ return out;
+};
+
+/* Available for the map screen and for anything else that needs to move the player between maps. */
+function v87Go(index){return v87Install(index,true);}
+function v87Unlocked(index){
+ if(index<=0)return true;
+ /* The map the player is standing in reports live, not from the banked copy. `progress` is only
+    written on a map change or a final clear, so asking it about the CURRENT map gives an answer
+    that is up to a whole session out of date -- and the one case that matters is a player who has
+    just finished map one and wants the next one to be open now rather than after a switch. */
+ const prev=index-1===v87State.map?{unlocked:v14Save.unlocked}:v87State.progress[index-1];
+ return !!(prev&&prev.unlocked>=v14StageCount);
+}
+
+/* Install whatever the player was standing in when they left. Map zero is a no-op by construction:
+   its tables are the ones already loaded, and rewriting them with a snapshot of themselves is the
+   cheapest way to keep one code path rather than two. */
+v87Install(v87State.map,false);
