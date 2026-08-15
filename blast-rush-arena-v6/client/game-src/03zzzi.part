@@ -77,6 +77,7 @@ const V87_MAPS=[
   name:'THE OUTER REACH',
   subtitle:'WHERE THE LEGION HOLDS',
   roster:0,
+  worldNames:worlds.map((w)=>w.name),
   stages:v14StageBlueprints.slice()
  },
  {
@@ -84,6 +85,11 @@ const V87_MAPS=[
   name:'THE BLOOM',
   subtitle:'SOMETHING GREW OUT HERE',
   roster:1,
+  /* A map's places are its own. `worlds` is one global table of six and every map indexes into it,
+    so without this map two's stage dividers read NEBULA FORGE and SOLAR TEMPLE -- map one's names
+    over map two's ground, which is the kind of detail that quietly tells a player the second map is
+    a reskin. Rewritten in place on install, the same way the stage table is. */
+  worldNames:['SEEDBED','THE THICKET','ASH ROWS','HEARTWOOD','DEEP LOAM','THE CANOPY'],
   stages:[
    {name:'FIRST BLOOM',world:0,kind:'purge',target:18,brief:'Something new is growing in the dark. Cut it back.'},
    {name:'SPORE DRIFT',world:0,kind:'survive',duration:40,hazards:['fog'],brief:'Hold forty seconds inside the spore cloud.'},
@@ -150,12 +156,24 @@ function v87Install(index,announce){
  const to=Math.max(0,Math.min(V87_MAPS.length-1,index|0));
  const from=v87State.map;
 
- /* Bank where the player had got to in the map they are leaving. */
- v87State.progress[from]={unlocked:v14Save.unlocked,lastStage:v14Save.lastStage};
+ /* Bank where the player had got to in the map they are leaving.
+
+    Stars and best scores travel with it, and that was missed the first time: `v14Save.stars` and
+    `.best` are single tables keyed by stage NUMBER, so with only `unlocked` swapped, map two's node
+    three showed map one's node three stars. Reported by the map screen, which is where it was
+    visible. The objects are moved by reference rather than copied, so a clear recorded later
+    updates the banked copy too and the two cannot drift.
+
+    `from === to` on the load-time install, which is what makes that call a no-op: the live tables
+    are written into `progress[to]` and read straight back out. */
+ v87State.progress[from]={unlocked:v14Save.unlocked,lastStage:v14Save.lastStage,
+  stars:v14Save.stars,best:v14Save.best};
  v87State.map=to;
  const kept=v87State.progress[to]||{unlocked:1,lastStage:1};
  v14Save.unlocked=Math.max(1,Math.min(v14StageCount,kept.unlocked|0||1));
  v14Save.lastStage=Math.max(1,Math.min(v14Save.unlocked,kept.lastStage|0||1));
+ v14Save.stars=kept.stars&&typeof kept.stars==='object'?kept.stars:{};
+ v14Save.best=kept.best&&typeof kept.best==='object'?kept.best:{};
  v87Write();
  v14Persist();
 
@@ -165,6 +183,12 @@ function v87Install(index,announce){
  /* The stage table, rewritten in place so `v14StageCount` and every reader of it stay valid. */
  v14StageBlueprints.length=0;
  for(const s of map.stages)v14StageBlueprints.push(s);
+
+ /* The places. Names only -- the palettes and skylines stay shared, because a map is a cast and a
+    sequence rather than a whole new renderer. */
+ if(map.worldNames)for(let i=0;i<worlds.length;i++){
+  if(map.worldNames[i])worlds[i].name=map.worldNames[i];
+ }
 
  /* The cast. Assigned rather than replaced for the same reason -- `v15Creatures` is captured by
     name in half a dozen places and a fresh object would leave them all pointing at the old one. */

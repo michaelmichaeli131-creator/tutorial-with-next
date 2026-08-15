@@ -32,6 +32,7 @@ const STYLESHEETS = [
   "v41-titan.css",
   "v75-quiet.css",
   "v80-print.css",
+  "v88-map.css",
 ];
 
 export async function buildStyles(): Promise<void> {
