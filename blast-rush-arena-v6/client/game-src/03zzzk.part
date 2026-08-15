@@ -1,0 +1,564 @@
+/* V89 — THE BLOOM's cast. Six things that grew, wearing the six roles the game already speaks.
+
+   ---- What this is, and what it deliberately is not ----
+
+   V87 made a map "a cast plus a list of stages" and left index 1 of `V87_ROSTERS` empty on purpose,
+   so map two shipped playable with map one's machines while its own cast was drawn. This is that
+   index. It adds no mechanic, no field on `o`, and no branch anywhere else: six draw functions and
+   six palettes, installed through the table V87 already rewrites.
+
+   The roles are untouched and that is the whole point. `normal / armored / bomb / shard / splitter /
+   rival` are what V63 sizes a blast from, what V64 spaces a formation against, what V65 seals, what
+   V72 splits, what V76 gathers and what V83 refunds on. A player crossing into THE BLOOM meets a
+   cast they have never seen and a game they already know how to play.
+
+   ---- The silhouette contract ----
+
+   `03j.part` decided each archetype answers one question differently, and that decision is the
+   reason a crowd is readable at five taps a second on a phone. It is inherited here as a contract
+   rather than as a style, because the player learned it in map one and has to be able to spend it
+   in map two BEFORE they know what any of these things are:
+
+     normal    the thinnest thing        dart          ->  seed drifter, a husk with two long blades
+     armored   the widest thing          walker        ->  bracket husk, shelves out past its feet
+     bomb      the only true circle      sphere        ->  seed gall, a swollen pod about to split
+     shard     the tall spike            crystal       ->  bramble thorn, barbed, no head
+     splitter  the twin-headed one       two heads     ->  twin bud on a root cluster
+     rival     the only humanoid         humanoid      ->  the grown one, shoulders, waist, cloak
+
+   Each is drawn a different way inside the same outline family. The machines are hard planes with
+   fasteners; these are blades, husks, roots and buds, and every mass that had a bolted seam has a
+   growth ring instead. Nothing here is cute and nothing here is a mushroom joke: it is overgrowth
+   that has learned to defend itself, which mostly means thorns pointing outward and a lot of dark
+   fibrous bulk under a thin bright skin.
+
+   ---- Everything goes through v15Carapace, because V81 lives there ----
+
+   V81 wraps that one helper to put a heavy near-black contour behind every body and a bright rim
+   along its upper-left edge, and it removes body-sized halos. That treatment is what makes a
+   silhouette survive a lit planet passing behind it, so every primary mass here is a `v15Carapace`
+   call and nothing is a free-floating fill.
+
+   Anything that is NOT a carapace -- blades, shelves, barbs, petals, crowns -- gets the same
+   treatment by hand through `v89Plate`, which strokes the contour first and fills over its inner
+   half. Drawn the other way round the outline straddles the path and eats a third of a thin blade's
+   own colour, which is exactly the failure V81's header describes.
+
+   ---- Colour, chosen against V81's convergence rather than in spite of it ----
+
+   V81 pulls every hostile's hue half-way toward the world's own enemy colour and takes 30% of its
+   saturation, leaving lightness alone. That has a consequence worth stating, because it caught the
+   first draft of this palette: two hues 30 degrees apart end up 15 apart, and in a violet world a
+   rot-red and a fungal gold both arrive as the same dull magenta. Neighbouring hues are not a
+   palette here, they are a collision waiting for world four.
+
+   So the cast is spread across a wide arc and, more importantly, laddered by LIGHTNESS, which
+   convergence does not touch:
+
+     shard    ~.78  bleached bone      the brightest thing on the field, and the thinnest tall one
+     normal   ~.61  new growth
+     splitter ~.54  fungal gold
+     bomb     ~.42  rot red
+     armored  ~.31  wet bark           the darkest mass, and the biggest
+     rival     n/a  bruise violet      wears the player's skin in play; this is its preview colour
+
+   Eyes and glows are the one channel V81 leaves alone, so they are deliberately NOT used to tell
+   the archetypes apart -- they are all sporelight, one narrow band of acid yellow-green, because a
+   single shared eye colour is what says these six are one organism rather than six species. The
+   gall is the exception and gets amber: on that one creature the eye is a fuse readout.
+
+   ---- Rules honoured ----
+
+   No `lighter` on a body, no gradient of my own filling a body, no `shadowBlur`. The only additive
+   marks are `v15Eye` and one `v15Spark` on the gall's bud, which is what those helpers exist for.
+   `rng()` is never called -- it is the seeded stream the spawner draws from and a cosmetic read
+   would desynchronise a replayed seed. Anything that must not flicker frame to frame is derived
+   from `o.anim`, which is per creature and fixed for its life.
+
+   ---- Things that did not work, kept here so they are not retried ----
+
+   - Translucent petals layered over the body. Without additive blending they turn to mud against a
+     dark arena, and with it they are a body glow by another name. Petals here are opaque plates.
+   - Orbiting spore motes around the thorn, mirroring the crystal wraith's shards. At speed they
+     read as a halo, which is the thing V81 removed; the barbs do the same job and stay attached.
+   - A rot-red gall next to a gold splitter, both at mid lightness. Distinct at desk size, identical
+     after convergence in world one. The gall was darkened until the pair separated in monochrome.
+   - Asymmetric outlines for an "grown wrong" feel. Mirrored shapes read as creatures and asymmetric
+     ones read as damage; the wrongness is carried by the barbs and the split seams instead. */
+
+const V89={
+ /* The hand-rolled equivalent of V81.edge, for the plates that do not pass through v15Carapace.
+    Slightly lighter than V81's 3.6 because these shapes are smaller and a 3.6 contour on a 6-unit
+    barb is a black spike with a hint of colour in it. */
+ edge:3,
+ ink:'rgba(3,8,5,.9)'
+};
+
+/* A flat organic plate with its own contour: stroke first, fill over the inner half. */
+function v89Plate(c,points,fill,alpha=1){
+ c.save();
+ c.globalAlpha=alpha;
+ c.lineJoin='round';
+ c.strokeStyle=V89.ink;
+ c.lineWidth=V89.edge;
+ v14Art.poly(c,points);
+ c.stroke();
+ c.fillStyle=fill;
+ v14Art.poly(c,points);
+ c.fill();
+ c.restore();
+}
+
+/* A dark wash over part of a plate. Flat plates read as cut card next to a carapace, which has
+   V19's ramp and seams inside it; one shaded region is enough to give a blade a fold and costs a
+   fill. Deliberately near-black rather than a darker tint of the body: a tint reads as a second
+   material, shadow reads as the same material bending. */
+function v89Shade(c,points,alpha=.34){
+ c.save();
+ c.globalAlpha=alpha;
+ c.fillStyle='#050a04';
+ v14Art.poly(c,points);
+ c.fill();
+ c.restore();
+}
+
+/* Fibre running through a mass, clipped to it. The organic answer to V19's panel seams, which are
+   still drawn underneath by the shared carapace and read as growth rings rather than plating. */
+function v89Grain(c,points,color,lines,alpha=.4){
+ c.save();
+ v14Art.poly(c,points);
+ c.clip();
+ c.globalAlpha=alpha;
+ c.strokeStyle=color;
+ c.lineWidth=1.1;
+ c.lineCap='round';
+ for(const [ax,ay,bx,by] of lines){c.beginPath();c.moveTo(ax,ay);c.lineTo(bx,by);c.stroke();}
+ c.restore();
+}
+
+/* Spore freckles. A fixed table rather than a random one: `rng()` belongs to the spawner and a
+   per-frame `Math.random()` here would make the creature crawl. */
+function v89Dots(c,list,color,alpha=.55){
+ c.save();
+ c.globalAlpha=alpha;
+ c.fillStyle=color;
+ for(const [x,y,r] of list){c.beginPath();c.arc(x,y,r,0,Math.PI*2);c.fill();}
+ c.restore();
+}
+
+/* The one shape in the cast that has to be a circle, built once. Twelve sides with a ±1.2 unit
+   wobble off the radius so it is a grown thing rather than a ball bearing -- small enough that it
+   is still unmistakably the only round creature on the field, which is the contract. */
+const V89_GALL=(()=>{
+ const points=[];
+ for(let i=0;i<12;i++){
+  const a=i/12*Math.PI*2-Math.PI/2;
+  const r=26+((i*7)%3-1)*1.2;
+  points.push([Math.cos(a)*r,Math.sin(a)*r+1]);
+ }
+ return points;
+})();
+
+const V89_CREATURES={
+ /* SEED DRIFTER — the thinnest thing. A husk barely wider than its own eye, two long blades swept
+    back and down, and three root threads trailing under it. Vertical from crest to thread is more
+    than three times its width, which is the read: everything else in this cast is bulk. */
+ normal(c,o,pal,t){
+  const anim=o.anim||0;
+  const drift=Math.sin(t*3.2+anim)*.15;
+  const sway=Math.sin(t*2.4+anim)*4;
+
+  /* Blades sweep DOWN rather than out. Out is a wing and a wing is width; down keeps the whole
+     creature inside a narrow vertical envelope while still giving it something to fall on. */
+  for(const side of [-1,1]){
+   c.save();
+   c.translate(side*4,-12);
+   c.rotate(side*(drift+.1));
+   /* Serrated along the trailing edge only. A leaf notched all the way round reads as damage; one
+      toothed edge reads as a leaf. */
+   const blade=[[0,-5],[side*11,-4],[side*28,16],[side*20,18],[side*22,24],[side*13,22],[side*13,27],[side*3,9]];
+   v89Plate(c,blade,pal.body,.95);
+   v89Shade(c,[[side*3,9],[side*13,27],[side*22,24],[side*18,15]],.45);
+   c.save();
+   c.globalAlpha=.5;
+   c.strokeStyle=pal.trim;
+   c.lineWidth=1.2;
+   c.lineCap='round';
+   c.beginPath();c.moveTo(side*2,-2);c.lineTo(side*24,16);c.stroke();
+   c.beginPath();c.moveTo(side*8,1);c.lineTo(side*13,11);c.stroke();
+   c.beginPath();c.moveTo(side*14,7);c.lineTo(side*18,17);c.stroke();
+   c.restore();
+   c.restore();
+  }
+
+  /* Threads. One long centre thread with two short ones beside it, rather than three of a length:
+     three equal threads read as legs and legs belong to the husk and the twin bud. */
+  v14Art.limb(c,-4,20,-8+sway*.3,36,2.6,pal.body);
+  v14Art.limb(c,4,20,8-sway*.3,38,2.6,pal.body);
+  v14Art.limb(c,0,22,sway*.5,57,2.2,pal.body);
+
+  /* Crest, behind the body so the carapace covers its root. */
+  v89Plate(c,[[0,-49],[4,-32],[-4,-32]],pal.trim,.92);
+
+  v15Carapace(c,pal,[[0,-35],[6,-19],[7,4],[4,24],[-4,24],[-7,4],[-6,-19]],-7,-33,7,22);
+  c.fillStyle='#080f06';
+  v14Art.poly(c,[[0,-30],[5,-21],[4,-9],[-4,-9],[-5,-21]]);c.fill();
+  /* Same dark core as the thorn, and for the same reason: V19's vent and specular are additive and
+     clipped to the body, so on a fourteen-unit-wide body they cover most of it and the husk loses
+     its value. Knocked back rather than blacked out, because a husk with something lit inside it is
+     what this creature is. */
+  c.save();
+  c.globalAlpha=.32;
+  c.fillStyle='#0b1209';
+  v14Art.poly(c,[[-4.5,-10],[4.5,-10],[3.2,22],[-3.2,22]]);c.fill();
+  c.restore();
+  v15Eye(c,0,-18,5,pal);
+  v89Dots(c,[[-3,2,1.2],[3,8,1],[-2,14,.9]],pal.trim,.5);
+ },
+
+ /* BRACKET HUSK — the widest thing. Shelf growths out past its own feet, a squat woody mass and a
+    crown of thorns: wider than it is tall by a clear margin, which no other creature here is. */
+ armored(c,o,pal,t){
+  const anim=o.anim||0;
+  const stomp=Math.sin(t*2.4+anim)*2.4;
+
+  /* Legs clear of the body, which reaches x=±26 and y=27: a leg tucked under a mass that wide is a
+     leg nobody sees, and then the husk is a rock rather than a thing that walks toward you. */
+  v14Art.limb(c,-15,19,-25,39+stomp,12,pal.body);
+  v14Art.limb(c,15,19,25,39-stomp,12,pal.body);
+  /* Root toes. A walker with no feet is furniture; a grown thing with no roots is a rock. Drawn as
+     plates rather than as flat black fills -- a black shape under a dark body reads as a hole. */
+  for(const side of [-1,1]){
+   const y=39+stomp*side;
+   v89Plate(c,[[side*17,y-6],[side*35,y-3],[side*33,y+6],[side*16,y+7]],pal.body,.9);
+   v89Shade(c,[[side*17,y+1],[side*34,y],[side*33,y+6],[side*16,y+7]],.45);
+  }
+
+  /* The shelves. These are the silhouette: they take the outline out to ±46 while the body stops at
+     30, so the widest point of this creature is a growth rather than its shoulders -- and they have
+     to clear the body by enough that V81's contour on each does not merge them into one blob. */
+  for(const side of [-1,1]){
+   v89Plate(c,[[side*14,-21],[side*36,-19],[side*46,-4],[side*34,9],[side*14,4]],pal.body,1);
+   v89Shade(c,[[side*14,-3],[side*41,-3],[side*34,9],[side*14,4]],.4);
+   c.save();
+   c.globalAlpha=.42;
+   c.strokeStyle=pal.trim;
+   c.lineWidth=1.2;
+   for(let i=1;i<=3;i++){
+    c.beginPath();
+    c.moveTo(side*(16+i*3),-18+i*4.5);
+    c.lineTo(side*(34+i*2),-11+i*4);
+    c.stroke();
+   }
+   c.restore();
+  }
+
+  v15Carapace(c,pal,[[-16,-23],[16,-23],[30,-6],[26,12],[13,27],[-13,27],[-26,12],[-30,-6]],-30,-23,30,27);
+
+  /* Thorns along the top edge. Defence, and a hard upper contour so the mass does not read as a
+     pebble once the shelves are lost at distance. */
+  for(const [x,h] of [[-12,-33],[0,-38],[12,-33]])v89Plate(c,[[x-4.5,-21],[x,h],[x+4.5,-21]],pal.trim,.9);
+
+  c.fillStyle='#070d05';
+  v14Art.poly(c,[[-21,-21],[21,-21],[17,-5],[-17,-5]]);c.fill();
+  /* Three eyes in a row rather than one bar: the same wide horizontal face the sentinel had, said
+     in an animal's grammar instead of a machine's. */
+  v15Eye(c,-10,-13,3.4,pal);
+  v15Eye(c,0,-13.5,4.4,pal);
+  v15Eye(c,10,-13,3.4,pal);
+  v89Dots(c,[[-19,6,1.6],[-11,15,1.3],[6,9,1.5],[17,4,1.2],[0,20,1.4]],pal.trim,.45);
+ },
+
+ /* SEED GALL — the only true circle. A swollen pod with the split already started and something
+    lit inside it, four short roots clamped to the shell, and a stalk carrying a bud that is the
+    fuse. Round is the shape everybody already reads as "this is going to go off". */
+ bomb(c,o,pal,t){
+  const anim=o.anim||0;
+  const beat=.5+.5*Math.sin(t*9+anim);
+
+  for(const side of [-1,1]){
+   v14Art.limb(c,side*19,6,side*28,17,5,pal.body);
+   v14Art.limb(c,side*11,24,side*15,35,5,pal.body);
+  }
+
+  v15Carapace(c,pal,V89_GALL,-24,-24,24,24);
+
+  /* The split. Flat bright strokes rather than additive ones -- the shell is a body and V81's rule
+     is that bodies do not emit. The pulse is carried by alpha and line width, which reads as a
+     pressure change rather than as a lamp. */
+  c.save();
+  v14Art.poly(c,V89_GALL);
+  c.clip();
+  /* Dark first, hot line beside it. A bright line alone is a scratch on the surface; a dark
+     fissure with light coming up one side of it is a shell that has come apart. */
+  c.lineJoin='round';
+  c.lineCap='round';
+  /* One split that runs the whole shell top to bottom with two short branches off it, rather than
+     three unrelated cracks. Three read as a graphic applied to the surface; one read as a seam the
+     thing is failing along, which is what it is. */
+  const fissure=[
+   [[1,-27],[5,-14],[-3,-2],[3,11],[-4,26]],
+   [[-3,-2],[-16,-7],[-21,-13]],
+   [[3,11],[15,9],[21,15]]
+  ];
+  for(const line of fissure){
+   c.globalAlpha=.8;
+   c.strokeStyle='#100704';
+   c.lineWidth=3.4;
+   c.beginPath();c.moveTo(line[0][0],line[0][1]);
+   for(let i=1;i<line.length;i++)c.lineTo(line[i][0],line[i][1]);
+   c.stroke();
+   c.globalAlpha=.45+beat*.45;
+   c.strokeStyle=pal.eye;
+   c.lineWidth=1.2+beat*.7;
+   c.translate(-.9,-.9);
+   c.beginPath();c.moveTo(line[0][0],line[0][1]);
+   for(let i=1;i<line.length;i++)c.lineTo(line[i][0],line[i][1]);
+   c.stroke();
+   c.translate(.9,.9);
+  }
+  c.restore();
+
+  /* Ocelli in a shallow arc rather than two big eyes in a rounded hollow. The hollow-plus-pair is a
+     face, and a face on a round body is a cartoon -- which the raider gets away with because it is
+     unmistakably a machine and this thing is not. Three small ones set into a slot read as an
+     animal that has eyes, which is a different and much less friendly statement. */
+  c.fillStyle='#140806';
+  v14Art.poly(c,[[-16,-21],[16,-21],[12,-6],[-12,-6]]);c.fill();
+  v15Eye(c,0,-17,3.6,pal,1+beat);
+  v15Eye(c,-8,-10,3,pal,1+beat*.6);
+  v15Eye(c,8,-10,3,pal,1+beat*.6);
+
+  /* Stalk and bud. The one additive mark on this creature, and it is a fuse readout. */
+  c.save();
+  c.strokeStyle=pal.trim;
+  c.lineWidth=2.6;
+  c.lineCap='round';
+  c.beginPath();c.moveTo(3,-26);c.quadraticCurveTo(13,-39,21,-34);c.stroke();
+  c.restore();
+  v89Plate(c,[[21,-40],[26,-34],[21,-28],[16,-34]],pal.trim,.9);
+  v15Spark(c,21,-34,'#ffcf6a',12,.7+beat*.6);
+
+  v89Dots(c,[[-16,10,1.5],[-6,18,1.2],[12,10,1.4],[16,-2,1.1]],pal.trim,.4);
+ },
+
+ /* BRAMBLE THORN — the tall spike. No head, no limbs to speak of, barbs hooking up and out, and a
+    single eye low on the shaft. Taller than anything else in the cast and the palest, so it is the
+    one that still reads when everything else has gone to shape. */
+ shard(c,o,pal,t){
+  const anim=o.anim||0;
+  const lean=Math.sin(t*1.7+anim)*.045;
+
+  c.save();
+  c.rotate(lean);
+
+  /* Barbs first so the shaft covers their roots. Hooked, and all pointing up-and-out: a thorn is
+     read by which way it would go into you. */
+  /* Rooted on the shaft, not floating beside it: every barb's first and last point sit inside the
+     outline, so the plate is cut off by the body rather than meeting it at a seam. Uneven lengths,
+     because a thorn that alternates evenly is a fish bone. */
+  for(const barb of [
+   [[-7,-8],[-30,-24],[-21,-9],[-8,3]],
+   [[7,0],[32,-13],[22,2],[8,12]],
+   [[-6,11],[-24,3],[-16,13],[-5,19]],
+   [[5,-20],[20,-38],[15,-23],[6,-13]],
+   [[6,17],[19,15],[13,22],[5,24]]
+  ]){
+   v89Plate(c,barb,pal.body,1);
+   v89Shade(c,[barb[0],barb[2],barb[3]],.42);
+  }
+
+  /* Root stubs. Three, short, so the base is anchored without becoming legs -- legs would make it
+     a walker and the walker is somebody else. */
+  v14Art.limb(c,-4,26,-11,38,3.4,pal.body);
+  v14Art.limb(c,4,26,11,38,3.4,pal.body);
+  v14Art.limb(c,0,28,0,42,3,pal.body);
+
+  /* The tip hooks. A straight symmetrical spike is a mineral -- it is what the crystal wraith is,
+     and drawing it again in green would be the same creature in a costume. A shaft that leans off
+     its own axis at the top is something that grew toward something. */
+  const shaft=[[7,-48],[11,-26],[9,-8],[5,12],[0,33],[-7,10],[-9,-16],[-4,-34]];
+  v15Carapace(c,pal,shaft,-9,-46,11,30);
+  /* Fibre running the length of the shaft, not facets: this grew, it was not cut. */
+  v89Grain(c,shaft,'#0a1008',[[4,-44,-4,30],[8,-40,2,28],[-2,-38,-7,20],[0,-46,3,32]],.5);
+  /* A dark core under V19's additive vent and specular, which between them lift a narrow body's
+     whole interior. Painted after the carapace so it survives them, and inset so the rim V81 put
+     along the lit edge is untouched -- that rim is the whole silhouette on a shape this thin.
+
+     Not, however, the fix for the soft bloom that photographs over the middle of the drifter and
+     the thorn in the zoo harness. That was chased and attributed: it survives `v19PanelSeams`,
+     `v15Eye` and `drawOrb` all stubbed out, and map one's scout and wraith carry the identical mark
+     in the identical place. It is not coming from the creature art and it is not worth drawing
+     around. */
+  c.save();
+  c.globalAlpha=.5;
+  c.fillStyle='#0b1209';
+  v14Art.poly(c,[[5,-40],[8,-24],[6,-8],[3,10],[0,26],[-5,9],[-6,-15],[-2,-31]]);c.fill();
+  c.restore();
+
+  /* Small, low, and dimmed. The thorn has no head, so the eye is the only thing on it that reads as
+     alive -- but a large one halfway up the shaft turns the creature into a lamp on a stick, which
+     is the crystal wraith's failure and the wraith at least had a radial heart gradient to blame. */
+  v15Eye(c,1,8,3.6,pal,.8);
+  v89Dots(c,[[-3,-26,1.1],[3,-14,1],[-2,22,1.1]],pal.trim,.45);
+  c.restore();
+ },
+
+ /* TWIN BUD — the two-headed one, bottom-heavy on a cluster of roots, with the seam it will come
+    apart along already open down the middle. Two buds craning off one base is the same statement
+    the twin beast made, and it is the only creature here with a horizontal centre of mass. */
+ splitter(c,o,pal,t){
+  const anim=o.anim||0;
+  const sway=Math.sin(t*3+anim)*3;
+
+  v14Art.limb(c,-17,14,-31,30+sway,5,pal.body);
+  v14Art.limb(c,17,14,31,30-sway,5,pal.body);
+  v14Art.limb(c,-11,24,-17,41,6,pal.body);
+  v14Art.limb(c,11,24,17,41,6,pal.body);
+  v14Art.limb(c,-4,26,-5,44,5,pal.body);
+  v14Art.limb(c,4,26,5,44,5,pal.body);
+
+  const base=[[-16,-8],[16,-8],[28,8],[18,30],[-18,30],[-28,8]];
+  v15Carapace(c,pal,base,-28,-9,28,29);
+  /* Vertical fibre, to cut across V19's horizontal seams. Left alone the base is the one mass in
+     this cast that still reads as a panelled hull. */
+  v89Grain(c,base,'#080d05',[[-19,-10,-14,32],[-8,-10,-6,32],[8,-10,7,32],[19,-10,15,32]],.4);
+
+  /* The seam. Dark and dashed, with a thin sap line beside it -- the cue that this one is already
+     failing along a line the player gets to choose the position of. */
+  c.save();
+  v14Art.poly(c,base);
+  c.clip();
+  c.globalAlpha=.65;
+  c.strokeStyle='#070d05';
+  c.lineWidth=2.6;
+  c.setLineDash([4,4]);
+  c.beginPath();c.moveTo(0,-10);c.lineTo(0,31);c.stroke();
+  c.globalAlpha=.35;
+  c.strokeStyle=pal.trim;
+  c.lineWidth=1;
+  c.setLineDash([]);
+  c.beginPath();c.moveTo(2,-10);c.lineTo(2,31);c.stroke();
+  c.restore();
+
+  for(const side of [-1,1]){
+   c.save();
+   v14Art.limb(c,side*6,-6,side*11,-17,5,pal.body);
+   c.translate(side*11,-21+sway*side*.2);
+   c.rotate(side*.26);
+   /* Sepals behind the bud, so each head has a spiked collar and the pair cannot merge into one
+      blob when they overlap at distance. */
+   for(const s of [-1,1])v89Plate(c,[[s*3,-6],[s*15,-19],[s*7,-2]],pal.body,.95);
+   /* A bud rather than a head: pointed at the top, widest below the middle, and with one petal
+      peeled back off the outer side. Boxy heads on stalks read as sensor pods, which is the map
+      the player just left. */
+   v89Plate(c,[[side*2,-16],[side*13,-9],[side*11,4],[side*1,2]],pal.body,.9);
+   v15Carapace(c,pal,[[0,-20],[7,-9],[9,3],[4,9],[-4,9],[-9,3],[-7,-9]],-9,-20,9,9);
+   c.fillStyle='#0a0e05';
+   v14Art.poly(c,[[-6,-12],[6,-12],[5,1],[-5,1]]);c.fill();
+   v15Eye(c,0,-6,4,pal);
+   c.restore();
+  }
+
+  v89Dots(c,[[-20,12,1.5],[-9,22,1.2],[13,16,1.4],[21,6,1.2]],pal.trim,.45);
+ },
+
+ /* THE GROWN ONE — the only humanoid. Shoulders, a waist, a flared hip and a cloak of hanging
+    fronds: a person-shaped thing where everything else is a thing-shaped thing. It wears the
+    player's own skin colours in play, so its silhouette is carrying the whole of its identity. */
+ rival(c,o,pal,t){
+  const anim=o.anim||0;
+  const cape=Math.sin(t*2.2+anim)*5;
+
+  /* Cloak: leaf-edged rather than cut cloth, ragged along the bottom. */
+  for(const side of [-1,1]){
+   v89Plate(c,[
+    [side*13,-15],[side*34,-25-cape*side],[side*31,2],[side*23,7],
+    [side*26,17],[side*16,15],[side*18,27],[side*10,22],[side*11,32]
+   ],pal.body,.72);
+  }
+
+  /* Two-segment arms hanging at the sides. One straight bar per side reads as a strut; an elbow
+     reads as a limb, and the limb is half of what makes this thing a person. */
+  for(const side of [-1,1]){
+   v14Art.limb(c,side*18,-13,side*27,3,7,pal.body);
+   v14Art.limb(c,side*27,3,side*23,21,6,pal.body);
+   v89Plate(c,[[side*20,20],[side*27,20],[side*26,28],[side*20,27]],pal.body,.95);
+  }
+
+  const body=[[0,-25],[22,-15],[12,4],[15,20],[8,33],[-8,33],[-15,20],[-12,4],[-22,-15]];
+  v15Carapace(c,pal,body,-22,-25,22,33);
+  v89Grain(c,body,'#0a0e05',[[-10,-16,-4,30],[10,-16,4,30],[0,-20,0,30]],.35);
+
+  /* A head on a neck, clear of the shoulders. Map one's warlord puts its visor into the top of its
+     own torso, and it survives that because it is plated and symmetrical and reads as a suit. This
+     one is a grown thing and needs the join stated: without a neck it was a crest on a shield. */
+  v14Art.limb(c,0,-22,0,-30,7,pal.body);
+  v15Carapace(c,pal,[[0,-46],[10,-39],[11,-28],[0,-22],[-11,-28],[-10,-39]],-11,-46,11,-22);
+
+  /* A seed set in the chest. The one place on this creature where something is visibly alive. */
+  c.save();
+  c.globalAlpha=.9;
+  c.fillStyle=pal.trim;
+  v14Art.poly(c,[[0,-14],[7,-1],[0,12],[-7,-1]]);c.fill();
+  c.restore();
+  c.save();
+  c.globalAlpha=.6;
+  c.fillStyle='#0a0e05';
+  v14Art.poly(c,[[0,-8],[3.5,-1],[0,6],[-3.5,-1]]);c.fill();
+  c.restore();
+
+  c.fillStyle='#070c06';
+  v14Art.poly(c,[[-9,-42],[9,-42],[8,-28],[-8,-28]]);c.fill();
+  c.save();
+  c.translate(0,-35);
+  v15Halo(c,pal.glow,17);
+  c.fillStyle=pal.glow;
+  v14Art.round(c,-7,-2.5,14,5,2.5);c.fill();
+  c.restore();
+
+  /* Crown: branched thorns, two a side, uneven lengths. A single pair reads as horns and horns are
+     the twin bud's; a branched crown reads as a head that kept growing. */
+  for(const side of [-1,1]){
+   v89Plate(c,[[side*6,-44],[side*13,-62],[side*11,-42]],pal.trim,.92);
+   v89Plate(c,[[side*10,-40],[side*23,-52],[side*14,-36]],pal.trim,.85);
+  }
+ }
+};
+
+/* ---- The palette --------------------------------------------------------------------------------
+
+   Laddered by lightness for the reason in the header: convergence takes half the hue and none of
+   the value, so value is the channel that is still there in world four. Trims are the rim V81
+   strokes along the lit edge, so each is a clear step above its body rather than a tint of it.
+
+   `glow` is darker than it looks like it should be, and that is measured rather than taste. V19
+   paints an additive vent band across the middle of every carapace in `pal.glow`, so a pale glow is
+   a white bar through the centre of the creature -- on the drifter and the thorn, both of which are
+   narrow, the band is as wide as the body and the middle of the silhouette disappears into it.
+   Mid-value saturated glows keep the vent as an interior light and keep the hue, which matters
+   because `glow` and `eye` are the two channels V81's convergence leaves alone. */
+
+const V89_PALETTE={
+ normal:{body:'#a6d861',trim:'#e6f7b4',glow:'#79b234',eye:'#eaffb0'},
+ armored:{body:'#6d5a33',trim:'#c9ae70',glow:'#87693a',eye:'#ffe08e'},
+ bomb:{body:'#b03a28',trim:'#ffb590',glow:'#d8532a',eye:'#ffce6a'},
+ shard:{body:'#d8dfb0',trim:'#f8ffe0',glow:'#93aa62',eye:'#f4ffd2'},
+ splitter:{body:'#d9a13a',trim:'#ffe6a6',glow:'#c08e2c',eye:'#fff2bc'},
+ /* The warlord's replacement takes the player's skin from `v15Skin` in play, so these colours are
+    what the armory preview and any UI that draws a rival outside a run will use. */
+ rival:{body:'#8e5ab4',trim:'#ead0f8',glow:'#b87fe2',eye:'#ffffff'}
+};
+
+V87_ROSTERS.push({
+ id:'bloom',
+ name:'THE BLOOM',
+ creatures:Object.assign({},V89_CREATURES),
+ palette:JSON.parse(JSON.stringify(V89_PALETTE))
+});
+
+/* V87 installs the roster on load, and on load this file had not run yet -- so a player standing in
+   map two right now is holding map one's cast until the next reload. Reinstalling the map they are
+   already in swaps the tables under them with no announcement and no progress movement, which is
+   the cheapest correct answer: `v87Install` banks and restores the same numbers either way. */
+v87Install(v87State.map,false);
