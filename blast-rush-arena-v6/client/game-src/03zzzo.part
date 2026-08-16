@@ -1,0 +1,234 @@
+/* V93 — two doors.
+
+   ---- What the home screen currently asks ----
+
+   Six buttons, all the same size, all worded like the headline feature of a different game:
+
+     CAMPAIGN            15 stages • continue where you stopped
+     QUICK DUEL          LIVE MATCHMAKING READY
+     DAILY ARENA         One field. Everyone gets the same one.
+     SOLO ASCENSION      Endless waves • escalating missions
+     TITAN GAUNTLET      Boss rush • maximum pressure
+     PLAY WITH FRIENDS   Private invite, room code or public arena
+
+   A player opening this for the first time has to read six subtitles and pick, before they have any
+   idea what any of the words mean, and nothing on the screen tells them which one is the game. Two
+   of the six are the same thing — QUICK DUEL and PLAY WITH FRIENDS are both "play against a person",
+   split by how you find them, which is an implementation detail the player is being asked to decide
+   before they have a rival. And three more are variations on the run loop that only mean anything to
+   somebody who has already played it: "endless waves" is not a promise you can evaluate having never
+   seen one wave.
+
+   The cost is not aesthetic. This screen is the first thing anyone sees, the decision is made with
+   the least information they will ever have, and five of the six answers are wrong for a new player.
+
+   ---- Two ----
+
+     PLAY   continues the campaign — the map, your stage, where you were.
+     DUEL   a rival, whether that is matchmaking or a friend's invite.
+
+   PLAY plays. It does not open a submenu, because a button that says PLAY and then asks another
+   question is the same problem one level deeper. Pressing it goes to the map, and the map already
+   has your current node lit as the thing to press — V88 built that, and it means the campaign's
+   "where was I" is answered by a picture rather than by a sentence.
+
+   ---- Nothing is deleted ----
+
+   The daily arena, endless and the gauntlet are all still here, one level down, on the map screen —
+   which is where you are once you have pressed PLAY and is exactly the population that knows what
+   those words mean. They are three chips rather than three huge buttons because that is their honest
+   weight: they are what you do with the game once you have it, not what the game is.
+
+   Quick match moves onto the duel screen, alongside the invite and the room code, which is where it
+   always belonged: those three are one decision ("who am I playing?") that was split across two
+   levels of the menu.
+
+   ---- Built by forwarding, not by rewiring ----
+
+   Every one of the six buttons stays in the DOM with its handler attached, and the new controls
+   click them. That is the same choice V90 made with the results screen and for the same reasons: the
+   rules about what each mode does are already correct and already tested, V39 writes the daily's hint
+   into `#dailyBtnHint` and V29 writes the network's state into `.mode-live-copy` without knowing this
+   part exists, and a consolidation that reimplemented six entry points would be six new places for
+   them to disagree. `.click()` works on a hidden element, so hiding them costs nothing. */
+
+const V93={on:true};
+
+let v93Play=null;
+let v93Duel=null;
+
+function v93Fire(id){
+ const el=$(id);
+ if(el)el.click();
+}
+
+/* The one sentence that has to be true on this screen: where PLAY will take you. Read live rather
+   than stored, because the campaign advances from inside a run and the menu is rebuilt on return. */
+function v93Where(){
+ const map=(typeof v87Map==='function')?v87Map():null;
+ const stage=(typeof v14Save==='object'&&v14Save)?(v14Save.lastStage|0):0;
+ const total=(typeof v14StageCount!=='undefined')?v14StageCount:15;
+ const place=map?map.name:'THE OUTER REACH';
+ if(stage<=1)return `${place} — START AT THE BEGINNING`;
+ return `${place} — STAGE ${Math.min(stage,total)} OF ${total}`;
+}
+
+function v93Build(){
+ if(v93Play||!V93.on)return;
+ const old=document.querySelector('.mode-command');
+ if(!old)return;
+
+ /* Given its own container next to `.mode-command` rather than placed inside it, and this is the
+    second attempt: the first put the doors in the existing block and lost. Four stylesheets have
+    been layered onto that block over the life of this project and three of them use `!important` —
+    `.mode-command{grid-template-columns:repeat(2,minmax(0,1fr))!important}` in v15-vision,
+    `#menuScreen .mode-command .huge{min-height:96px!important}` in v19-craft — so the two doors
+    came out as a matched pair of blue tiles 96px tall whatever this part asked for.
+
+    Winning that would have meant a fifth layer of `!important` on the same selectors, which is how
+    a stylesheet becomes unmaintainable one reasonable decision at a time. A sibling container
+    inherits none of it, and the old block is hidden with its six buttons and their handlers intact
+    inside — which is the arrangement this part wanted anyway. */
+ const host=document.createElement('div');
+ host.className='v93-doors';
+ old.parentNode.insertBefore(host,old);
+
+ /* No icons, and that is a decision rather than an omission. The six-button screen used one glyph
+    per mode to help tell them apart, which is work two buttons do not need — and the glyphs were
+    never safe: the crossed-swords this started with rendered as an empty box on the test device,
+    because a mode menu is not somewhere to find out which symbols a phone's font actually has.
+    PLAY and DUEL are unambiguous words. */
+ const make=(id,cls,label)=>{
+  const b=document.createElement('button');
+  b.id=id;
+  b.className=cls;
+  b.type='button';
+  b.innerHTML=`<b></b><small></small>`;
+  b.querySelector('b').textContent=label;
+  return b;
+ };
+
+ /* No `primary`/`secondary`/`huge` either: those are exactly the classes the four layers above
+    target, and these two buttons are styled outright in v93-two.css. */
+ v93Play=make('v93PlayBtn','v93-door','PLAY');
+ v93Duel=make('v93DuelBtn','v93-door','DUEL');
+ v93Play.addEventListener('click',()=>{haptic(12);v93Fire('campaignBtn');});
+ v93Duel.addEventListener('click',()=>{haptic(12);v93Fire('socialBtn');});
+ host.prepend(v93Duel);
+ host.prepend(v93Play);
+ v93Paint();
+}
+
+function v93Paint(){
+ if(!v93Play)return;
+ v93Play.querySelector('small').textContent=v93Where();
+ /* Mirrored rather than duplicated: V29 keeps the live copy honest about whether the network is
+    actually up, and inventing a second sentence here would be a second thing to keep true. */
+ const live=document.querySelector('#quickBtn .mode-live-copy');
+ const copy=live?live.textContent.trim():'';
+ v93Duel.querySelector('small').textContent=copy&&/READY|LIVE/i.test(copy)
+  ? 'FIND A RIVAL, OR INVITE A FRIEND'
+  : 'INVITE A FRIEND, OR JOIN A ROOM';
+}
+
+const v93UpdateMenu=updateMenu;
+updateMenu=function(){
+ const out=v93UpdateMenu();
+ if(V93.on){v93Build();v93Paint();}
+ return out;
+};
+
+/* ---- The three chips, on the map --------------------------------------------------------------
+
+   Rebuilt with the map rather than parked next to it: `v14RenderStages` clears `#stageList` and
+   fills it from scratch on every map change and every stage cleared, so anything inserted once
+   would survive exactly until the first thing the player does. */
+
+const V93_RAIL=[
+ {id:'soloBtn',   label:'ENDLESS', hint:()=>{
+  const f=(typeof v90Field==='function')?v90Field():null;
+  return f&&f.best>0?`BEAT ${format(f.best)}`:'ONE FIELD, UNTIL YOU BEAT IT';
+ }},
+ {id:'dailyBtn',  label:'TODAY',   hint:()=>{
+  const h=$('dailyBtnHint');
+  return h&&h.textContent.trim()?h.textContent.trim():'EVERYONE GETS THE SAME FIELD';
+ }},
+ {id:'gauntletBtn',label:'TITANS', hint:()=>'BOSSES ONLY, BACK TO BACK'}
+];
+
+function v93Rail(){
+ const list=$('stageList');
+ if(!V93.on||!list)return;
+ if(list.querySelector('.v93-rail'))return;
+ const head=list.querySelector('.v88-head');
+ const rail=document.createElement('div');
+ rail.className='v93-rail';
+ rail.append(Object.assign(document.createElement('span'),{className:'v93-rail-label',textContent:'OTHER WAYS IN'}));
+ const row=document.createElement('div');
+ row.className='v93-rail-row';
+ for(const entry of V93_RAIL){
+  const chip=document.createElement('button');
+  chip.type='button';
+  chip.className='v93-rail-chip';
+  chip.innerHTML=`<b></b><small></small>`;
+  chip.querySelector('b').textContent=entry.label;
+  chip.querySelector('small').textContent=entry.hint();
+  chip.addEventListener('click',()=>{haptic(12);v93Fire(entry.id);});
+  row.append(chip);
+ }
+ rail.append(row);
+ if(head&&head.nextSibling)list.insertBefore(rail,head.nextSibling);
+ else list.append(rail);
+}
+
+if(typeof v14RenderStages==='function'){
+ const v93RenderStages=v14RenderStages;
+ v14RenderStages=function(){
+  const out=v93RenderStages();
+  v93Rail();
+  return out;
+ };
+}
+
+/* ---- Quick match, moved onto the duel screen ---------------------------------------------------
+
+   The screen already asks "who am I playing?" three ways and was missing the fourth, which was up on
+   the home screen as a coequal mode. Placed above the grid rather than in it because it is the
+   answer for a player with nobody in particular to play — the other three all require somebody you
+   already know. */
+
+function v93Quick(){
+ /* getElementById rather than `$`, and not a style choice: the build validates that every id `$` is
+    called with exists in index.html, which is a good rule and this element is built at runtime. */
+ if(!V93.on||document.getElementById('v93QuickBtn'))return;
+ const screen=$('socialScreen');
+ const grid=screen&&screen.querySelector('.social-grid');
+ if(!grid)return;
+ const btn=document.createElement('button');
+ btn.id='v93QuickBtn';
+ btn.type='button';
+ btn.className='primary huge v93-quick';
+ btn.innerHTML='<b>QUICK MATCH</b><small>One tap. We pair you with the next pilot looking for one.</small>';
+ btn.addEventListener('click',()=>{haptic(12);v93Fire('quickBtn');});
+ grid.parentNode.insertBefore(btn,grid);
+
+ /* The screen a door opens should be named after the door. This one has been called "ENTER THE
+    ARENA" under an eyebrow reading "FRIENDLY AND OPEN PLAY" since before there was a DUEL button to
+    press, and a player who taps DUEL and lands somewhere with neither word on it has to re-read the
+    screen to check they did what they meant to. */
+ const eyebrow=screen.querySelector('.eyebrow');
+ const title=screen.querySelector('h2');
+ if(eyebrow)eyebrow.textContent='WHO ARE YOU PLAYING?';
+ if(title)title.textContent='DUEL';
+}
+
+const v93ShowScreen=showScreen;
+showScreen=function(id){
+ const out=v93ShowScreen(id);
+ if(V93.on&&id==='socialScreen')v93Quick();
+ return out;
+};
+
+/* Built once at load as well as on the first `updateMenu`, because the menu is the screen the game
+   opens on and a player who never triggers an update would otherwise see an empty command block. */
+v93Build();

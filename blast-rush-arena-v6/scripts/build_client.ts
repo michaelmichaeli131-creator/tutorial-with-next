@@ -34,6 +34,7 @@ const STYLESHEETS = [
   "v80-print.css",
   "v88-map.css",
   "v90-again.css",
+  "v93-two.css",
 ];
 
 export async function buildStyles(): Promise<void> {
