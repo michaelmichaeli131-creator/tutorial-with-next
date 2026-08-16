@@ -1,0 +1,726 @@
+/* V92 — THE BLOOM gets somewhere to happen.
+
+   V87's header wrote down the risk and then took it: "the palettes and skylines stay shared, because
+   a map is a cast and a sequence rather than a whole new renderer." That was the right call to ship
+   the machinery on, and it is the wrong thing to leave standing. As it is, a player who beats fifteen
+   stages and unlocks a second map walks into a place called SEEDBED and finds map one's nebula over
+   map one's city skyline, with new monsters in front of it. Six new creatures cannot carry a world on
+   their own — the screen is nine parts background — and the exact sentence V87 was worried about
+   ("the kind of detail that quietly tells a player the second map is a reskin") is what the second
+   map currently says out loud.
+
+   ---- Nothing here is a new renderer ----
+
+   V26 already parameterised all of this and it is worth saying how well, because it is why this part
+   is data and six painters rather than a rewrite. `V26_SCENERY` is a table of six, one per world,
+   naming a sky body, a skyline, and the four colours that decide the mood: `sun`, `haze`, `horizon`
+   and an optional `mid`. `V26_SKYLINES` is a plain object of named painter functions, so a new
+   silhouette is a new key. `v26SkyBody` switches on a kind. The colours the creatures are lit by come
+   from `worlds[i]`.
+
+   So a second map's world is: six scenery rows, six painters, two sky bodies, six palettes, and a
+   swap on install. No drawing code in the arena changes, and map one is byte-for-byte what it was —
+   its rows are snapshotted at load and put back when you travel home.
+
+   ---- The one trap, and it is a real one ----
+
+   V26 caches every pre-rendered layer and every full-screen gradient, keyed by **world index**:
+   `sky-line|0|1|390x148|3` and `sky|0|844`. Index 0 is SEEDBED on one map and NEBULA FORGE on the
+   other. Swapping the table without clearing those caches leaves the Legion's foundry towers standing
+   on the Bloom's ground, painted once and then never questioned again, because a cache hit does not
+   re-read the table it was built from. Both maps are cleared on every install.
+
+   ---- Six places, and why they are six different shapes ----
+
+   The temptation with a forest is six kinds of tree, which is one shape six times. Each of these is
+   built to have a different silhouette at a glance, because the skyline is what a player reads
+   peripherally while looking at the middle of the screen:
+
+     SEEDBED       low mounds and thin sprouts. Ground-hugging, mostly sky — deliberately the
+                   emptiest horizon in the game, so arriving here reads as an opening.
+     THE THICKET   crossing thorn arches. No verticals at all; the shape is tangle.
+     ASH ROWS      burnt stumps on a regular pitch. The only skyline with a rhythm, because the
+                   name is the mechanic: something planted these in rows and then it burned.
+     HEARTWOOD     three trunks across the whole width, cut faces showing rings. Scale contrast —
+                   after four worlds of small things, one thing that does not fit on screen.
+     DEEP LOAM     inverted: roots hanging from above, caps below. The only ceiling in the game.
+     THE CANOPY    overlapping leaf lobes filling from below with light between them. The only
+                   skyline you are looking up through rather than at.
+
+   Three new sky bodies and two of map one's reused, which is not the split this part started with.
+   The plan was two new and three reused, on the assumption that `v26SkyBody` keying its cache on
+   `w.accent` and `w.enemy` meant a reused body would repaint in the new world's colours. Photographed,
+   it does not: `eclipse` and `sun` read their colours from `scene`, but `giant` hardcodes its own
+   teal — `lit(R,'#0d3a44','#4fd6c0')` and five teal storm bands — so HEARTWOOD, a world lit amber
+   from end to end, had a blue-green gas giant hanging in it. A cache key that includes a colour is
+   not the same as a painter that uses it. HEARTWOOD got its own body instead, and it is a better one
+   than the reuse would have been: a cut face with growth rings in the sky, answering the rings on
+   the trunks below. */
+
+/* ---- The palettes -------------------------------------------------------------------------------
+
+   `enemy` is not just the nebula's second colour: V81 pulls every creature's hue halfway towards
+   `worlds[world].enemy`, so this table is also what the cast is lit by. The Bloom's greens are
+   therefore given to the GROUND and the golds and corals to `enemy`, not the other way round —
+   creatures the colour of the world they stand in is the exact failure V81 was written to fix, and
+   the monochrome test at the end of this pass is what confirms it did not come back. */
+
+const V92_BLOOM_WORLDS=[
+ {bg:['#04100b','#123d24'],accent:'#8dff9e',enemy:'#ffd45e',boss:'THE FIRST SEED'},
+ {bg:['#06090f','#1d3014'],accent:'#b6ff5e',enemy:'#ff7a3d',boss:'THE THORN CROWN'},
+ {bg:['#0d0806','#3a2114'],accent:'#ffb46b',enemy:'#ff5a4d',boss:'THE LAST STANDING'},
+ {bg:['#0a0603','#46280c'],accent:'#ffc861',enemy:'#ff6fae',boss:'HEARTWOOD ITSELF'},
+ {bg:['#04030a','#241040'],accent:'#b98cff',enemy:'#55f0c8',boss:'THE DEEP MYCELIUM'},
+ {bg:['#030c07','#0f4a2c'],accent:'#7dffcf',enemy:'#ffe066',boss:'WHAT THE CANOPY HIDES'}
+];
+
+const V92_BLOOM_SCENERY=[
+ {sky:'bloomhead',skyline:'seedbed',  sun:'#d8ffb0',haze:'#4fb36a',horizon:'#0d2a18',sx:.76,sy:.23,ss:.60},
+ {sky:'veiled',   skyline:'bramble',  sun:'#e8ffc0',haze:'#4f8f2c',horizon:'#101f0c',sx:.26,sy:.20,ss:.56},
+ /* The burnt world keeps map one's sun because a sun is what burned it, and gets its own `mid` for
+    the same reason SOLAR TEMPLE needed one: an orange sky that meets an orange ground with nothing
+    between them loses the horizon, and the horizon is where the skyline has to read. */
+ {sky:'sun',      skyline:'ashrow',   sun:'#ffd0a0',haze:'#c46a35',horizon:'#2e150a',sx:.72,sy:.25,ss:.68,mid:'#2b1a12'},
+ {sky:'ringed',   skyline:'heartwood',sun:'#ffe3a8',haze:'#b8792c',horizon:'#3a1f07',sx:.78,sy:.21,ss:.80},
+ {sky:'eclipse',  skyline:'loam',     sun:'#ddc6ff',haze:'#7b4bd0',horizon:'#180a30',sx:.5, sy:.24,ss:.62},
+ {sky:'veiled',   skyline:'canopy',   sun:'#eaffd0',haze:'#35a86e',horizon:'#0a3320',sx:.22,sy:.19,ss:.66}
+];
+
+/* Snapshotted rather than reconstructed, so map one is exactly what it was rather than what this
+   part believes it was. Taken at load, which is after V87's install has run and rewritten the world
+   NAMES — names are V87's to own and are deliberately not copied here. */
+const V92_HOME_WORLDS=worlds.map((w)=>({bg:w.bg.slice(),accent:w.accent,enemy:w.enemy,boss:w.boss}));
+const V92_HOME_SCENERY=V26_SCENERY.map((s)=>({...s}));
+
+function v92Apply(mapIndex){
+ const bloom=mapIndex===1;
+ const pal=bloom?V92_BLOOM_WORLDS:V92_HOME_WORLDS;
+ const scn=bloom?V92_BLOOM_SCENERY:V92_HOME_SCENERY;
+ for(let i=0;i<worlds.length;i++){
+  const p=pal[i%pal.length];
+  worlds[i].bg=p.bg.slice();
+  worlds[i].accent=p.accent;
+  worlds[i].enemy=p.enemy;
+  worlds[i].boss=p.boss;
+  /* Replaced rather than assigned over: `mid` is present on some rows and absent on others, and
+     Object.assign would leave a stale `mid` from the row underneath. Nothing captures a scenery row
+     across frames — `drawBackground` reads `V26_SCENERY[index]` every frame — so replacing the
+     element is safe and copying it is not enough. */
+  V26_SCENERY[i]={...scn[i%scn.length]};
+ }
+ /* See the header: these are keyed by world INDEX, which means the same key names two different
+    places once a second map exists. */
+ if(typeof v26Layers!=='undefined')v26Layers.clear();
+ if(typeof v26Fills!=='undefined')v26Fills.clear();
+ /* V81 caches the converged creature colours per world, and every one of them was converged towards
+    an `enemy` that has just changed. */
+ if(typeof v81SkinCache!=='undefined'){v81SkinCache=null;v81SkinWorld=-1;}
+}
+
+/* ---- The sky bodies -----------------------------------------------------------------------------
+
+   Wrapped rather than edited into V26's own switch, which keeps the two new ones and the reasoning
+   for them in the part that needs them. Falls through for every kind it does not own, so map one's
+   five bodies are reached by exactly the code that always reached them. */
+
+const V92_BODIES=['bloomhead','veiled','ringed'];
+const v92SkyBody=v26SkyBody;
+v26SkyBody=function(kind,size,w,scene){
+ if(V92_BODIES.indexOf(kind)<0)return v92SkyBody(kind,size,w,scene);
+ return v26Layer(`sky|${kind}|${Math.round(size)}|${w.accent}|${w.enemy}|${DPR}`,size,size,(c,S)=>{
+  const cx=S/2,cy=S*.5,R=S*.3;
+  const glow=c.createRadialGradient(cx,cy,R*.85,cx,cy,S*.5);
+  glow.addColorStop(0,scene.haze+'4a');
+  glow.addColorStop(.5,scene.haze+'14');
+  glow.addColorStop(1,scene.haze+'00');
+  c.fillStyle=glow;c.fillRect(0,0,S,S);
+
+  if(kind==='bloomhead'){
+   /* A seed head hanging into frame on a stalk that leaves the top of the screen. The stalk is what
+      makes it an object in the world rather than a light in the sky, and it is the reason this body
+      sits high and to one side in every scenery row that uses it: a stalk that starts below the top
+      edge reads as a balloon. */
+   /* Photographed first as a single dark stroke and it was not there: `#0a2416` against a sky whose
+      own colour is `#04100b` is one shade of near-black on another, so the head read as a lollipop
+      floating with nothing holding it. Drawn twice — the dark body, then a lit edge down one side
+      from the same direction the head is lit from. A silhouette needs something behind it or
+      something on it, and a stalk crossing an empty sky has neither. */
+   const stalk=(width,style)=>{
+    c.strokeStyle=style;
+    c.lineWidth=Math.max(1,S*width);
+    c.lineCap='round';
+    c.beginPath();
+    c.moveTo(cx+S*.06,-2);
+    c.quadraticCurveTo(cx+S*.10,cy-R*1.5,cx,cy-R*.86);
+    c.stroke();
+   };
+   stalk(.034,'#0a2416');
+   c.save();
+   c.globalCompositeOperation='lighter';
+   c.translate(-S*.009,0);
+   stalk(.013,scene.sun+'55');
+   c.restore();
+
+   /* The head: lit from the upper left like every other body in this table, so the whole game agrees
+      about where the light is. */
+   const g=c.createRadialGradient(cx-R*.45,cy-R*.5,R*.05,cx,cy,R);
+   g.addColorStop(0,'#ffffff');
+   g.addColorStop(.18,scene.sun);
+   g.addColorStop(.62,w.accent+'aa');
+   g.addColorStop(1,'#05130c');
+   c.fillStyle=g;
+   c.beginPath();c.arc(cx,cy,R,0,Math.PI*2);c.fill();
+
+   /* Seams. Without them this is a green sphere, and a green sphere in the sky of a space game is a
+      planet however it is coloured — the whole point of putting a seed head up there is that it is
+      not one. Five curves from crown to base, spaced by their cosine so they crowd towards the limb
+      the way segments on anything round actually do, clipped to the body. */
+   c.save();
+   c.beginPath();c.arc(cx,cy,R,0,Math.PI*2);c.clip();
+   for(let i=0;i<5;i++){
+    const k=-1+ (i+.5)/5*2;
+    const off=Math.sin(k*Math.PI*.5)*R;
+    c.strokeStyle='#04120a55';
+    c.lineWidth=Math.max(1,R*.045);
+    c.beginPath();
+    c.moveTo(cx+off*.12,cy-R*1.02);
+    c.quadraticCurveTo(cx+off,cy,cx+off*.12,cy+R*1.02);
+    c.stroke();
+   }
+   c.restore();
+
+   /* Filaments drooping off the underside, each ending in a lit tip. Drawn dark first and lit at the
+      tip only: a fully additive fringe turns the body into a starburst and loses the sphere. */
+   const rnd=v26Rand(41);
+   for(let i=0;i<11;i++){
+    const a=Math.PI*.12+ (i/10)*Math.PI*.76;
+    const ox=cx+Math.cos(a)*R*.92,oy=cy+Math.sin(a)*R*.92;
+    const len=R*(.34+rnd()*.5);
+    const sway=(rnd()-.5)*R*.4;
+    c.strokeStyle='#0b2a19';
+    c.lineWidth=Math.max(1,R*.035);
+    c.beginPath();
+    c.moveTo(ox,oy);
+    c.quadraticCurveTo(ox+sway,oy+len*.6,ox+sway*1.4,oy+len);
+    c.stroke();
+    c.save();
+    c.globalCompositeOperation='lighter';
+    c.fillStyle=w.enemy+'cc';
+    c.beginPath();c.arc(ox+sway*1.4,oy+len,Math.max(1.2,R*.045),0,Math.PI*2);c.fill();
+    c.restore();
+   }
+   /* Spores leaving it. Three, not thirty — this is a landmark, not weather. */
+   c.save();
+   c.globalCompositeOperation='lighter';
+   c.fillStyle=scene.sun+'66';
+   for(let i=0;i<3;i++){
+    c.beginPath();
+    c.arc(cx+(rnd()-.5)*S*.5,cy+R*(1.2+rnd()*.8),Math.max(1,R*.03),0,Math.PI*2);
+    c.fill();
+   }
+   c.restore();
+   return;
+  }
+
+  if(kind==='ringed'){
+   /* HEARTWOOD's sky: a cut face. Growth rings on a disc, off-centre, with one split running from
+      the heart to the edge — the same drawing the trunks on the ground carry, at the scale of a
+      moon. The point is that the world's landmark and its architecture are the same object seen
+      twice, which is a thing a place does and a backdrop does not. */
+   const g=c.createRadialGradient(cx-R*.4,cy-R*.45,R*.05,cx,cy,R);
+   g.addColorStop(0,scene.sun);
+   g.addColorStop(.35,'#c98a3e');
+   g.addColorStop(.78,'#6b3f16');
+   g.addColorStop(1,'#1a0d04');
+   c.fillStyle=g;
+   c.beginPath();c.arc(cx,cy,R,0,Math.PI*2);c.fill();
+
+   c.save();
+   c.beginPath();c.arc(cx,cy,R,0,Math.PI*2);c.clip();
+   /* The heart sits off centre, because rings are only legible as rings when they are not
+      concentric with the outline that contains them. */
+   const hx=cx-R*.22,hy=cy+R*.16;
+   const rnd=v26Rand(53);
+   for(let i=1;i<=11;i++){
+    const rr=R*(i/11)*1.35;
+    c.strokeStyle=(i%3===0?scene.sun+'44':'#00000038');
+    c.lineWidth=Math.max(.8,R*(i%3===0?.012:.022));
+    c.beginPath();
+    c.ellipse(hx,hy,rr,rr*(.9+rnd()*.16),.2,0,Math.PI*2);
+    c.stroke();
+   }
+   /* The split. One, from the heart outward, widening as it goes. */
+   c.fillStyle='#120802cc';
+   c.beginPath();
+   c.moveTo(hx,hy);
+   c.lineTo(cx+R*1.4,cy-R*.75);
+   c.lineTo(cx+R*1.4,cy-R*.42);
+   c.closePath();c.fill();
+   c.restore();
+
+   /* Sap at the heart, the one warm light, matching the sap on the trunks. */
+   c.save();
+   c.globalCompositeOperation='lighter';
+   const sap=c.createRadialGradient(cx-R*.22,cy+R*.16,0,cx-R*.22,cy+R*.16,R*.3);
+   sap.addColorStop(0,w.enemy+'66');
+   sap.addColorStop(1,'transparent');
+   c.fillStyle=sap;
+   c.beginPath();c.arc(cx-R*.22,cy+R*.16,R*.3,0,Math.PI*2);c.fill();
+   c.restore();
+   return;
+  }
+
+  /* 'veiled' — a pale moon with leaves crossing in front of it. The leaves are the point: they are
+     the only thing in the sky that says the player is UNDER something, which is what separates a
+     forest from a field, and they cost four filled curves. */
+  const g=c.createRadialGradient(cx-R*.42,cy-R*.5,R*.05,cx,cy,R);
+  g.addColorStop(0,'#ffffff');
+  g.addColorStop(.22,scene.sun);
+  g.addColorStop(.72,scene.haze+'88');
+  g.addColorStop(1,'#040a06');
+  c.fillStyle=g;
+  c.beginPath();c.arc(cx,cy,R,0,Math.PI*2);c.fill();
+
+  /* Craters before the leaves, clipped to the disc, so the leaves sit on top of a body rather than
+     on top of a flat circle. */
+  c.save();
+  c.beginPath();c.arc(cx,cy,R,0,Math.PI*2);c.clip();
+  const crnd=v26Rand(23);
+  c.fillStyle='#00000022';
+  for(let i=0;i<6;i++){
+   c.beginPath();
+   c.arc(cx+(crnd()-.5)*R*1.5,cy+(crnd()-.5)*R*1.5,R*(.06+crnd()*.13),0,Math.PI*2);
+   c.fill();
+  }
+  c.restore();
+
+  /* Photographed at len up to 1.9R and width .12R and they read as blades slashing across the sky —
+     a thin dark sliver longer than the thing it crosses is a scratch, not a leaf. Shorter, fatter,
+     more of them, and each with a midrib, which is the one mark that makes a lens shape read as
+     foliage at this size. They still overhang the edge, deliberately: a leaf entirely inside the
+     disc reads as a marking ON the moon rather than as something in front of it. */
+  const lrnd=v26Rand(29);
+  for(let i=0;i<8;i++){
+   const a=-1.15+i*.3+(lrnd()-.5)*.35;
+   const len=R*(.72+lrnd()*.55);
+   const wide=R*(.2+lrnd()*.16);
+   const ox=cx+(lrnd()-.5)*R*1.6;
+   const oy=cy+(lrnd()-.5)*R*1.6;
+   c.save();
+   c.translate(ox,oy);
+   c.rotate(a);
+   c.fillStyle='#030b07dd';
+   c.beginPath();
+   c.moveTo(-len*.5,0);
+   c.quadraticCurveTo(0,-wide,len*.5,0);
+   c.quadraticCurveTo(0,wide,-len*.5,0);
+   c.closePath();c.fill();
+   /* A lit edge on the side facing the light, or the leaves read as holes punched in the moon. */
+   c.strokeStyle=scene.sun+'3a';
+   c.lineWidth=Math.max(.8,R*.016);
+   c.beginPath();
+   c.moveTo(-len*.5,0);
+   c.quadraticCurveTo(0,-wide,len*.5,0);
+   c.stroke();
+   /* The midrib, stopping short of the tip the way a real one does. */
+   c.strokeStyle=scene.sun+'26';
+   c.lineWidth=Math.max(.6,R*.01);
+   c.beginPath();
+   c.moveTo(-len*.44,0);
+   c.lineTo(len*.4,0);
+   c.stroke();
+   c.restore();
+  }
+ });
+};
+
+/* ---- The skylines -------------------------------------------------------------------------------
+
+   Assigned onto V26's table rather than wrapping anything: `V26_SKYLINES` is a plain object looked up
+   by name at paint time, which is the seam it was written with. Each of these is called once per
+   size per world and cached, so they can afford to be more expensive than a per-frame path — and all
+   of them are, deliberately: this is the one place in the game where detail is free.
+
+   Every painter takes (c,w,h,pal,rnd,near). `rnd` is V26's seeded generator, so a repaint after a
+   rotation produces the skyline the player was just looking at rather than a new one. `near` is the
+   front range, which is bigger, darker and scrolls faster. */
+
+/* A leaf: pointed where it joins the stem, blunt at the far end, fattest past the middle.
+
+   Written first as a symmetric lens — a point at BOTH ends — and photographed hanging off the canopy
+   it read as a cave full of stalactites. A shape that tapers to a point at the end furthest from
+   what holds it is a spike; the asymmetry is the entire difference, and it costs one bezier over one
+   quadratic. Width matters as much: past about three to one, any silhouette reads as a spine
+   whatever its ends are doing, so callers pass fat. */
+function v92Leaf(c,len,wide){
+ c.beginPath();
+ c.moveTo(0,0);
+ c.bezierCurveTo(len*.28,-wide,len*.8,-wide*.86,len,-wide*.1);
+ c.bezierCurveTo(len*.8,wide*.86,len*.28,wide,0,0);
+ c.closePath();
+ c.fill();
+}
+
+V26_SKYLINES.seedbed=function(c,w,h,pal,rnd,near){
+ /* Mounds first, as one continuous ground line rather than separate humps: a row of discrete bumps
+    reads as objects sitting on a floor, and this is meant to read as the floor itself. */
+ c.fillStyle=near?'#03150d':'#072319';
+ c.beginPath();
+ c.moveTo(-10,h);
+ let x=-10;
+ while(x<w+10){
+  const step=h*(near?.5:.36)*(.7+rnd()*.9);
+  const rise=h*(near?.3:.2)*(.35+rnd()*.8);
+  c.quadraticCurveTo(x+step*.5,h-rise,x+step,h-rise*.35);
+  x+=step;
+ }
+ c.lineTo(w+10,h);
+ c.closePath();
+ c.fill();
+
+ /* Sprouts. Thin, tall relative to the mounds, and topped with a pod that carries the world's
+    colour — out here the pods are the only light, which is the same rule map one's garden used and
+    the reason these two worlds read as related rather than identical. */
+ x=-6;
+ while(x<w+6){
+  const th=h*(near?.62:.44)*(.35+rnd()*.9);
+  const lean=(rnd()-.5)*h*.16;
+  const base=h-h*(near?.16:.1)*rnd();
+  c.strokeStyle=near?'#03150d':'#072319';
+  c.lineWidth=Math.max(1,h*(near?.014:.009));
+  c.beginPath();
+  c.moveTo(x,base);
+  c.quadraticCurveTo(x+lean*.4,base-th*.6,x+lean,base-th);
+  c.stroke();
+  c.save();
+  c.globalCompositeOperation='lighter';
+  c.fillStyle=pal.accent+(near?'66':'3a');
+  c.beginPath();
+  c.ellipse(x+lean,base-th,Math.max(1.2,h*(near?.02:.014)),Math.max(1.6,h*(near?.032:.022)),lean*.02,0,Math.PI*2);
+  c.fill();
+  c.restore();
+  x+=h*(near?.14:.09)*(.5+rnd());
+ }
+};
+
+V26_SKYLINES.bramble=function(c,w,h,pal,rnd,near){
+ /* No trunks and no baseline: arches springing from the floor and landing back on it, crossing each
+    other. Tangle is the silhouette, so the arches are drawn as thick strokes that overlap rather
+    than as filled shapes that would merge into one mass. */
+ const ink=near?'#050d04':'#0b1608';
+ const arcs=[];
+ let x=-h*.4;
+ while(x<w+h*.4){
+  const span=h*(near?1.0:.7)*(.6+rnd()*.9);
+  const rise=h*(near?.86:.6)*(.45+rnd()*.7);
+  arcs.push([x,span,rise]);
+  x+=h*(near?.34:.24)*(.5+rnd());
+ }
+ c.lineCap='round';
+ for(const [ax,span,rise] of arcs){
+  c.strokeStyle=ink;
+  c.lineWidth=Math.max(1.6,h*(near?.038:.024));
+  c.beginPath();
+  c.moveTo(ax,h+2);
+  c.quadraticCurveTo(ax+span*.5,h-rise,ax+span,h+2);
+  c.stroke();
+  /* Thorns along the outside of each arch. Placed by walking the curve so they point away from it —
+     spikes on a random tangent are the difference between a bramble and a scribble. */
+  const n=near?7:5;
+  for(let i=1;i<n;i++){
+   const t=i/n;
+   const px=(1-t)*(1-t)*ax+2*(1-t)*t*(ax+span*.5)+t*t*(ax+span);
+   const py=(1-t)*(1-t)*(h+2)+2*(1-t)*t*(h-rise)+t*t*(h+2);
+   const dx=2*(1-t)*(span*.5)+2*t*(span*.5);
+   const dy=2*(1-t)*(-rise-2)+2*t*(rise+2);
+   const m=Math.hypot(dx,dy)||1;
+   const len=h*(near?.07:.045)*(.6+rnd()*.8);
+   c.strokeStyle=ink;
+   c.lineWidth=Math.max(1,h*(near?.014:.009));
+   c.beginPath();
+   c.moveTo(px,py);
+   c.lineTo(px-dy/m*len,py+dx/m*len);
+   c.stroke();
+  }
+  /* One bud per arch, at the crown, and only sometimes. Light in a thicket has to be scarce or the
+     tangle stops reading as dense. */
+  if(rnd()<.45){
+   c.save();
+   c.globalCompositeOperation='lighter';
+   c.fillStyle=pal.accent+(near?'55':'30');
+   c.beginPath();
+   c.arc(ax+span*.5,h-rise*.5,Math.max(1.2,h*(near?.02:.013)),0,Math.PI*2);
+   c.fill();
+   c.restore();
+  }
+ }
+};
+
+V26_SKYLINES.ashrow=function(c,w,h,pal,rnd,near){
+ /* The regular pitch is the whole idea and it is the only regular thing in six worlds, so the jitter
+    on the spacing is deliberately tiny — enough that it is not a comb, not enough to lose the row. */
+ const pitch=h*(near?.30:.21);
+ let x=-pitch;
+ while(x<w+pitch){
+  const th=h*(near?.66:.46)*(.55+rnd()*.5);
+  /* Widened from .05: at the first width these photographed as a picket fence of spikes rather than
+     as stumps. A stump is short and thick relative to what it used to be, and the ratio is the only
+     thing carrying that. */
+  const tw=Math.max(3,h*(near?.085:.058)*(.75+rnd()*.5));
+  const lean=(rnd()-.5)*h*.06;
+  c.save();
+  c.translate(x+(rnd()-.5)*pitch*.16,h);
+  c.fillStyle=near?'#0b0705':'#171009';
+  /* Snapped off rather than tapered to a point: these were cut or burned through, and a broken top
+     is a diagonal with a splinter, not a cone. */
+  c.beginPath();
+  c.moveTo(-tw,0);
+  c.lineTo(-tw*.7+lean,-th);
+  c.lineTo(lean+tw*.1,-th*(.82+rnd()*.12));
+  c.lineTo(tw*.7+lean,-th*.94);
+  c.lineTo(tw,0);
+  c.closePath();c.fill();
+  /* Embers still in the stump. On the near range only: two ranges of glowing dots is a starfield at
+     ground level. */
+  if(near&&rnd()<.5){
+   c.save();
+   c.globalCompositeOperation='lighter';
+   c.fillStyle=pal.enemy+'55';
+   for(let i=0;i<2;i++){
+    c.beginPath();
+    c.arc(lean+(rnd()-.5)*tw,-th*(.3+rnd()*.5),Math.max(1,h*.012),0,Math.PI*2);
+    c.fill();
+   }
+   c.restore();
+  }
+  c.restore();
+  /* Smoke: one thin rising line off some of them, fading out. Vertical against a horizon of
+     verticals, so it is kept faint and sparse and reads as air rather than as more stumps. */
+  if(rnd()<.28){
+   c.save();
+   c.globalAlpha=near?.16:.1;
+   c.strokeStyle=pal.accent;
+   c.lineWidth=Math.max(1,h*.008);
+   c.beginPath();
+   c.moveTo(x,h-th*.9);
+   c.quadraticCurveTo(x+h*.06,h-th*1.4,x-h*.03,h-th*1.9);
+   c.stroke();
+   c.restore();
+  }
+  x+=pitch;
+ }
+};
+
+V26_SKYLINES.heartwood=function(c,w,h,pal,rnd,near){
+ /* Three trunks across the entire width on the near range. After four worlds of things that fit on
+    screen, one that does not is the cheapest scale cue there is, and the ring faces are what make
+    the size legible — a shape with no detail on it has no size. */
+ const count=near?3:5;
+ const pitch=w/count;
+ for(let i=0;i<=count;i++){
+  const cxT=i*pitch+(rnd()-.5)*pitch*.3;
+  const tw=pitch*(near?.42:.3)*(.7+rnd()*.5);
+  c.fillStyle=near?'#100802':'#1c1206';
+  c.beginPath();
+  c.moveTo(cxT-tw,h);
+  c.quadraticCurveTo(cxT-tw*.72,h*.4,cxT-tw*.56,-2);
+  c.lineTo(cxT+tw*.56,-2);
+  c.quadraticCurveTo(cxT+tw*.72,h*.4,cxT+tw,h);
+  c.closePath();c.fill();
+  /* Growth rings, drawn as nested arcs on the lit side of the trunk and clipped to it. Concentric
+     ellipses centred on the trunk would read as a target; offset to one edge they read as a cut. */
+  c.save();
+  c.beginPath();
+  c.moveTo(cxT-tw,h);
+  c.quadraticCurveTo(cxT-tw*.72,h*.4,cxT-tw*.56,-2);
+  c.lineTo(cxT+tw*.56,-2);
+  c.quadraticCurveTo(cxT+tw*.72,h*.4,cxT+tw,h);
+  c.closePath();
+  c.clip();
+  /* First version drew nested ellipses whose vertical radius grew as `h*.5*r*.5` — by the third
+     ring that is taller than the strip, so five of the six were entirely off the sprite and the
+     one that showed was a faint arc at 13% alpha. Photographed as flat dark columns.
+
+     Concentric arcs about a heart just OUTSIDE the trunk's near edge, stepping by a fixed fraction
+     of the trunk's own width, so every ring lands on the trunk and the curvature reads as a cut
+     face turned slightly away rather than as a target painted on a post. */
+  const hx=cxT-tw*1.05,hy=h*.55;
+  for(let r=1;r<=9;r++){
+   const rr=tw*.34*r;
+   c.strokeStyle=r%3===0?pal.accent+(near?'3a':'22'):'#00000044';
+   c.lineWidth=Math.max(1,h*(r%3===0?.006:.011));
+   c.beginPath();
+   c.ellipse(hx,hy,rr,rr*1.35,0,-Math.PI*.55,Math.PI*.55);
+   c.stroke();
+  }
+  c.restore();
+  /* Sap, running down from a split. The one warm light in a world lit gold, so it uses `enemy`
+     rather than `accent` and stays on the near range. */
+  if(near&&rnd()<.7){
+   c.save();
+   c.globalCompositeOperation='lighter';
+   c.strokeStyle=pal.enemy+'44';
+   c.lineWidth=Math.max(1.2,h*.01);
+   const sx=cxT+(rnd()-.5)*tw*.8;
+   c.beginPath();
+   c.moveTo(sx,h*(.1+rnd()*.3));
+   c.quadraticCurveTo(sx+h*.02,h*.6,sx-h*.01,h*.95);
+   c.stroke();
+   c.restore();
+  }
+ }
+};
+
+V26_SKYLINES.loam=function(c,w,h,pal,rnd,near){
+ /* Upside down, and it is the only one. Roots come DOWN from the top of the strip, which puts the
+    dark mass where every other world puts sky and is why this world feels like being underneath
+    something even before the caps below are read. */
+ c.fillStyle=near?'#0a0518':'#140a26';
+ c.beginPath();
+ c.moveTo(-10,-2);
+ let x=-10;
+ while(x<w+10){
+  const step=h*(near?.34:.24)*(.6+rnd()*.9);
+  const drop=h*(near?.5:.34)*(.3+rnd()*.9);
+  c.quadraticCurveTo(x+step*.5,drop,x+step,drop*.35);
+  x+=step;
+ }
+ c.lineTo(w+10,-2);
+ c.closePath();
+ c.fill();
+
+ /* Individual roots hanging past the mass, tapering to a point. Drawn as strokes with a decreasing
+    width rather than as filled triangles, because a root that bends has to keep its thickness
+    through the bend. */
+ x=-6;
+ while(x<w+6){
+  const len=h*(near?.78:.55)*(.4+rnd()*.8);
+  const sway=(rnd()-.5)*h*.2;
+  const top=h*(near?.2:.14)*rnd();
+  c.strokeStyle=near?'#0a0518':'#140a26';
+  for(const [k,wid] of [[1,.026],[.66,.016],[.33,.008]]){
+   c.lineWidth=Math.max(1,h*(near?wid:wid*.66));
+   c.lineCap='round';
+   c.beginPath();
+   c.moveTo(x,top);
+   c.quadraticCurveTo(x+sway*.4,top+len*k*.6,x+sway*k,top+len*k);
+   c.stroke();
+  }
+  x+=h*(near?.12:.08)*(.5+rnd());
+ }
+
+ /* Fungal caps on the floor, the only light source down here. Domes rather than discs, and lit at
+    the crown only, so they sit on the ground instead of floating. */
+ x=-4;
+ while(x<w+4){
+  const cw=h*(near?.09:.06)*(.5+rnd()*1.1);
+  const ch=cw*(.5+rnd()*.35);
+  c.save();
+  c.globalCompositeOperation='lighter';
+  c.fillStyle=pal.accent+(near?'44':'26');
+  c.beginPath();
+  c.ellipse(x,h,cw,ch,0,Math.PI,Math.PI*2);
+  c.fill();
+  c.fillStyle=pal.enemy+(near?'55':'2e');
+  c.beginPath();
+  c.ellipse(x,h-ch*.45,cw*.34,ch*.3,0,Math.PI,Math.PI*2);
+  c.fill();
+  c.restore();
+  x+=h*(near?.2:.13)*(.5+rnd());
+ }
+};
+
+V26_SKYLINES.canopy=function(c,w,h,pal,rnd,near){
+ /* First version grew leaves up off stems standing on the floor and photographed as tall ferns — a
+    handsome skyline and the wrong one twice over: it is not what a canopy is, and it was built from
+    the same primitive as SEEDBED's sprouts, so two of six worlds shared a silhouette.
+
+    Hung from above instead, like DEEP LOAM's roots and for the same reason: this is a world you are
+    underneath. What separates it from loam is mass — broad overlapping lobes with holes between them
+    rather than thin strands — and the holes are the actual subject, because what a canopy does to a
+    place is let light through in patches. */
+ const ink=near?'#02120a':'#062018';
+
+ /* Shafts first, so the leaves drawn over them do the occluding. Placing dapple by hand means
+    guessing where the gaps ended up; letting the canopy cast it means the light is in the gaps by
+    construction. */
+ c.save();
+ c.globalCompositeOperation='lighter';
+ for(let i=0;i<(near?5:7);i++){
+  const sx=rnd()*w;
+  const spread=h*(near?.3:.2);
+  const g=c.createLinearGradient(sx,0,sx+spread*.6,h);
+  g.addColorStop(0,pal.accent+(near?'2e':'1c'));
+  g.addColorStop(1,'transparent');
+  c.fillStyle=g;
+  c.beginPath();
+  c.moveTo(sx-spread*.1,0);
+  c.lineTo(sx+spread*.1,0);
+  c.lineTo(sx+spread*.75,h);
+  c.lineTo(sx+spread*.25,h);
+  c.closePath();c.fill();
+ }
+ c.restore();
+
+ /* The mass along the top: one continuous edge, so the lobes below read as hanging off something
+    rather than as free-floating leaves. */
+ c.fillStyle=ink;
+ c.beginPath();
+ c.moveTo(-10,-2);
+ let x=-10;
+ while(x<w+10){
+  const step=h*(near?.44:.3)*(.6+rnd()*.8);
+  const drop=h*(near?.42:.3)*(.35+rnd()*.9);
+  c.quadraticCurveTo(x+step*.5,drop,x+step,drop*.4);
+  x+=step;
+ }
+ c.lineTo(w+10,-2);
+ c.closePath();c.fill();
+
+ /* Lobes hanging off the mass, three per hanger, fanned downward. The middle one is longest, which
+    is what a compound leaf does and what stops the fan reading as a hand. */
+ x=-h*.2;
+ while(x<w+h*.2){
+  const from=h*(near?.2:.14)*rnd();
+  for(const [ang,scale] of [[.95,.82],[1.4,1],[1.95,.8]]){
+   c.save();
+   c.translate(x,from);
+   c.rotate(ang+(rnd()-.5)*.28);
+   c.fillStyle=ink;
+   /* Broad and short: roughly two and a half to one, against the four to one of the first pass. */
+   const len=h*(near?.5:.35)*scale*(.7+rnd()*.5);
+   v92Leaf(c,len,h*(near?.28:.19)*scale);
+   /* A midrib, and it is doing more work than its one line suggests. Broad blunt lobes in
+      silhouette read as rock as readily as they read as foliage — the same shape makes a cave
+      ceiling — and a single line down the length of each one is the cue that settles it. Lighter
+      than the leaf rather than darker, because a dark line on a dark shape is nothing. */
+   c.strokeStyle=near?'#0a2a1a':'#0e3327';
+   c.lineWidth=Math.max(.8,h*.006);
+   c.beginPath();
+   c.moveTo(len*.04,0);
+   c.lineTo(len*.82,-h*.004);
+   c.stroke();
+   c.restore();
+  }
+  /* Spaced wider than the lobes are broad, so the light drawn underneath still has somewhere to
+     come through. The first pass overlapped them into one unbroken ceiling and lost the gaps,
+     which are the subject. */
+  x+=h*(near?.46:.31)*(.65+rnd());
+ }
+};
+
+/* ---- Installed with the map ---------------------------------------------------------------------
+
+   Wrapped rather than folded into V87, so the map machinery keeps knowing only about casts and stage
+   lists and this part owns everything about how a place looks. The direct call underneath is not
+   belt-and-braces: V87 and V89 both run `v87Install` at load, which is before this file exists, so
+   without it the first paint of a saved Bloom save would be map one's world. */
+
+const v92Install=v87Install;
+v87Install=function(index,announce){
+ const out=v92Install(index,announce);
+ v92Apply(index);
+ return out;
+};
+
+v92Apply(typeof v87State==='object'&&v87State?v87State.map:0);
