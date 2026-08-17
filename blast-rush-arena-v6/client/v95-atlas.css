@@ -1,0 +1,159 @@
+/* V95 — the map wears the worlds it leads to.
+
+   Bands and horizons are built in 03zzzq.part; this file positions them, and restyles the nodes and
+   the path now that there is something behind them to be legible against. */
+
+.v95-band {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 0;
+  pointer-events: none;
+  /* Rounded only at the extreme ends of the track — every interior edge is a seam with the next
+     world and has to be flush, or the map reads as a stack of cards instead of a descent. */
+  border-radius: 0;
+}
+
+.v95-band:first-child { border-radius: 20px 20px 0 0; }
+
+/* Height is set inline from the part, so the base of the towers lands exactly on the band boundary
+   at every screen size. */
+.v95-ridge {
+  position: absolute;
+  left: 0;
+  z-index: 1;
+  width: 100%;
+  pointer-events: none;
+}
+
+/* The panel's own background would otherwise show through above the first band and below the last.
+   The track carries the ground now, so it needs the corners. */
+.v88-track {
+  border-radius: 20px;
+  overflow: hidden;
+}
+
+/* ---------- The path ----------
+
+   Two strokes for one route: V88's line, and the light it throws. A single 4px stroke on a flat
+   panel read as a wire diagram; over painted ground it needs to look like something walked. */
+
+.v95-road {
+  fill: none;
+  stroke: rgba(255, 214, 120, .16);
+  stroke-width: 15;
+  stroke-linecap: round;
+  filter: blur(3px);
+}
+
+/* Walked turns gold. It was the same cyan as everything else on the screen, which meant the one
+   piece of information the path carries — how far you have come — was told in the colour the UI
+   uses for everything. Gold is used nowhere else on this screen except the stars and the current
+   node, which is exactly the association wanted: gold is yours. */
+.v88-seg.is-walked {
+  stroke: rgba(255, 206, 106, .82);
+  stroke-width: 4.5;
+  filter: drop-shadow(0 0 7px rgba(255, 176, 60, .55));
+}
+
+.v88-seg.is-pending {
+  stroke: rgba(190, 220, 255, .3);
+  stroke-width: 3;
+  stroke-dasharray: 2 10;
+}
+
+/* ---------- Nodes ----------
+
+   `--v95-a` and `--v95-e` are that node's world's accent and enemy colours, set per node from the
+   part. Everything below is the same plate V88 designed, tinted by where it stands. */
+
+.v88-node { --v95-a: #7ed6ff; --v95-e: #945bff; }
+
+/* Cleared: the world's own colour, at full strength. A finished stage should look like it belongs
+   to somewhere. */
+.v88-node.is-cleared .v88-shape {
+  background: var(--v95-a);
+  opacity: .92;
+}
+
+.v88-node.is-cleared .v88-shape-in {
+  background: linear-gradient(168deg, rgba(0, 0, 0, .34) 0%, rgba(2, 6, 16, .82) 46%, rgba(1, 3, 9, .94) 100%);
+}
+
+.v88-node.is-cleared .v88-glyph { color: #eaf5ff; }
+
+/* Locked: still that world's colour, just turned right down. Fourteen identical grey plates told a
+   new player nothing except that the game was mostly shut; fourteen plates that fade from blue
+   through magenta into fire tell them where the next hour goes. */
+/* Attenuated once, not three times. The first pass stacked a 38% mix with saturate(.7),
+   brightness(.8) and opacity .72, and the result was the uniform grey wall it was written to
+   replace — four reductions multiply. A locked stage has to look locked, which the padlock and the
+   missing number already say; the plate's job is to say WHERE. */
+.v88-node.is-locked { opacity: .88; }
+
+.v88-node.is-locked .v88-shape {
+  background: color-mix(in srgb, var(--v95-a) 58%, #16243c);
+  filter: brightness(.86) drop-shadow(0 2px 6px rgba(0, 0, 0, .6));
+}
+
+/* color-mix is recent enough to deserve a floor. Anything that does not understand it keeps V88's
+   original plate, which was never wrong — only uniform. */
+@supports not (background: color-mix(in srgb, red 50%, blue)) {
+  .v88-node.is-locked .v88-shape { background: rgba(140, 175, 215, .26); }
+}
+
+.v88-node.is-locked .v88-shape-in {
+  background: linear-gradient(168deg, rgba(10, 18, 34, .92) 0%, rgba(6, 11, 22, .96) 50%, rgba(3, 5, 11, .98) 100%);
+}
+
+/* Current: the one node asking to be pressed, so it is the one node that moves. Scaled up, ringed in
+   gold, and given a slow breath — on a screen where everything else is still, motion is the whole
+   signal and it does not need to be fast to be found. */
+.v88-node.is-current .v88-shape {
+  background: linear-gradient(180deg, #ffe07a, #ff9d1f);
+  filter: drop-shadow(0 0 16px rgba(255, 176, 48, .6)) drop-shadow(0 4px 10px rgba(0, 0, 0, .7));
+  animation: v95Breathe 2.6s ease-in-out infinite;
+}
+
+.v88-node.is-current .v88-shape-in {
+  background: linear-gradient(168deg, #3a2a06 0%, #1b1303 46%, #0b0801 100%);
+}
+
+.v88-node.is-current .v88-glyph { color: #ffe9ae; }
+
+@keyframes v95Breathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.055); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .v88-node.is-current .v88-shape { animation: none; }
+}
+
+/* ---------- Labels and dividers ---------- */
+
+/* Now that there is a lit sky behind them, stage names need their own ground or they sit in whatever
+   the band happens to be doing at that height. */
+.v88-label b {
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .9), 0 0 10px rgba(0, 0, 0, .65);
+}
+
+.v88-world {
+  color: #cfe6ff;
+  font-size: 9px;
+  letter-spacing: .3em;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, .9);
+}
+
+.v88-world:before, .v88-world:after {
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--v95-a, #7ed6ff) 60%, transparent), transparent);
+  height: 1px;
+}
+
+@supports not (background: color-mix(in srgb, red 50%, blue)) {
+  .v88-world:before, .v88-world:after {
+    background: linear-gradient(90deg, transparent, rgba(126, 214, 255, .4), transparent);
+  }
+}
+
+.v88-stars { text-shadow: 0 1px 3px rgba(0, 0, 0, .9); }
