@@ -1,0 +1,168 @@
+/* V96 — the arena has a bottom, and nothing has ever used it.
+
+   ---- The measurement ----
+
+   Sixty seconds of a competent bot, wave five, 100k points, on a 390x844 phone. Every live hostile
+   binned by where it was on screen, every frame:
+
+     0-  5%   #######################################################  55.2%
+     5- 10%   ###########################                              27.0%
+    10- 15%   ################                                         15.8%
+    15- 20%   ##                                                        2.0%
+    20-100%                                                             0.0%
+
+   **Ninety-eight percent of everything that happens, happens in the top fifth of the screen.** The
+   median kill is one percent of the way down. Six hundred and seventy-five pixels — the planet, the
+   nebula, the skyline V26 spent a whole pass on, the pilot, the reactor — are scenery that no
+   hostile has ever entered. The damage line sits at 87% and nothing has ever been close to it.
+
+   That is not a bug in any part. It is the direct consequence of one fact: **killing a hostile the
+   instant it appears costs exactly the same as killing it anywhere else, so there is never a reason
+   to let anything fall.** Every system in this tree pushes the player to tap sooner — V83's
+   magazine refunds on chains, V84 raises the arrival rate, V63 pays for cascades — and none of them
+   has ever given a single point for nerve.
+
+   This is also, finally, the mechanical root of the owner's oldest complaint. "The game is boring
+   because all you do is press the monsters" is exactly right, and it is right *because the monsters
+   are pressed on arrival*. There is no approach, no build-up, no moment where something is coming
+   and you decide what to do about it. A hostile's entire life is a quarter of a second at the top
+   edge of the glass.
+
+   ---- What this does ----
+
+   A kill is worth more the further it has fallen. One times on arrival, up to three times at the
+   line. Nothing else changes: no new object, no new verb, no new button.
+
+   What it changes is that every hostile is now a question — hold, or take it? — and the answer is
+   different for a lone drifter than for a pack that is forming. Waiting is how a group gathers, a
+   gathered group is what V63's cascade was built for, and a deep cascade is now worth several times
+   a shallow one. Every system already here points at the same play and this is the first one that
+   pays for it.
+
+   The risk is already built and needs nothing added: past the line a hostile costs a life, and V82's
+   pool — everything you have earned this wave, unbanked — burns when you take damage. So holding is
+   a real bet with a real stake, which is what the bottom two thirds of this screen have been
+   waiting for.
+
+   ---- Read as colour, not as a number ----
+
+   No text. V75 cleared the arena of it and the rule stands. A hostile that has fallen far enough to
+   be worth holding grows a gold rim that closes as it ripens — the same vocabulary V76 landed on
+   for its wells, for the same reason: a gauge on the edge of a thing is read without looking at it,
+   and a number floating over a creature is read instead of the creature. Gold, because since V90
+   gold on this screen means yours. */
+
+const V96={
+ on:true,
+ /* No bonus at all in the first third of the fall. This is the load-bearing number: if a hostile
+    picked off on arrival earned anything extra, the whole gradient would just be a scoring tweak.
+    The top of the screen has to be worth exactly one times, so that depth is the only way up. */
+ start:.30,
+ max:3,
+ /* Where the gold rim starts to show. Set to just above `start` after photographing a run: it began
+    at .55 on the theory that a mark appearing the moment the bonus did would put a ring on
+    everything, and the photograph showed the opposite — hostiles are killed at a median depth of
+    56%, so a ring that starts at 55% is a ring nobody ever sees. The reasoning had the population
+    backwards. Almost everything is killed shallow and never marked at all; the few being HELD are
+    exactly the ones the player is thinking about, and they are the ones this is for. */
+ ripe:.34,
+ gold:'#ffd469',
+ hot:'#ffb03c'
+};
+
+function v96Live(){return V96.on&&game.running&&!game.paused;}
+
+/* Depth as a fraction of the fall the hostile actually has to make, not of the screen: the damage
+   line is what the bet is against, and it moves with the device. */
+function v96Depth(o){
+ const line=(typeof v73Line==='function')?v73Line():H;
+ if(!(line>0))return 0;
+ return Math.max(0,Math.min(1,o.y/line));
+}
+
+function v96Mult(o){
+ if(!v96Live()||!o)return 1;
+ /* Bosses and the duel's rival are not falling towards anything — a boss holds station near the top
+    for its whole fight, so a depth bonus on it would be a permanent 1x tax dressed up as a choice. */
+ if(o.type==='rival')return 1;
+ const k=(v96Depth(o)-V96.start)/(1-V96.start);
+ return 1+(V96.max-1)*Math.max(0,Math.min(1,k));
+}
+
+/* ---- Paying it ---------------------------------------------------------------------------------
+
+   `hitOrb` is where a kill becomes points, and it is re-entrant: a cascade kills its neighbours by
+   calling back into it from inside `explode`. So the multiplier is saved and restored around the
+   call rather than assigned, and each link in a chain is scored at its own depth — which is the
+   right answer and not merely the safe one, since the whole point of a deep cascade is that every
+   member of it was held. */
+
+const v96Hit=hitOrb;
+hitOrb=function(o,x,y,chain=false){
+ const outer=game.v96Mult;
+ game.v96Mult=v96Mult(o);
+ try{
+  return v96Hit(o,x,y,chain);
+ }finally{
+  game.v96Mult=outer;
+ }
+};
+
+/* Outermost on `score`, so the multiplied figure is what V82's pool banks and what V75's delta chip
+   shows. A bonus the player cannot see arrive is not a bonus, it is a balance change. */
+const v96Score=score;
+score=function(n,kind,...rest){
+ const m=game.v96Mult;
+ return v96Score((m&&m>1)?Math.round(n*m):n,kind,...rest);
+};
+
+const v96Begin=begin;
+begin=function(mode='solo',seed){
+ const out=v96Begin(mode,seed);
+ game.v96Mult=1;
+ return out;
+};
+
+/* ---- Showing it --------------------------------------------------------------------------------
+
+   Registered as a V19 overlay rather than layered as a `drawOrb` wrapper. That system exists for
+   exactly this and its header says why: wrapping only decorates whichever body renderer happens to
+   be last in the chain, so an installed art pack would silently drop it — and this is a readout,
+   not decoration. */
+
+if(typeof v19OrbOverlays!=='undefined'){
+ v19OrbOverlays.push((o)=>{
+  if(!v96Live()||o.type==='rival'||o.y<=0)return;
+  const depth=v96Depth(o);
+  if(depth<V96.ripe)return;
+  const k=Math.min(1,(depth-V96.ripe)/(1-V96.ripe));
+  const r=o.r*1.34;
+
+  ctx.save();
+  ctx.translate(o.x,o.y);
+  ctx.globalCompositeOperation='lighter';
+
+  /* The gauge: an arc starting at the top and closing clockwise as the hostile ripens. A full gold
+     ring is the moment it is worth three times, and it is the only full ring in the arena. */
+  ctx.strokeStyle=k>.82?V96.hot:V96.gold;
+  ctx.lineWidth=1.4+2.4*k;
+  ctx.lineCap='round';
+  ctx.globalAlpha=.32+.55*k;
+  ctx.beginPath();
+  ctx.arc(0,0,r,-Math.PI/2,-Math.PI/2+Math.PI*2*(.18+.82*k));
+  ctx.stroke();
+
+  /* A soft halo underneath it, so the ripest thing on the field is findable in peripheral vision
+     rather than only when looked at. Cheap: one radial, and only on the few that are ripe. */
+  if(k>.45){
+   ctx.globalAlpha=(k-.45)*.5;
+   const g=ctx.createRadialGradient(0,0,r*.7,0,0,r*1.9);
+   g.addColorStop(0,V96.gold);
+   g.addColorStop(1,'rgba(255,212,105,0)');
+   ctx.fillStyle=g;
+   ctx.beginPath();ctx.arc(0,0,r*1.9,0,Math.PI*2);ctx.fill();
+  }
+  ctx.restore();
+  ctx.globalAlpha=1;
+ });
+}
