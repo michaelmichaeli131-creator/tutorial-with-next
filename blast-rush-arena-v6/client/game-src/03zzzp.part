@@ -1,0 +1,297 @@
+/* V94 — the Bloom's titan.
+
+   V92 gave the second map its own sky and ground and left the loudest thing in it untouched. A boss
+   arrives at stage 5, 10 and 15 of every map — the climax of a third of the campaign — and both maps
+   send the same one: `drawBoss` calls `v15DrawTitan`, one drawing, 375 lines of shoulder pods,
+   struts and a visor.
+
+   Recolouring it was never an option even in principle. The titan's armour is hardcoded navy from
+   end to end — `#131a3a` on the pods, `#243060` and `#2b3563` on the struts, `#1c2550`, `#0b1230`,
+   `#1b2650`, `#050718` through the body — with the world's two colours applied only as edge lights.
+   That is the exact fault V92 found in the `giant` sky body, at ten times the size and in the middle
+   of the screen. THE GARDENER and HEARTWOOD would be a blue war machine standing in a forest.
+
+   ---- What this one is ----
+
+   The Legion's titan is a machine: bilateral, armoured, angular, lit at the edges. So the Bloom's is
+   everything that is not — a thing that grew. A woody trunk on four root-limbs, and a crown of
+   petals around a seed core.
+
+   The petals carry the fight. `b.phase` already steps 1 to 3 as the boss is worn down, and the base
+   titan spends that on a colour change and some spikes — a tell you have to know to read. Here the
+   crown **opens**: a closed bud at full health, half open at phase two, fully splayed at phase three
+   with the core exposed and burning. The player learns in one fight that an open flower is a boss
+   that is nearly done, without a word of UI, and it is legible from across the arena because it is a
+   change in silhouette rather than in colour.
+
+   ---- Installed at v15DrawTitan, not at drawBoss ----
+
+   `drawBoss` is wrapped by five later parts that add things this titan should keep: V10's pulse
+   rings, V11's breathing scale and phase-three spikes, and the overlays after them. Replacing
+   `drawBoss` would take the boss out from under all of it. `v15DrawTitan` is the body itself and the
+   innermost link in that chain, so swapping it changes the drawing and nothing else. */
+
+const V94={on:true};
+
+/* Map one keeps its own titan, reached by exactly the code that always reached it. */
+const v94Legion=v15DrawTitan;
+
+function v94IsBloom(){
+ return V94.on&&typeof v87State==='object'&&v87State&&v87State.map===1;
+}
+
+v15DrawTitan=function(b,w){
+ if(!v94IsBloom())return v94Legion(b,w);
+ return v94Bloom(b,w);
+};
+
+/* A petal: pointed where it joins the crown, blunt at the far end, fattest past the middle. The
+   same asymmetry V92 arrived at for the canopy leaves, and for the same reason — a lens with a
+   point at both ends reads as a spike whatever it is coloured. */
+function v94Petal(c,len,wide){
+ c.beginPath();
+ c.moveTo(0,0);
+ c.bezierCurveTo(len*.26,-wide,len*.82,-wide*.82,len,-wide*.08);
+ c.bezierCurveTo(len*.82,wide*.82,len*.26,wide,0,0);
+ c.closePath();
+}
+
+/* How far the crown has opened, 0 to 1, following the phase rather than snapping to it.
+
+   Driven off `b.t`, which is the boss's own clock and advances with the simulation, rather than off
+   a frame count — the opening is cosmetic, but a cosmetic that moves at the frame rate looks wrong
+   on a slow phone in a way a player notices even if they cannot say why. */
+function v94Open(b){
+ const target=b.phase>=3?1:b.phase===2?.52:0;
+ if(typeof b.v94Open!=='number'){b.v94Open=target;b.v94T=b.t;}
+ const dt=Math.max(0,Math.min(.2,b.t-(b.v94T||b.t)));
+ b.v94T=b.t;
+ /* Opens briskly and never closes: a flower that shuts again when a phase boundary flickers would
+    be the tell contradicting itself. */
+ if(target>b.v94Open)b.v94Open=Math.min(target,b.v94Open+dt*1.3);
+ return b.v94Open;
+}
+
+function v94Bloom(b,w){
+ const r=b.r,t=b.t,phase=b.phase||1;
+ const rage=phase===3;
+ const open=v94Open(b);
+ const sway=Math.sin(t*.9)*r*.05;
+ /* Bark, deliberately warm — the whole reason this part exists is that the Legion's titan is navy
+    through the middle, so nothing here is allowed to be.
+
+    And deliberately much lighter than a photograph of real bark would suggest. The first values were
+    `#1d1206` over `#3a2610`, which are honest browns and were invisible: this titan stands on the
+    Bloom's own ground, and V92 gave every one of those six worlds a horizon in the same register.
+    Dark brown on dark green is one near-black on another, which is the identical mistake V92 made
+    with the seed-head's stalk. The trunk has to be lighter than the world it is standing in or the
+    flower reads as floating. */
+ const bark='#33200a';
+ const barkLit='#5e3d16';
+
+ ctx.save();
+ ctx.translate(b.x,b.y);
+
+ /* Spore motes instead of the Legion's two orbit rings. Same job — mark the boss's reach without
+    competing with it — done by something that drifts rather than something machined. */
+ ctx.save();
+ ctx.globalCompositeOperation='lighter';
+ for(let i=0;i<14;i++){
+  const a=t*.22+i*(Math.PI*2/14);
+  const rr=r*(1.16+.1*Math.sin(t*.8+i*1.7));
+  ctx.globalAlpha=.18+.22*(.5+.5*Math.sin(t*1.6+i));
+  ctx.fillStyle=i%3===0?w.enemy:w.accent;
+  ctx.beginPath();
+  ctx.arc(Math.cos(a)*rr,Math.sin(a)*rr*.72,Math.max(1.4,r*.022),0,Math.PI*2);
+  ctx.fill();
+ }
+ ctx.restore();
+ ctx.globalAlpha=1;
+
+ /* Roots. Four, splayed, drawn before the trunk so they read as going under it. */
+ for(const [ox,oy,tx,ty,wd] of [
+  [-r*.26,r*.42,-r*.86,r*.92,r*.15],
+  [r*.26,r*.42,r*.86,r*.92,r*.15],
+  [-r*.16,r*.5,-r*.4,r*1.02,r*.11],
+  [r*.16,r*.5,r*.4,r*1.02,r*.11]
+ ]){
+  v14Art.limb(ctx,ox,oy,tx+sway*.4,ty,wd,bark);
+ }
+
+ /* The trunk: a tapering woody mass, wider at the base. Drawn as one closed curve rather than as a
+    stack of shapes, because a thing that grew has one outline. */
+ const crownY=-r*.36+sway*.2;
+ ctx.fillStyle=v15Grad(ctx,`v94trunk|${Math.round(r)}|${w.accent}|${rage}`,()=>{
+  const g=ctx.createLinearGradient(-r*.4,-r*.5,r*.45,r*.8);
+  g.addColorStop(0,barkLit);
+  g.addColorStop(.34,bark);
+  g.addColorStop(.72,'#1d1206');
+  g.addColorStop(1,'#0d0803');
+  return g;
+ });
+ ctx.beginPath();
+ ctx.moveTo(-r*.52,r*.66);
+ ctx.quadraticCurveTo(-r*.42,r*.05,-r*.3,crownY);
+ ctx.lineTo(r*.3,crownY);
+ ctx.quadraticCurveTo(r*.42,r*.05,r*.52,r*.66);
+ ctx.quadraticCurveTo(0,r*.86,-r*.52,r*.66);
+ ctx.closePath();
+ ctx.fill();
+ ctx.strokeStyle='#0a0602';
+ ctx.lineWidth=Math.max(1.5,r*.02);
+ ctx.stroke();
+
+ /* Bark seams, clipped to the trunk. Three, following its taper — the one mark that separates wood
+    from a brown shape. */
+ ctx.save();
+ ctx.beginPath();
+ ctx.moveTo(-r*.52,r*.66);
+ ctx.quadraticCurveTo(-r*.42,r*.05,-r*.3,crownY);
+ ctx.lineTo(r*.3,crownY);
+ ctx.quadraticCurveTo(r*.42,r*.05,r*.52,r*.66);
+ ctx.quadraticCurveTo(0,r*.86,-r*.52,r*.66);
+ ctx.closePath();
+ ctx.clip();
+ ctx.strokeStyle='#00000055';
+ ctx.lineWidth=Math.max(1.2,r*.028);
+ for(const k of [-.5,0,.5]){
+  ctx.beginPath();
+  ctx.moveTo(r*k*.5,crownY);
+  ctx.quadraticCurveTo(r*k*.68,r*.3,r*k*.86,r*.78);
+  ctx.stroke();
+ }
+ /* And a seam of sap running down the lit side, which is where the Legion titan puts an edge light
+    and this one puts something alive. */
+ ctx.save();
+ ctx.globalCompositeOperation='lighter';
+ ctx.strokeStyle=w.enemy+(rage?'88':'44');
+ ctx.lineWidth=Math.max(1.4,r*.022);
+ ctx.beginPath();
+ ctx.moveTo(-r*.16,crownY+r*.04);
+ ctx.quadraticCurveTo(-r*.24,r*.3,-r*.12,r*.72);
+ ctx.stroke();
+ ctx.restore();
+ ctx.restore();
+
+ /* ---- The crown ----
+
+    Petals radiate from one point. `open` interpolates each petal's angle from straight up — where
+    they overlap into a bud — to its own share of the full circle. That single number is the boss's
+    health made into a shape. */
+ ctx.save();
+ ctx.translate(sway,crownY);
+ const petals=7;
+ const back=[],front=[];
+ for(let i=0;i<petals;i++){
+  const spread=-Math.PI/2+(i/petals)*Math.PI*2;
+  const bud=-Math.PI/2+(i-(petals-1)/2)*.13;
+  const a=bud+(spread-bud)*open;
+  /* Petals whose tips point upward are behind the core; the ones coming toward the viewer are in
+     front. Without the split the core is either buried or floating on top of everything. */
+  (Math.sin(a)<0?back:front).push(a);
+ }
+ /* Within a group, the petals nearest vertical are painted LAST.
+
+    Index order photographed as a bud leaning to the right, and the geometry says it should be
+    symmetric — it is a fan of seven at ±22° about straight up. The lean was painter's order: in a
+    closed bud the petals almost entirely overlap, so whichever is drawn last is the one you see, and
+    in index order that is always the rightmost. Sorting by |cos| puts the most horizontal first and
+    the most vertical on top, which is also what a real bud does — the outer petals wrap the inner
+    ones. Free in the open state, where they barely overlap at all. */
+ const stack=(list)=>list.sort((p,q)=>Math.abs(Math.cos(q))-Math.abs(Math.cos(p)));
+ stack(back);
+ stack(front);
+ const petalLen=r*(.52+.16*open);
+ const petalWide=r*.17;
+ const paint=(list)=>{
+  for(const a of list){
+   ctx.save();
+   ctx.rotate(a+Math.sin(t*1.3+a)*.03);
+   ctx.fillStyle=v15Grad(ctx,`v94petal|${Math.round(r)}|${w.accent}|${w.enemy}|${rage}`,()=>{
+    const g=ctx.createLinearGradient(0,0,petalLen,0);
+    g.addColorStop(0,rage?'#5a1108':'#123018');
+    g.addColorStop(.45,w.enemy);
+    g.addColorStop(1,w.accent);
+    return g;
+   });
+   v94Petal(ctx,petalLen,petalWide);
+   ctx.fill();
+   ctx.strokeStyle='#04100899';
+   ctx.lineWidth=Math.max(1,r*.014);
+   ctx.stroke();
+   /* Midrib. V92 learned this on the canopy: a broad blunt lobe reads as rock without one. */
+   ctx.strokeStyle='#0410084d';
+   ctx.lineWidth=Math.max(.8,r*.01);
+   ctx.beginPath();
+   ctx.moveTo(petalLen*.05,0);
+   ctx.lineTo(petalLen*.84,0);
+   ctx.stroke();
+   ctx.restore();
+  }
+ };
+ paint(back);
+
+ /* The core, and it is only really visible once the petals are out of its way — which is the point.
+    A closed bud shows a sliver of light; an open one shows the whole thing burning. */
+ const coreR=r*(.15+.09*open);
+ ctx.save();
+ ctx.globalCompositeOperation='lighter';
+ v15Halo(ctx,rage?'#ff6a4d':w.accent,r*(.3+.35*open));
+ ctx.restore();
+ ctx.fillStyle=v15Grad(ctx,`v94core|${Math.round(r)}|${w.accent}|${rage}`,()=>{
+  const g=ctx.createRadialGradient(-coreR*.3,-coreR*.35,coreR*.05,0,0,coreR);
+  g.addColorStop(0,'#fff6d8');
+  g.addColorStop(.35,rage?'#ff8a4a':w.accent);
+  g.addColorStop(1,rage?'#5c1206':'#0d2413');
+  return g;
+ });
+ ctx.beginPath();ctx.arc(0,0,coreR,0,Math.PI*2);ctx.fill();
+
+ /* Seeds set into the core face, in a ring. They are what the whole plant is for, and they give the
+    core a scale — a plain lit disc could be any size. */
+ ctx.fillStyle=rage?'#3a0d04':'#08180d';
+ for(let i=0;i<8;i++){
+  const a=t*.35+i*(Math.PI*2/8);
+  ctx.beginPath();
+  ctx.arc(Math.cos(a)*coreR*.55,Math.sin(a)*coreR*.55,coreR*.14,0,Math.PI*2);
+  ctx.fill();
+ }
+ paint(front);
+ ctx.restore();
+
+ ctx.restore();
+
+ /* ---- Weak points ----
+
+    Deliberately the identical drawing the Legion titan uses, down to the numbers: this is not
+    decoration, it is the readout that tells the player where to tap, and a boss that marked its
+    weak points differently would make somebody re-learn the one thing they must not hesitate over.
+    Copied rather than shared because the base draws it inline inside its own 375 lines; if either
+    ever changes, both have to. */
+ for(const weak of b.weak){
+  if(!weak.alive)continue;
+  const x=b.x+Math.cos(weak.a+t*.6)*(b.r+36);
+  const y=b.y+Math.sin(weak.a+t*.6)*(b.r*.65+28);
+  const pulse=.7+.3*Math.sin(t*5+weak.a);
+  ctx.save();
+  ctx.translate(x,y);
+  v15Halo(ctx,'#ffd85c',26*pulse);
+  ctx.rotate(t*.9+weak.a);
+  ctx.fillStyle=`rgba(255,226,120,${pulse})`;
+  v14Art.poly(ctx,[[0,-16],[13,-5],[9,13],[-9,13],[-13,-5]]);
+  ctx.fill();
+  ctx.strokeStyle='#ffe98a';
+  ctx.lineWidth=2.4;
+  v14Art.poly(ctx,[[0,-16],[13,-5],[9,13],[-9,13],[-13,-5]]);
+  ctx.stroke();
+  ctx.fillStyle='#3a2400';
+  ctx.beginPath();ctx.arc(0,0,3.4,0,Math.PI*2);ctx.fill();
+  ctx.restore();
+  ctx.save();
+  ctx.globalCompositeOperation='lighter';
+  ctx.strokeStyle=`rgba(255,216,92,${.35*pulse})`;
+  ctx.lineWidth=2;
+  ctx.beginPath();ctx.arc(x,y,isMobile?30:25,0,Math.PI*2);ctx.stroke();
+  ctx.restore();
+ }
+}

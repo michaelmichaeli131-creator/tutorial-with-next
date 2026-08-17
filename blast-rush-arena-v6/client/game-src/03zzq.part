@@ -1,0 +1,95 @@
+/* V69 — the reward text was being drawn where the player cannot see it.
+
+   Captured from live play: a cascade fired near the top of the arena and its `CHAIN ×5` badge came
+   out clipped behind the wave bar, with only "CHA" visible. The score float above it was in the same
+   place. That is the single best moment the game produces, drawn underneath the HUD.
+
+   The cause is that the canvas is the whole screen while the chrome is DOM sitting on top of it. The
+   arena's usable band is not 0..H, it is roughly 150 to H-150 on a phone: above that is the pilot
+   plate, score and wave bar, below it the weapon chip, the avatar and two ability buttons. Nothing
+   enforced that. Floats are spawned at the kill, hostiles enter at y=0, and V17 then drifts every
+   float upward by about 34 points over its life -- so a kill anywhere in the top fifth produced a
+   reward nobody read.
+
+   Clamping the float rather than the kill, deliberately. Where the hostile dies is gameplay and V57
+   pays real money for depth; where its number is drawn is presentation and can be moved. The
+   explosion, the ring and the blast all still happen exactly where the player tapped.
+
+   Sides too: `CHAIN ×5` is drawn centred and is about ninety points wide, so a cascade near either
+   edge lost half its badge. */
+
+const V69={
+ /* The usable band, matched to the chrome rather than guessed. Top clears the pilot plate and wave
+    bar; bottom clears the ability row and the reactor avatar. */
+ top:()=>isMobile?152:118,
+ bottom:()=>H-(isMobile?150:110),
+ /* Half the width of the widest reward text. `CHAIN ×4` is drawn centred at about 135 points wide,
+    and at a 60-point margin it still ran off the left edge in a captured frame. */
+ side:80,
+ /* V17 drifts a float upward at 42 points a second for its whole life. The clamp has to account for
+    where the text ENDS UP, not where it starts, or a float placed exactly on the line still slides
+    under the bar before it fades. */
+ drift:42
+};
+
+const v69Floating=floating;
+floating=function(x,y,text,color='#fff'){
+ /* A cascade's score is banked and shown once -- see "One number for one cascade" below. */
+ if(v69Buffer&&V69_SCORE.test(String(text))){
+  v69Buffer.total+=Number(String(text).replace(/[^0-9]/g,''))||0;
+  /* The position and colour of the FIRST banked popup, so an aggregated cascade appears exactly
+     where a single kill's score always has. `score()` puts every score popup at a fixed point in
+     the middle of the screen rather than at the kill, which is why they piled up there, and moving
+     the total somewhere new would be a second change hiding inside a fix. */
+  if(!v69Buffer.count){v69Buffer.x=x;v69Buffer.y=y;v69Buffer.color=color;}
+  v69Buffer.count++;
+  return;
+ }
+ const out=v69Floating(x,y,text,color);
+ const entry=game.texts[game.texts.length-1];
+ if(!entry)return out;
+ /* Read after the base call: V17 offsets both axes by a cascade slot, so clamping the arguments
+    instead of the entry would be clamping a number nobody uses. */
+ const rise=V69.drift*(entry.max||.8);
+ entry.x=Math.max(V69.side,Math.min(W-V69.side,entry.x));
+ entry.y=Math.max(V69.top()+rise,Math.min(V69.bottom(),entry.y));
+ return out;
+};
+
+/* ---- One number for one cascade ----
+
+   The same captured frame showed five score popups stacked on top of each other, half of them
+   unreadable behind the others. V17 already staggers consecutive popups down and to the right by a
+   slot, which is enough for the two or three a chain used to produce and nowhere near enough for the
+   five or six a V63 cascade produces in a single frame.
+
+   Staggering harder is the wrong answer: the player does not want to read five numbers, they want to
+   know what the cascade was worth. So the score floats raised during one tap are banked, and if the
+   tap turned into a cascade they are shown once, as a total, at the point the player tapped. A tap
+   that killed one thing still produces exactly the one popup it always did.
+
+   Only plain score popups are banked. `CHAIN x4`, `PERFECT`, the depth multiplier badge and every
+   other piece of text carry meaning that a sum would destroy. */
+
+const V69_SCORE=/^\+[\d,]+$/;
+let v69Buffer=null;
+
+const v69HitOrb=hitOrb;
+hitOrb=function(o,x,y,chain=false){
+ /* Only the outermost call opens the bank. Nested calls are the cascade resolving inside it. */
+ const top=!v69Buffer;
+ if(top)v69Buffer={total:0,count:0,color:'#fff',x:W*.5,y:H*.38};
+ try{
+  return v69HitOrb(o,x,y,chain);
+ }finally{
+  if(top){
+   const bank=v69Buffer;
+   v69Buffer=null;
+   /* One popup for one tap. A tap that killed a single hostile gets back exactly the popup it
+      always had, in the same place and the same colour; a cascade gets one gold total instead of
+      five overlapping numbers. */
+   if(bank.count===1)floating(bank.x,bank.y,`+${format(bank.total)}`,bank.color);
+   else if(bank.count>1)floating(bank.x,bank.y,`+${format(bank.total)}`,'#ffe27a');
+  }
+ }
+};

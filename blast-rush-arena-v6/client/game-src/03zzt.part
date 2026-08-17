@@ -1,0 +1,109 @@
+/* V72 — a splitter answers back.
+
+   The splitter has been in the game since the first version and has always done the same thing: it
+   dies and leaves two hostiles, 25 points either side of where it was. Two more taps. In a game
+   whose verb was "tap the thing" that was a fair enemy; in a game whose verb is "choose where the
+   blast goes" it is the only creature that ignores the question entirely, because nothing the player
+   does changes what it leaves behind.
+
+   So where you hit it decides how it comes apart.
+
+   Hit it dead centre and the two halves fly wide -- far enough apart that neither is in the other's
+   blast, so it really is two more taps. Clip it on one flank and both halves are thrown off the
+   other side, landing close together: one blast now takes them both. The rule is a single sentence
+   and it is visible the first time it happens, which is what a mechanic on a common enemy has to be.
+
+   It is also the smallest possible version of the idea the last ten parts have been building: the
+   arena is not a list of targets, it is an arrangement, and the player's taps are what arrange it.
+   Everything else added since V63 asks the player to read a formation somebody else built. This one
+   lets them build one.
+
+   The numbers come from V63's own reach, like V64's spacing, so they cannot drift apart from the
+   mechanic they exist to serve. */
+
+const V72={
+ /* How far apart the halves land on a dead-centre hit, as a multiple of the blast's catch distance.
+    Above 1 means out of reach of each other -- a centre hit genuinely costs two taps. */
+ wide:1.42,
+ /* And on a full flank hit. Below 1 means the first kill takes the second with it. */
+ tight:.62,
+ /* How far the pair is thrown from the impact, again as a multiple of catch distance. Enough that
+    the throw is visible as a throw rather than as the halves appearing where the parent was. */
+ push:.55
+};
+
+/* Catch distance for a hostile of this size: the same expression V63 tests a blast against, so
+   "in reach" here means exactly what it means there. */
+function v72Reach(r){return V63.radius*r+r*.35;}
+
+const v72HitOrb=hitOrb;
+hitOrb=function(o,x,y,chain=false){
+ /* Only a player's own tap on a splitter that is about to die. A chain kill does not split at all in
+    the base rules, and a splitter still on its feet has not produced anything to place. */
+ if(chain||o.type!=='splitter'||o.hp>1)return v72HitOrb(o,x,y,chain);
+
+ const ox=o.x,oy=o.y,or=o.r;
+ /* Where on the body the tap landed, -1 at the left edge, +1 at the right. The same quantity the
+    perfect-hit window is judged from, read before the base call because the orb is gone after it. */
+ const off=Math.max(-1,Math.min(1,(x-ox)/Math.max(1,or)));
+ const away=Math.abs(off);
+
+ /* A set of what was on the field, not a length.
+
+    The obvious version -- remember `game.orbs.length`, then take `slice(before)` afterwards -- is
+    what V65 and V71 do, and it is correct there because a spawn only ever appends. A kill does not:
+    the base removes the splitter from the array first and then pushes its two halves, so the length
+    goes 1 -> 2 and `slice(1)` returns one of them. Measured, that made the whole mechanic a no-op --
+    every hit position produced the base's own 50-point gap. Identity survives the splice; an index
+    does not. */
+ const before=new Set(game.orbs);
+ /* The base spawns the halves through `spawnOrb`, which since V64 can bring a whole formation with
+    it, and since V65 and V71 can seal or mine one of them. A splitter's halves are the splitter's
+    halves. `v64Building` is V64's own guard for exactly this case -- a later layer calling back into
+    the spawner -- and the size gates in V65 and V71 then never fire, because with formations
+    suppressed each call appends exactly one hostile. */
+ const wasBuilding=v64Building;
+ v64Building=true;
+ let out;
+ try{
+  out=v72HitOrb(o,x,y,chain);
+ }finally{
+  v64Building=wasBuilding;
+ }
+
+ const born=game.orbs.filter((n)=>!before.has(n));
+ if(born.length!==2)return out;
+
+ const reach=v72Reach(born[0].r||or);
+ /* Wide on a centre hit, tight on a flank hit. Linear between, so there is no threshold to learn --
+    the closer to the edge you land, the closer the halves come down. */
+ const gap=reach*(V72.wide+(V72.tight-V72.wide)*away);
+ /* Thrown away from the tap: hit the left flank and the pair lands to the right. Nothing moves on a
+    centre hit, which is what makes the centre the neutral, expensive option. */
+ const centre=ox-off*reach*V72.push;
+
+ for(let i=0;i<2;i++){
+  const half=born[i];
+  half.x=Math.max(half.r+8,Math.min(W-half.r-8,centre+(i?gap/2:-gap/2)));
+  half.y=oy;
+  /* Sharing the parent's speed keeps the pair together on the way down, so a tight split stays
+     tight long enough to be worth setting up. */
+  half.speed=o.speed;
+  half.v72Half=true;
+ }
+
+ /* Said once, ever, on the first splitter a player breaks.
+
+    V65 and V71 each got a one-time toast because a mechanic that changes what a tap does has to be
+    named. This one needs it more than either, and it is the case that is easiest to overlook: a
+    sealed hostile refuses to die and a mine punishes a tap, so both announce themselves by
+    happening. A splitter looks exactly like it always did. Nothing about breaking one tells the
+    player that they chose where the halves landed, so without a line of text the rule is invisible
+    and the mechanic may as well not exist. */
+ if(!save.v72Taught){
+  save.v72Taught=1;
+  persist();
+  toast('SPLITTER — CLIP THE EDGE TO KEEP THE HALVES TOGETHER');
+ }
+ return out;
+};

@@ -1,0 +1,162 @@
+/* V37 — make the results screen say something.
+
+   Captured after a real run rather than reasoned about, and the capture made the problem plain.
+   The run scored 85,001 against a stored best of 21,500 — four times the player's previous best,
+   the single biggest moment they had had with the game — and the screen said "RUN COMPLETE". It
+   also said it twice, because the eyebrow above the title is hardcoded in the markup and the title
+   is set to the same words by `finish`.
+
+   Four numbers sat under the score: WAVE 3, PERFECT 43, MAX COMBO x36, SHARDS +77. Every one is
+   true and not one of them tells the player whether that was good, what decided the run, or why
+   they should press PLAY AGAIN rather than put the phone down. This is the retention screen. It
+   was doing no retaining.
+
+   So, three things, in the order the eye reaches them:
+
+   1. **The eyebrow carries context** — mode, world, how far — instead of repeating the title.
+   2. **A line about the best.** Beating it is celebrated with the margin; not beating it shows the
+      gap. "12,400 SHORT" is the most reliable replay hook in the entire genre and it costs one
+      line of text.
+   3. **A read on the run**, derived from what actually happened rather than from a list of
+      flavour strings. Overheats mean accuracy was the problem; escapes mean priority was; a long
+      chain means the combo was the story. It gives the player something to intend next time,
+      which is the difference between playing again and playing again *for a reason*. */
+
+const V37={
+ /* Below this a chain is not what the run was about, it is just a number that happened. */
+ chain:18,
+ /* Two overheats is a bad patch; four is the reason the run ended. */
+ hot:3
+};
+
+const v37BeginStats=begin;
+begin=function(mode='solo',seed){
+ v37BeginStats(mode,seed);
+ game.v37Escapes=0;
+ game.v37Breaches=0;
+};
+
+/* Counted where they happen rather than inferred at the end, so the read is about this run and not
+   about a guess made from the final score. */
+if(typeof v22Escape==='function'){
+ const v37EscapeBase=v22Escape;
+ v22Escape=function(o){
+  game.v37Escapes=(game.v37Escapes||0)+1;
+  return v37EscapeBase(o);
+ };
+}
+if(typeof v22Detonate==='function'){
+ const v37DetonateBase=v22Detonate;
+ v22Detonate=function(o){
+  game.v37Breaches=(game.v37Breaches||0)+1;
+  return v37DetonateBase(o);
+ };
+}
+
+/* Campaign runs are measured against the stage they were on; everything else against the player's
+   all-time best. Comparing a stage-3 attempt to a career high would be meaningless. */
+function v37PriorBest(){
+ if(game.mode==='campaign'&&game.v14&&typeof v14Save==='object'){
+  const index=game.v14.stage?.index;
+  const best=v14Save.best&&v14Save.best[index];
+  return{value:Number.isFinite(best)?best:0,label:'STAGE BEST'};
+ }
+ return{value:Number.isFinite(save.best)?save.best:0,label:'BEST'};
+}
+
+/* Each clause is a whole sentence rather than something to be glued to another with "and". The
+   first attempt joined two fragments that already contained their own "and", and with a single
+   raider it read "1 raider reached the reactor, and each one took..." — the plural agreement broke
+   the moment the number was one, which is the most common case. */
+function v37Read(snapshot){
+ const bits=[];
+ /* Ordered by what the player can most usefully do about it next run. Accuracy first: it is the
+    one that compounds, because heat sets the rate of fire everything else depends on. */
+ if(snapshot.overheats>=V37.hot){
+  bits.push(`The reactor overheated <em>${snapshot.overheats} times</em> — accuracy is what buys your rate of fire.`);
+ }else if(snapshot.breaches===1){
+  bits.push('A raider reached the reactor, and took your recovery window with it.');
+ }else if(snapshot.breaches>1){
+  bits.push(`<em>${snapshot.breaches} raiders</em> reached the reactor, and each took a recovery window with it.`);
+ }else if(snapshot.escapes>2){
+  bits.push(`<em>${snapshot.escapes} runners</em> got past you. They only cost shards, but they cost them every time.`);
+ }
+ if(snapshot.maxCombo>=V37.chain){
+  bits.push(`A chain of <em>${snapshot.maxCombo}</em> carried most of the score.`);
+ }else if(!bits.length&&snapshot.perfects>0){
+  bits.push(`<em>${snapshot.perfects}</em> clean hits, but the chain never got going.`);
+ }
+ /* Two sentences at most: a results screen nobody reads is worse than no read at all. */
+ return bits.slice(0,2).join(' ');
+}
+
+/* These two live in index.html rather than being created here. The first version built them at
+   runtime and the build validator rejected the follow-up that referenced them by id: every id
+   reached through `$()` has to exist in the markup so the check that the element is still there
+   keeps working. The check was right both times — this is static structure. */
+let v37VerdictEl=null;
+let v37ReadEl=null;
+function v37Nodes(){
+ if(v37VerdictEl)return;
+ v37VerdictEl=$('v37Verdict');
+ v37ReadEl=$('v37Read');
+}
+
+const v37FinishBase=finish;
+finish=function(victory=false,duelData=null){
+ /* Read before the base runs: `finish` opens by writing the new best over the old one, so by the
+    time the screen is populated the number to compare against is already gone. */
+ const running=game.running;
+ const prior=running?v37PriorBest():null;
+ const snapshot=running?{
+  score:Math.floor(game.score),
+  wave:game.wave,
+  mode:game.mode,
+  world:worlds[game.world%worlds.length].name,
+  stage:game.mode==='campaign'&&game.v14?game.v14.stage:null,
+  maxCombo:game.maxCombo||0,
+  perfects:game.perfects||0,
+  overheats:game.v21Overheats||0,
+  escapes:game.v37Escapes||0,
+  breaches:game.v37Breaches||0
+ }:null;
+
+ v37FinishBase(victory,duelData);
+ if(!snapshot)return;
+
+ v37Nodes();
+ if(!v37VerdictEl)return;
+
+ /* Duels are scored against a person, not against a personal best, and V20's own result block
+    already says who won. Adding a best line under it would be answering a question nobody asked. */
+ const duel=snapshot.mode==='duel'||Boolean(duelData);
+
+ const eyebrow=$('resultEyebrow');
+ if(eyebrow){
+  eyebrow.textContent=duel?'DUEL'
+   :snapshot.stage?`STAGE ${snapshot.stage.index} · ${snapshot.stage.name}`
+   :`${(snapshot.mode||'solo').toUpperCase()} · ${snapshot.world} · WAVE ${snapshot.wave}`;
+ }
+
+ if(duel){
+  v37VerdictEl.className='v37-verdict';
+  v37VerdictEl.textContent='';
+  v37ReadEl.innerHTML='';
+  return;
+ }
+
+ const beat=snapshot.score>prior.value;
+ if(beat&&prior.value>0){
+  v37VerdictEl.className='v37-verdict best';
+  /* "OVER YOUR LAST" was true and made the line wrap to two rows on a phone, which cost more than
+     the words were worth. The plus sign already says what the number is. */
+  v37VerdictEl.innerHTML=`NEW ${prior.label} · <b>+${format(snapshot.score-prior.value)}</b>`;
+ }else if(beat){
+  v37VerdictEl.className='v37-verdict best';
+  v37VerdictEl.innerHTML='FIRST RUN ON THE BOARD';
+ }else{
+  v37VerdictEl.className='v37-verdict';
+  v37VerdictEl.innerHTML=`${prior.label} <b>${format(prior.value)}</b> · ${format(prior.value-snapshot.score)} SHORT`;
+ }
+ v37ReadEl.innerHTML=v37Read(snapshot);
+};

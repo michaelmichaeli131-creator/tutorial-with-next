@@ -1,0 +1,78 @@
+/* V84 — harder, by arriving faster rather than by hitting harder.
+
+   ---- What "harder" has to mean here ----
+
+   The arena is empty 53-82% of the time with a median of ZERO hostiles on screen, and the spawner
+   is why: `02.part` waits `max(.22, 1.05 - wave*.035)` seconds between arrivals — a fraction over a
+   second at wave one — and V56 holds a floor of one to three on screen. A player who can remove an
+   arrival in 0.2 seconds is never behind, and nothing else in the game can make them behind.
+
+   That is also why V83's magazine changed nothing measurable on its own: a tap budget cannot bind
+   on a player who has nothing to tap. Measured with six shots and a 1.8/second reload, the bot sat
+   at a full magazine for an entire run.
+
+   So the difficulty is the arrival rate, and it always was. Everything else — stronger hostiles,
+   more hit points, faster fall — makes a hostile cost two free taps instead of one.
+
+   ---- Why more arrivals is not the thing that was complained about ----
+
+   The owner's complaint was "too many monsters, which makes the game uninteresting", and V56 was
+   cut hard in response. That complaint was right about the symptom and the cut was right at the
+   time, because a crowd with no answer is noise: the only tool the player had was to tap each
+   member, so a crowd was six times the work and none of the decisions.
+
+   Everything since has been building the answer. V63 made where you break a group decide how much
+   of it goes; V64 arranged them so the break point matters; V76 lets the player gather a crowd
+   where they chose it; V81 made the six archetypes readable at a glance instead of six coloured
+   circles; V82 made a wave worth protecting; V83 makes a cascade the affordable way to clear one.
+
+   A crowd is now a harvest rather than a chore, which is what makes this raise a different change
+   from the one that was cut. Pressure is a small number of legible threats arriving faster than
+   comfortable; noise is a large number you cannot tell apart. This raises the rate and leaves the
+   simultaneous count near the tracking limit, deliberately.
+
+   ---- Applied as a drain, not a rewrite ----
+
+   The spawn interval is reset inside `02.part`'s update, in the middle of the loop, with no seam.
+   Rather than reimplementing that line here — which would put two copies of the arrival curve in
+   the tree and guarantee they drift — the timer is drained faster, which is exactly how V56 and V21
+   both already bend it. Draining at 1.6x is a 1.6x arrival rate, arrived at by the one mechanism the
+   rest of the codebase already uses. */
+
+const V84={
+ on:true,
+ /* Extra drain on the spawn timer, as a fraction on top of real time. 0.5 means the timer runs at
+    1.5x and arrivals come half again as fast. Ramped with the wave so the opening is still an
+    opening, and capped so this never becomes its own runaway curve on top of the base one. */
+ rate0:.55,
+ ramp:.11,
+ rateMax:1.6,
+ /* V56's floor, raised. Five rather than three, reached later rather than sooner: five is at the
+    limit of what a person tracks as individuals, and past it a crowd stops being a set of things
+    and becomes a texture -- which is the mechanism by which density became noise the first time. */
+ floorMax:5,
+ floorRamp:.34
+};
+
+function v84Live(){return V84.on&&game.running&&!game.paused&&game.mode!=='duel';}
+
+function v84Rate(){
+ return Math.min(V84.rateMax,V84.rate0+Math.max(0,game.wave-1)*V84.ramp);
+}
+
+/* The floor, replaced rather than wrapped: V56 exposes it as a function on its own constant object,
+   which is the seam it was written with. */
+if(typeof V56==='object'){
+ V56.floor=(wave)=>Math.min(V84.floorMax,1+Math.floor((wave-1)*V84.floorRamp));
+}
+
+const v84Update=update;
+update=function(dt){
+ v84Update(dt);
+ if(!v84Live())return;
+ /* The duel parks the timer at MAX_SAFE_INTEGER because its arrivals come from the server's
+    schedule. Draining that would spawn a hostile the rival never sees. */
+ if(game.spawnTimer===Number.MAX_SAFE_INTEGER)return;
+ if(game.boss)return;
+ game.spawnTimer=Math.max(0,game.spawnTimer-dt*v84Rate());
+};

@@ -1,0 +1,336 @@
+/* V14 ORIGINAL ARTWORK — every pilot is drawn from scratch on any 2D context, so the same
+   routine renders the launch hero, the armory previews and the in-game reactor. No external art. */
+const v14Art={
+ round(c,x,y,w,h,r){
+  const q=Math.min(r,Math.abs(w)/2,Math.abs(h)/2);
+  c.beginPath();
+  c.moveTo(x+q,y);c.lineTo(x+w-q,y);c.quadraticCurveTo(x+w,y,x+w,y+q);
+  c.lineTo(x+w,y+h-q);c.quadraticCurveTo(x+w,y+h,x+w-q,y+h);
+  c.lineTo(x+q,y+h);c.quadraticCurveTo(x,y+h,x,y+h-q);
+  c.lineTo(x,y+q);c.quadraticCurveTo(x,y,x+q,y);
+  c.closePath();
+ },
+ poly(c,points){
+  c.beginPath();
+  c.moveTo(points[0][0],points[0][1]);
+  for(let i=1;i<points.length;i++)c.lineTo(points[i][0],points[i][1]);
+  c.closePath();
+ },
+ plate(c,ch,x0,y0,x1,y1){
+  const g=c.createLinearGradient(x0,y0,x1,y1);
+  g.addColorStop(0,'#ffffff');
+  g.addColorStop(.14,ch.c1);
+  g.addColorStop(.52,'#0b1226');
+  g.addColorStop(.82,ch.c2);
+  g.addColorStop(1,'#03050f');
+  return g;
+ },
+ limb(c,x1,y1,x2,y2,width,color){
+  c.save();
+  c.lineCap='round';
+  c.strokeStyle='#050b18';c.lineWidth=width+5;
+  c.beginPath();c.moveTo(x1,y1);c.lineTo(x2,y2);c.stroke();
+  c.strokeStyle=color;c.lineWidth=width;c.stroke();
+  c.restore();
+ },
+ visor(c,width,color,height=8){
+  c.save();
+  c.shadowBlur=20;c.shadowColor=color;c.fillStyle=color;
+  v14Art.round(c,-width/2,-height/2,width,height,height/2);
+  c.fill();
+  c.globalAlpha=.9;c.fillStyle='#ffffff';
+  v14Art.round(c,-width*.32,-height*.28,width*.2,height*.3,1.5);
+  c.fill();
+  c.restore();
+ },
+ halo(c,radius,color,alpha=.5){
+  c.save();
+  c.globalCompositeOperation='lighter';
+  const g=c.createRadialGradient(0,0,radius*.25,0,0,radius);
+  g.addColorStop(0,color);
+  g.addColorStop(1,'transparent');
+  c.globalAlpha=alpha;c.fillStyle=g;
+  c.beginPath();c.arc(0,0,radius,0,Math.PI*2);c.fill();
+  c.restore();
+ },
+ cloth(c,points,color,alpha=.55){
+  c.save();
+  c.globalAlpha=alpha;
+  c.fillStyle=color;
+  v14Art.poly(c,points);
+  c.fill();
+  c.restore();
+ }
+};
+
+const v14Frames={
+ /* Nova Vanguard — broad angular guardian with layered pauldrons and twin boosters. */
+ knight(c,ch,t){
+  const sway=Math.sin(t*2.1)*3,step=Math.sin(t*4)*3;
+  v14Art.limb(c,-17,20,-25,44+step,9,ch.c1);
+  v14Art.limb(c,17,20,25,44-step,9,ch.c1);
+  v14Art.limb(c,-22,-4,-38,16-sway,8,ch.c2);
+  v14Art.limb(c,22,-4,38,16+sway,8,ch.c2);
+  c.fillStyle=v14Art.plate(c,ch,-26,-38,26,34);
+  v14Art.poly(c,[[0,-38],[26,-22],[23,20],[11,36],[-11,36],[-23,20],[-26,-22]]);
+  c.fill();
+  c.strokeStyle='#ffffff55';c.lineWidth=2;c.stroke();
+  c.fillStyle=ch.c2;
+  v14Art.poly(c,[[-38,-20],[-20,-32],[-11,-19],[-24,-6]]);c.fill();
+  v14Art.poly(c,[[38,-20],[20,-32],[11,-19],[24,-6]]);c.fill();
+  c.strokeStyle=ch.c1;c.lineWidth=2;c.stroke();
+  c.fillStyle=ch.accent;
+  v14Art.poly(c,[[0,-16],[9,-2],[0,16],[-9,-2]]);c.fill();
+  c.fillStyle='#040914';
+  v14Art.round(c,-16,-34,32,19,8);c.fill();
+  c.save();c.translate(0,-25);v14Art.visor(c,23,ch.c1);c.restore();
+  c.strokeStyle=ch.c1;c.lineWidth=2.5;
+  c.beginPath();c.moveTo(0,-38);c.lineTo(0,-49);c.stroke();
+  c.fillStyle=ch.accent;c.beginPath();c.arc(0,-51,3,0,Math.PI*2);c.fill();
+  for(const side of [-1,1]){
+   const flame=13+Math.sin(t*13+side)*5;
+   const g=c.createLinearGradient(side*12,32,side*12,32+flame);
+   g.addColorStop(0,'#ffffff');g.addColorStop(.32,ch.c1);g.addColorStop(1,'transparent');
+   c.fillStyle=g;
+   v14Art.poly(c,[[side*7,30],[side*17,30],[side*12,32+flame]]);c.fill();
+  }
+ },
+ /* Ember Lancer — slim forward-leaning striker with swept delta wings and a plasma lance. */
+ striker(c,ch,t){
+  const beat=Math.sin(t*3.4);
+  c.save();
+  c.rotate(-.09);
+  c.globalCompositeOperation='lighter';
+  c.fillStyle=ch.c2+'66';
+  v14Art.poly(c,[[-10,-14],[-52,-40-beat*6],[-44,-6],[-14,10]]);c.fill();
+  v14Art.poly(c,[[10,-14],[52,-40+beat*6],[44,-6],[14,10]]);c.fill();
+  c.globalCompositeOperation='source-over';
+  c.fillStyle=ch.c1+'aa';
+  v14Art.poly(c,[[-12,-8],[-40,-20-beat*4],[-34,2],[-14,8]]);c.fill();
+  v14Art.poly(c,[[12,-8],[40,-20+beat*4],[34,2],[14,8]]);c.fill();
+  v14Art.limb(c,-13,18,-19,42,7,ch.c2);
+  v14Art.limb(c,13,18,20,40,7,ch.c2);
+  v14Art.limb(c,-17,-4,-30,12,6,ch.c1);
+  c.fillStyle=v14Art.plate(c,ch,-20,-34,20,30);
+  v14Art.poly(c,[[0,-34],[19,-20],[16,16],[8,32],[-8,32],[-16,16],[-19,-20]]);
+  c.fill();
+  c.strokeStyle='#ffffff66';c.lineWidth=1.8;c.stroke();
+  c.fillStyle='#050a16';
+  v14Art.poly(c,[[-13,-31],[13,-31],[10,-14],[-10,-14]]);c.fill();
+  c.save();c.translate(0,-22);v14Art.visor(c,21,ch.c1,8);c.restore();
+  c.fillStyle=ch.accent;
+  v14Art.poly(c,[[13,-33],[24,-44],[19,-28]]);c.fill();
+  c.save();
+  c.translate(32,2);c.rotate(-.26+beat*.05);
+  c.strokeStyle='#0a1220';c.lineWidth=8;c.lineCap='round';
+  c.beginPath();c.moveTo(0,32);c.lineTo(0,-36);c.stroke();
+  c.strokeStyle=ch.c2;c.lineWidth=4.5;c.stroke();
+  c.shadowBlur=24;c.shadowColor=ch.c1;c.fillStyle=ch.c1;
+  v14Art.poly(c,[[0,-60],[9,-34],[0,-26],[-9,-34]]);c.fill();
+  c.fillStyle='#fff8e0';
+  v14Art.poly(c,[[0,-54],[4,-36],[0,-31],[-4,-36]]);c.fill();
+  c.restore();
+  c.restore();
+ },
+ /* Orchid Specter — hovering hooded silhouette with a torn veil and paired focus orbs. */
+ specter(c,ch,t){
+  const drift=Math.sin(t*1.6)*4,tear=Math.sin(t*2.6);
+  c.save();
+  c.translate(0,drift*.4);
+  v14Art.cloth(c,[[-24,-14],[-40,30],[-28,26],[-22,44],[-12,28],[0,46],[12,28],[22,44],[28,26],[40,30],[24,-14]],ch.c2,.62);
+  c.fillStyle=v14Art.plate(c,ch,-26,-44,26,26);
+  v14Art.poly(c,[[0,-48],[24,-24],[26,4],[16,26],[-16,26],[-26,4],[-24,-24]]);
+  c.fill();
+  c.strokeStyle=ch.c1+'99';c.lineWidth=2;c.stroke();
+  c.fillStyle='#080a1a';
+  v14Art.poly(c,[[0,-38],[13,-22],[11,-2],[-11,-2],[-13,-22]]);c.fill();
+  c.save();
+  c.translate(0,-16);
+  c.shadowBlur=26;c.shadowColor=ch.c1;
+  for(const side of [-1,1]){
+   c.fillStyle=ch.c1;
+   v14Art.poly(c,[[side*3,-6],[side*11,-2],[side*10,5],[side*3,3]]);c.fill();
+   c.fillStyle='#ffffff';
+   v14Art.poly(c,[[side*4,-4],[side*9,-1],[side*8,2],[side*4,1]]);c.fill();
+  }
+  c.restore();
+  c.globalCompositeOperation='lighter';
+  c.fillStyle=ch.c1+'55';
+  v14Art.poly(c,[[-9,26],[-4,26],[-12,52+tear*5]]);c.fill();
+  v14Art.poly(c,[[9,26],[4,26],[12,52-tear*5]]);c.fill();
+  c.globalCompositeOperation='source-over';
+  c.restore();
+  for(const side of [-1,1]){
+   const a=t*1.5+(side>0?0:Math.PI);
+   c.save();
+   c.translate(Math.cos(a)*40,Math.sin(a)*15-6);
+   v14Art.halo(c,14,ch.c1,.85);
+   c.fillStyle=ch.accent;
+   c.beginPath();c.arc(0,0,4.5,0,Math.PI*2);c.fill();
+   c.restore();
+  }
+ },
+ /* Frost Warden — heavy defensive frame anchored by a hexagonal tower shield. */
+ warden(c,ch,t){
+  const brace=Math.sin(t*1.8)*2;
+  v14Art.limb(c,-19,24,-27,48,12,ch.c2);
+  v14Art.limb(c,19,24,27,48,12,ch.c2);
+  v14Art.limb(c,24,-2,42,18+brace,10,ch.c1);
+  c.fillStyle=v14Art.plate(c,ch,-30,-34,30,36);
+  v14Art.round(c,-29,-30,58,64,14);c.fill();
+  c.strokeStyle='#ffffff66';c.lineWidth=2.4;c.stroke();
+  c.fillStyle=ch.c2;
+  v14Art.poly(c,[[-42,-16],[-24,-34],[-12,-20],[-28,-2]]);c.fill();
+  v14Art.poly(c,[[42,-16],[24,-34],[12,-20],[28,-2]]);c.fill();
+  c.strokeStyle=ch.c1;c.lineWidth=2;c.stroke();
+  c.fillStyle='#040a16';
+  v14Art.round(c,-18,-34,36,20,8);c.fill();
+  c.save();c.translate(0,-24);v14Art.visor(c,26,ch.c1,7);c.restore();
+  c.fillStyle=ch.accent;
+  v14Art.poly(c,[[0,-52],[5,-34],[-5,-34]]);c.fill();
+  c.save();
+  c.shadowBlur=26;c.shadowColor=ch.c1;
+  c.fillStyle=ch.c1;
+  c.beginPath();c.arc(0,6,9,0,Math.PI*2);c.fill();
+  c.restore();
+  c.save();
+  c.translate(-40,6+brace);
+  c.rotate(-.12);
+  const shield=c.createLinearGradient(-20,-40,20,40);
+  shield.addColorStop(0,ch.accent);
+  shield.addColorStop(.4,ch.c2);
+  shield.addColorStop(1,'#040a18');
+  c.fillStyle=shield;
+  v14Art.poly(c,[[0,-46],[19,-32],[19,30],[0,46],[-19,30],[-19,-32]]);
+  c.fill();
+  c.strokeStyle=ch.c1;c.lineWidth=3;c.stroke();
+  c.globalAlpha=.75;c.strokeStyle=ch.accent;c.lineWidth=1.6;
+  v14Art.poly(c,[[0,-34],[11,-24],[11,22],[0,34],[-11,22],[-11,-24]]);
+  c.stroke();
+  c.restore();
+ },
+ /* Void Reaper — horned helm over a torn high collar, scythe carried across the body. */
+ reaper(c,ch,t){
+  const drift=Math.sin(t*1.4)*3,edge=Math.sin(t*2.2);
+  c.save();
+  c.translate(0,drift*.5);
+  v14Art.cloth(c,[[-26,-8],[-44,34],[-30,30],[-24,50],[-10,32],[0,52],[10,32],[24,50],[30,30],[44,34],[26,-8]],'#12042a',.85);
+  c.fillStyle=ch.c2+'cc';
+  v14Art.poly(c,[[-30,-18],[-14,-34],[14,-34],[30,-18],[22,10],[-22,10]]);c.fill();
+  c.fillStyle=v14Art.plate(c,ch,-20,-30,20,28);
+  v14Art.poly(c,[[0,-30],[18,-16],[15,14],[7,30],[-7,30],[-15,14],[-18,-16]]);
+  c.fill();
+  c.strokeStyle=ch.c1+'77';c.lineWidth=1.8;c.stroke();
+  c.fillStyle='#03040c';
+  v14Art.poly(c,[[0,-44],[15,-30],[13,-12],[-13,-12],[-15,-30]]);c.fill();
+  c.save();
+  c.translate(0,-26);
+  c.shadowBlur=30;c.shadowColor=ch.c1;
+  for(const side of [-1,1]){
+   c.fillStyle=ch.c1;
+   v14Art.poly(c,[[side*3,-6],[side*11,-4],[side*10,4],[side*3,3]]);c.fill();
+   c.fillStyle='#ffffff';
+   v14Art.poly(c,[[side*4,-4],[side*9,-2],[side*8,2],[side*4,1]]);c.fill();
+  }
+  c.restore();
+  c.fillStyle=ch.accent;
+  for(const side of [-1,1]){
+   v14Art.poly(c,[[side*13,-40],[side*30,-62-edge*3],[side*22,-36],[side*11,-30]]);c.fill();
+  }
+  c.restore();
+  c.save();
+  c.translate(30,0);c.rotate(.22+edge*.05);
+  c.strokeStyle='#0a1020';c.lineWidth=7;c.lineCap='round';
+  c.beginPath();c.moveTo(-2,42);c.lineTo(2,-40);c.stroke();
+  c.strokeStyle=ch.c2;c.lineWidth=3.6;c.stroke();
+  c.shadowBlur=24;c.shadowColor=ch.c1;
+  c.fillStyle=ch.c1;
+  c.beginPath();
+  c.moveTo(2,-40);
+  c.quadraticCurveTo(-34,-62,-46,-32);
+  c.quadraticCurveTo(-26,-44,2,-30);
+  c.closePath();
+  c.fill();
+  c.restore();
+ },
+ /* Omega Prime — four-winged ascendant frame under a rotating halo. */
+ omega(c,ch,t){
+  const lift=Math.sin(t*1.7)*4,flare=Math.sin(t*2.9);
+  c.save();
+  c.translate(0,lift*.5);
+  c.globalCompositeOperation='lighter';
+  c.fillStyle=ch.c2+'55';
+  v14Art.poly(c,[[-12,-16],[-58,-46-flare*5],[-50,-6],[-16,12]]);c.fill();
+  v14Art.poly(c,[[12,-16],[58,-46+flare*5],[50,-6],[16,12]]);c.fill();
+  c.fillStyle=ch.c1+'44';
+  v14Art.poly(c,[[-10,2],[-46,14+flare*4],[-38,32],[-14,22]]);c.fill();
+  v14Art.poly(c,[[10,2],[46,14-flare*4],[38,32],[14,22]]);c.fill();
+  c.globalCompositeOperation='source-over';
+  v14Art.limb(c,-14,22,-20,44,8,ch.c2);
+  v14Art.limb(c,14,22,20,44,8,ch.c2);
+  c.fillStyle=v14Art.plate(c,ch,-24,-36,24,32);
+  v14Art.poly(c,[[0,-36],[22,-20],[19,18],[9,34],[-9,34],[-19,18],[-22,-20]]);
+  c.fill();
+  c.strokeStyle='#ffffff88';c.lineWidth=2;c.stroke();
+  c.fillStyle=ch.c2;
+  v14Art.poly(c,[[-19,-6],[0,-18],[19,-6],[0,8]]);c.fill();
+  c.fillStyle='#04060f';
+  v14Art.round(c,-15,-33,30,19,8);c.fill();
+  c.save();c.translate(0,-24);v14Art.visor(c,22,ch.c1,7);c.restore();
+  c.fillStyle=ch.accent;
+  for(let i=-2;i<=2;i++){
+   const tip=-50+Math.abs(i)*6;
+   v14Art.poly(c,[[i*7,-38],[i*7+3,tip],[i*7-3,tip]]);
+   c.fill();
+  }
+  c.save();
+  c.shadowBlur=28;c.shadowColor=ch.c1;
+  c.fillStyle='#ffffff';
+  c.beginPath();c.arc(0,4,8,0,Math.PI*2);c.fill();
+  c.restore();
+  c.restore();
+  c.save();
+  c.translate(0,-56+lift);
+  c.globalCompositeOperation='lighter';
+  c.globalAlpha=.85;
+  c.strokeStyle=ch.c1;c.lineWidth=2.6;c.shadowBlur=20;c.shadowColor=ch.c1;
+  c.beginPath();c.ellipse(0,0,21,6+Math.sin(t*.8)*1.6,0,0,Math.PI*2);c.stroke();
+  c.restore();
+ }
+};
+
+/* Single entry point used by the launch hero, the armory cards and the in-game reactor. */
+function v14DrawCharacter(c,characterId,time,options={}){
+ const ch=v14Character(characterId);
+ const scale=options.scale||1;
+ c.save();
+ c.translate(options.x||0,options.y||0);
+ c.scale(scale,scale);
+ if(options.aura!==false){
+  c.save();
+  c.globalCompositeOperation='lighter';
+  const aura=c.createRadialGradient(0,0,4,0,0,options.auraRadius||86);
+  aura.addColorStop(0,'#ffffff');
+  aura.addColorStop(.16,ch.c1+'cc');
+  aura.addColorStop(.52,ch.c2+'55');
+  aura.addColorStop(1,'transparent');
+  c.globalAlpha=options.auraAlpha??.85;
+  c.fillStyle=aura;
+  c.beginPath();c.arc(0,0,options.auraRadius||86,0,Math.PI*2);c.fill();
+  c.restore();
+ }
+ c.save();
+ c.shadowBlur=options.glow??22;
+ c.shadowColor=ch.c1;
+ (v14Frames[ch.frame]||v14Frames.knight)(c,ch,time);
+ c.restore();
+ c.restore();
+}
+
+/* The player avatar in combat is now the equipped pilot rather than a recoloured orb. */
+drawReactor=function(){
+ const y=H-(isMobile?104:70);
+ v14DrawCharacter(ctx,v14Save.character,game.elapsed,{
+  x:W/2,y,scale:isMobile?.78:.92,auraRadius:isMobile?74:88,glow:quality.glow
+ });
+};

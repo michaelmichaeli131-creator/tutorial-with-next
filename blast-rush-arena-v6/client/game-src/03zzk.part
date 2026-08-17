@@ -1,0 +1,195 @@
+/* V63 — the tap stops being a needle.
+
+   Play feedback, and it is the more important of the two things raised: the game is boring because
+   all you do is press the monsters. That is a fair description of the verb. Everything built on top
+   of it so far — heat for missing, wards that must be timed, divers that must be prioritised, a
+   payout band low on the screen — changes *which* monster you press and *when*, but a tap has always
+   been a needle that resolves exactly one hostile. Ten of those in a row is ten repetitions of one
+   decision, and repetition is what boredom is.
+
+   The other complaint has the same root. Too many monsters is only oppressive because each one is a
+   separate chore with a separate tap; nothing about a group is worth more than the sum of its parts,
+   so a crowd is arithmetic, not an opportunity.
+
+   Both change if a kill has an area.
+
+   A kill now detonates. The blast is small — a bit over twice the hostile's own radius — and anything
+   caught in it takes a hit, and if that hit kills, it detonates in turn, up to four links, each blast
+   smaller than the one that set it off. Nothing else about the game changes. A player who taps one
+   isolated hostile at a time sees a puff of light and the same game they had before.
+
+   What it buys:
+
+   - **Where you tap matters.** Two hostiles drifting close together are no longer two taps. They are
+     one tap, if you take the right one first. That is a positional decision, and it is a different
+     decision every time because the arrangement is never the same twice.
+   - **A crowd becomes a prize.** The cascade bonus is quadratic in the number of links, so four
+     hostiles that arrive together are worth far more cleared as one chain than as four taps. The
+     player now *wants* the group that used to feel like a pile of chores — which is the honest fix
+     for "too many monsters", better than simply having fewer of them.
+   - **It pairs with the strike band.** V57 already pays the player to let hostiles live and sweep
+     them late; until now that meant sweeping them one at a time, which is the boring verb again,
+     just later. Held hostiles bunch up. Bunched hostiles chain. The two mechanics finally point the
+     same way.
+
+   Deliberately not done: no radius upgrade in the shop, no new currency, no meter. The mechanic has
+   to justify itself as a verb before it earns a progression hook. */
+
+const V63={
+ /* Blast radius as a multiple of the killed hostile's own radius.
+
+    Raised from 2.35 for a reason that only a screenshot could have shown. A blast of 2.35r means
+    hostiles have to sit about 2.7 radii apart to chain, and at that spacing a formation of four is
+    a single overlapping blob on a 390px screen -- unreadable, and exactly the "does not look good"
+    the play feedback described. Formation spacing is derived from this number (see V64.gap), so the
+    blast has to be large enough that hostiles which chain are also hostiles the eye can tell apart.
+    At 3.4 a formation has roughly half a body's clear air between members and still connects. */
+ radius:3.4,
+ /* Each link blasts smaller than the one that set it off, so a cascade runs out on its own rather
+    than depending on the depth cap to stop it. A chain that ends because it ran out of reach reads
+    as physics; one that ends because a counter hit four reads as a rule. */
+ falloff:.78,
+ /* Hard cap regardless of falloff. Guards the recursion as much as the design. */
+ depth:4,
+ /* The most any weapon may add to that cap. The recursion guard is sized against depth+depthMax
+    rather than depth, so a weapon that buys extra links is not silently cut off by a guard that
+    does not know about it -- and the guard still has a fixed ceiling no weapon can raise. */
+ depthMax:2,
+ /* Cascade bonus per link, paid triangularly -- see v63Reward. */
+ bonus:170
+};
+
+/* Recursion depth of the current tap. Zero means we are at the player's own tap; anything higher is
+   a blast resolving. Used both to size the blast and to know when the cascade has finished so it can
+   be scored as one event. */
+let v63Busy=0;
+/* Kills caused by blasts during the current cascade, not counting the one the player tapped. */
+let v63Links=0;
+let v63OriginX=0,v63OriginY=0;
+
+/* A seam for the equipped weapon, replaced by V68. Returns multipliers rather than absolute values
+   on purpose: V64 spaces formations against `V63.radius` itself, so the shape of the arena must stay
+   fixed while what a given weapon does to that shape varies. A blast that grew the formation with it
+   would change nothing at all. */
+function v63Power(){return{radius:1,depth:0,falloff:1,max:Infinity};}
+
+/* Called once per blast with the hostile that detonated and the blast's radius, for anything the
+   cascade can reach that is not in `game.orbs`. No-op here; V70 gives it to the titan. */
+function v63BlastHit(o,R){}
+
+function v63Detonate(o,depth,field){
+ const power=v63Power();
+ const R=o.r*V63.radius*power.radius*Math.pow(V63.falloff*power.falloff,depth);
+ const world=worlds[game.world%worlds.length];
+
+ /* Always drawn, even when the blast catches nothing. A player cannot learn the reach of something
+    they only see on the rare occasions it works, and learning the reach is the whole skill. */
+ ring(o.x,o.y,world.accent,R);
+ if(!save.comfort){
+  for(let i=0;i<5;i++){
+   const a=rng()*Math.PI*2;
+   game.particles.push({x:o.x,y:o.y,vx:Math.cos(a)*R*4.5,vy:Math.sin(a)*R*4.5,
+    life:.18,max:.18,r:1.6,color:world.accent,drag:.87,gravity:0});
+  }
+ }
+
+ /* Anything that is not a hostile in `game.orbs` but can still be caught in a blast. A seam rather
+    than a branch, because the boss is the only such thing today and hard-coding it here would put
+    boss logic in the middle of the cascade. Replaced by V70. */
+ v63BlastHit(o,R);
+
+ if(depth>=V63.depth+power.depth)return;
+
+ /* How many neighbours one blast may take, nearest first. Unlimited by default -- the blast is a
+    circle and everything inside it goes. A weapon can narrow it (see V68's lance), which is a
+    different kind of trade from a smaller radius: at the spacing V64 uses, shrinking the radius even
+    slightly drops it below one gap and removes the chain entirely, so radius is close to a binary
+    switch. A victim cap is a dial. Sorted by distance so a capped blast takes the neighbour it is
+    actually closest to rather than whichever happens to be first in the array. */
+ const reach=power.max===Infinity?field:field
+  .filter((n)=>n!==o&&n.hp>0&&game.orbs.includes(n))
+  .sort((a,b)=>Math.hypot(a.x-o.x,a.y-o.y)-Math.hypot(b.x-o.x,b.y-o.y))
+  .slice(0,power.max);
+
+ for(const n of reach){
+  if(n===o||n.hp<=0)continue;
+  if(!game.orbs.includes(n))continue;
+  /* The blast has to reach close to a neighbour's core, not merely graze its outline. The first
+     version used `R + n.r`, which sounds like the natural collision test and is far too generous:
+     a hostile's own radius is comparable to the whole blast, so every link reached as far as the
+     first one and a formation of five went down to a single tap. Measured, that produced cascades
+     of eight and made the shape of a formation irrelevant. At a third of the radius the first link
+     connects reliably and the second is genuinely in doubt, which is the entire decision. */
+  if(Math.hypot(n.x-o.x,n.y-o.y)>R+n.r*.35)continue;
+  /* Struck on the rim rather than dead centre. Passing the hostile's own coordinates would put the
+     hit distance at zero, which scores a PERFECT on every single link -- that is how the pre-existing
+     bomb chain behaves, and with cascades on every kill it would turn the precision bonus into
+     background noise. A rim hit is a hit. PERFECT stays something the player's own thumb earns. */
+  hitOrb(n,n.x+n.r,n.y,true);
+ }
+}
+
+function v63Reward(links){
+ /* Triangular rather than linear: two links pay 3x the unit, three pay 6x, four pay 10x. A crowd has
+    to be worth disproportionately more than its parts or there is no reason to set one up, and
+    setting one up is the interesting thing the player is being asked to do. */
+ const points=V63.bonus*links*(links+1)/2;
+ /* Read by V62's first-run teaching, which drops its "break them together" prompt the moment the
+    player has done it once rather than talking over someone who already understands. */
+ game.v63Chains=(game.v63Chains||0)+1;
+ score(points,'chain');
+ floating(v63OriginX,v63OriginY-26,`CHAIN ×${links+1}`,'#ffe27a');
+ v63Sound(links);
+ if(links>=3)haptic([12,20,12]);
+ else haptic(11);
+}
+
+/* A seam rather than a call, because what a cascade should sound like is an audio question and
+   belongs with the rest of the audio work -- V66 replaces this. The fallback is the reactor blast,
+   which is the wrong sound (it is the charged ability's identity, and a fixed one-second sawtooth
+   is the same whether two things died or six) but is at least a sound. */
+function v63Sound(links){
+ audio.sfx('blast');
+}
+
+const v63Begin=begin;
+begin=function(mode='solo',seed){
+ const out=v63Begin(mode,seed);
+ /* Per run, not per session: V62's teaching reads it to know whether a first-time player has felt a
+    cascade yet, and a stale count from someone else's earlier run would skip the lesson. */
+ game.v63Chains=0;
+ return out;
+};
+
+const v63HitBase=hitOrb;
+hitOrb=function(o,x,y,chain=false){
+ const nested=v63Busy>0;
+ if(!nested){v63Links=0;v63OriginX=o.x;v63OriginY=o.y;}
+
+ /* A splitter's two children are spawned by the base call, at the dead centre of the blast that is
+    about to go off. Snapshotting the field first means the cascade can only reach hostiles that were
+    already on it, so splitting still costs the player a follow-up rather than being erased by the
+    same tap that caused it.
+
+    Snapshotting unconditionally rather than only when the hostile looks likely to die: an upgraded
+    weapon can take an armoured hostile from full health to nothing in one hit, and predicting the
+    kill from `hp<=1` would silently skip the blast on exactly the strongest weapons. Whether it
+    died is read afterwards, from the field itself. */
+ const field=v63Busy<V63.depth+V63.depthMax?game.orbs.slice():null;
+ const wasAlive=game.orbs.includes(o);
+
+ v63Busy++;
+ let out;
+ try{
+  out=v63HitBase(o,x,y,chain);
+  const killed=wasAlive&&!game.orbs.includes(o);
+  /* Counted here rather than on entry: an armoured hostile that a blast merely dents is not a link,
+     and counting it would inflate the cascade bonus for a chain that killed one thing. */
+  if(killed&&nested)v63Links++;
+  if(killed&&field)v63Detonate(o,v63Busy-1,field);
+ }finally{
+  v63Busy--;
+  if(v63Busy===0&&v63Links>0)v63Reward(v63Links);
+ }
+ return out;
+};

@@ -1,0 +1,128 @@
+/* V26 REACTOR SKINS — stop selling coloured balls.
+
+   The skins screen was the most generic surface in the game and, on a screen whose entire content
+   is the cosmetics, that matters more than anywhere else. `paintSkinElement` set one CSS
+   `radial-gradient` per skin, so eight items were eight shaded spheres — the exact look the game
+   was criticised for. Meanwhile the creatures, pilots and bosses next door are drawn with plating,
+   rim light and inner energy. The store was not speaking the game's own language.
+
+   These are *reactor* skins: they colour the player's reactor, its trails, and the cores it sends
+   to a rival. So a preview should look like a reactor core — a plated housing with a chamfered
+   ring, vents, a hot centre and a light source — not a marble.
+
+   Rendered to a canvas once per skin and cached as a data URL, then handed back through the same
+   `background-image` the old function used. No markup changes, no per-frame cost, and every call
+   site — the store grid, the menu badge, the lobby, both duel portraits — picks it up untouched. */
+
+const V26_SIZE=192;
+const v26Cache=new Map();
+
+function v26Plate(c,radius,sides,rotation){
+ c.beginPath();
+ for(let i=0;i<sides;i++){
+  const a=rotation+i/sides*Math.PI*2;
+  const x=Math.cos(a)*radius,y=Math.sin(a)*radius;
+  if(i)c.lineTo(x,y);else c.moveTo(x,y);
+ }
+ c.closePath();
+}
+
+function v26Render(skin){
+ const canvas=document.createElement('canvas');
+ canvas.width=canvas.height=V26_SIZE;
+ const c=canvas.getContext('2d');
+ const half=V26_SIZE/2;
+ c.translate(half,half);
+ const r=half*.9;
+
+ /* Housing: an octagonal plate rather than a circle, because every other framed element in the
+    game is chamfered and a circle here is what made it read as a generic swatch. */
+ const body=c.createLinearGradient(-r,-r,r,r);
+ body.addColorStop(0,'#25355a');
+ body.addColorStop(.5,'#131d35');
+ body.addColorStop(1,'#080e1c');
+ c.fillStyle=body;
+ v26Plate(c,r,8,Math.PI/8);
+ c.fill();
+
+ /* Rim light along the top-left edge, shadow along the bottom-right: one light source is what
+    separates a manufactured object from a gradient. */
+ c.save();
+ v26Plate(c,r,8,Math.PI/8);
+ c.clip();
+ const rim=c.createLinearGradient(-r,-r,r*.4,r*.6);
+ rim.addColorStop(0,'rgba(255,255,255,.22)');
+ rim.addColorStop(.4,'rgba(255,255,255,.03)');
+ rim.addColorStop(1,'rgba(0,0,0,.35)');
+ c.fillStyle=rim;
+ c.fillRect(-r,-r,r*2,r*2);
+ /* Vents: four short cuts that catch the rim light and give the housing a scale. */
+ c.strokeStyle='rgba(3,8,18,.75)';
+ c.lineWidth=r*.055;
+ for(let i=0;i<4;i++){
+  const a=Math.PI*.25+i*Math.PI*.5;
+  c.beginPath();
+  c.moveTo(Math.cos(a)*r*.62,Math.sin(a)*r*.62);
+  c.lineTo(Math.cos(a)*r*.92,Math.sin(a)*r*.92);
+  c.stroke();
+ }
+ c.restore();
+
+ /* Chamfered ring in the skin's own colour, so the identity reads at thumbnail size. */
+ c.strokeStyle=skin.c2;
+ c.lineWidth=r*.07;
+ v26Plate(c,r*.995,8,Math.PI/8);
+ c.stroke();
+ c.strokeStyle=skin.c1;
+ c.lineWidth=r*.028;
+ v26Plate(c,r*.86,8,Math.PI/8);
+ c.stroke();
+
+ /* The core. A tight white centre bleeding into the two skin colours is what makes it read as
+    something powered rather than something painted. */
+ const core=c.createRadialGradient(-r*.1,-r*.12,r*.02,0,0,r*.66);
+ core.addColorStop(0,'#ffffff');
+ core.addColorStop(.18,skin.c1);
+ core.addColorStop(.62,skin.c2);
+ core.addColorStop(1,'rgba(2,5,14,.9)');
+ c.fillStyle=core;
+ c.beginPath();
+ c.arc(0,0,r*.66,0,Math.PI*2);
+ c.fill();
+
+ /* Containment arcs: two thin strokes over the core, offset, so the centre has structure instead
+    of being a smooth blob. */
+ c.strokeStyle='rgba(255,255,255,.5)';
+ c.lineWidth=r*.022;
+ c.beginPath();c.arc(0,0,r*.46,Math.PI*.15,Math.PI*.95);c.stroke();
+ c.beginPath();c.arc(0,0,r*.34,Math.PI*1.2,Math.PI*1.9);c.stroke();
+
+ /* Specular highlight last, on top of everything, where the light source says it should be. */
+ const spec=c.createRadialGradient(-r*.3,-r*.34,0,-r*.3,-r*.34,r*.42);
+ spec.addColorStop(0,'rgba(255,255,255,.55)');
+ spec.addColorStop(1,'rgba(255,255,255,0)');
+ c.fillStyle=spec;
+ c.beginPath();c.arc(-r*.3,-r*.34,r*.42,0,Math.PI*2);c.fill();
+
+ return canvas.toDataURL('image/png');
+}
+
+function v26Art(id){
+ let url=v26Cache.get(id);
+ if(!url){url=v26Render(currentSkin(id));v26Cache.set(id,url);}
+ return url;
+}
+
+/* Replaces rather than wraps: the base set a `background` shorthand, which would overwrite the
+   image if it ran first. The glow is kept because it is what makes the equipped skin obvious in
+   the grid. */
+paintSkinElement=function(el,id){
+ const skin=currentSkin(id);
+ el.style.background='transparent';
+ el.style.backgroundImage=`url(${v26Art(skin.id)})`;
+ el.style.backgroundSize='contain';
+ el.style.backgroundRepeat='no-repeat';
+ el.style.backgroundPosition='center';
+ el.style.borderRadius='0';
+ el.style.boxShadow=`0 0 22px ${skin.c1}55`;
+};

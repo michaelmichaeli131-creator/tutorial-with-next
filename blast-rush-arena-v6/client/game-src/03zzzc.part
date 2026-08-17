@@ -1,0 +1,214 @@
+/* V81 — give the creatures back their silhouettes, without changing the arena's colour.
+
+   ---- The finding this part acts on ----
+
+   Traced through the drawing code and confirmed by photographing the six archetypes on a plain
+   field: the shapes are good and nobody can see them. `03j.part` did real work on silhouette — the
+   scout is the only thin thing, the walker the only wide one, the raider the only true circle — and
+   the treatment throws all of it away:
+
+     - `v15Carapace` fills every body with a gradient running trim → body → #0a1024 → #04060f, so a
+       creature fades into a dark background at its own edges and has no outline to be read by;
+     - `drawOrb` then pastes a 34-40 point additive halo behind it to rescue it from the background
+       it was just faded into.
+
+   The result is that the aura is what the eye reads, and the aura is a circle. Six creatures with
+   six carefully different outlines all arrive as six coloured circles.
+
+   That was the diagnosis behind the print direction. The print direction is not what we want — but
+   the diagnosis was never about the ground being dark. It was about **figures separating from the
+   ground by emitted light instead of by edge and value**, and that can be fixed inside exactly the
+   palette the game already has.
+
+   ---- Four changes, all inside the current look ----
+
+   1. **An edge.** Every carapace gets a heavy near-black contour behind its fill, so the shape has
+      a boundary against anything it passes over — a lit planet, a skyline, another creature.
+   2. **A rim.** A bright inner highlight along the upper-left of the same outline, which is where
+      V48 established the light comes from. An edge alone reads as a sticker; an edge with a rim
+      reads as a solid object, and it is the rim that makes the outline legible at speed.
+   3. **The body halo goes.** Not every halo — a halo *wider than the creature* is atmosphere and is
+      the thing being read instead of the body; a halo smaller than it is detail on an eye or a
+      spark and stays. That is the whole of the rule, and the radius is the discriminator because
+      that is literally what distinguishes the two cases at every call site.
+   4. **The ground steps back.** One flat wash over the background so the planet, the nebula and the
+      skyline sit lower in value than anything in the play field. Figure/ground by value.
+
+   Glow is kept everywhere it belongs: explosions, wells, sparks, the reactor, the eyes. It is
+   removed from **bodies** only. That is the difference between a game that looks lit and a game
+   whose creatures are hiding inside their own light.
+
+   ---- And hue stops carrying identity ----
+
+   `v15Palette` gives every archetype its own hue, so a crowd is a rainbow and hue is simultaneously
+   carrying type, threat, ownership and UI state. A six-way hue code cannot be decoded at five taps a
+   second. The hostiles are pulled part-way toward one hostile hue — the current world's own enemy
+   colour, so worlds still differ from each other — and desaturated, while their *lightness* is left
+   alone, because lightness is what separates shapes and hue is what was doing the wrong job.
+
+   Partly rather than completely, deliberately. Full convergence is what the print direction did, and
+   it works there because the silhouettes are flat plates with heavy contours doing all the work.
+   Here the modelling is still doing some of it, and a fully monochrome cast in a dark arena loses
+   more than it gains. Half is the honest answer until it is measured otherwise. */
+
+const V81={
+ /* Above this radius a halo is wider than the creature it sits behind, which makes it the thing the
+    eye reads. Body halos are 34-40; eye and spark halos are 13-19. Nothing sits near the line. */
+ bodyHalo:26,
+ /* The contour. Heavier than it looks correct at desk size: on a phone, over a lit planet, a thin
+    outline is the first thing to disappear. */
+ edge:3.6,
+ edgeInk:'rgba(3,6,14,.85)',
+ /* The rim, drawn inside the shape along the upper-left. V48 put the light above and behind the
+    field; this is the same vector. */
+ rim:1.9,
+ rimOffset:1.7,
+ rimAlpha:.72,
+ /* How far a hostile's hue is pulled toward the world's enemy colour, and how much saturation is
+    taken out. */
+ converge:.5,
+ desaturate:.3,
+ /* The wash that pushes the background down in value. Enough to open a gap; not so much that the
+    world art stops being visible, which is the thing it exists for. */
+ wash:.34,
+ washInk:'#050a16'
+};
+
+/* ---- Colour ----------------------------------------------------------------------------------- */
+
+function v81Hsl(hex){
+ const s=hex.replace('#','');
+ const n=s.length===3?s.split('').map((c)=>c+c).join(''):s;
+ const r=parseInt(n.slice(0,2),16)/255,g=parseInt(n.slice(2,4),16)/255,b=parseInt(n.slice(4,6),16)/255;
+ const mx=Math.max(r,g,b),mn=Math.min(r,g,b),l=(mx+mn)/2;
+ if(mx===mn)return{h:0,s:0,l};
+ const d=mx-mn;
+ const sat=l>.5?d/(2-mx-mn):d/(mx+mn);
+ let h;
+ if(mx===r)h=((g-b)/d+(g<b?6:0))/6;
+ else if(mx===g)h=((b-r)/d+2)/6;
+ else h=((r-g)/d+4)/6;
+ return{h,s:sat,l};
+}
+
+function v81Hex(h,s,l){
+ const f=(n)=>{
+  const k=(n+h*12)%12;
+  const a=s*Math.min(l,1-l);
+  const v=l-a*Math.max(-1,Math.min(k-3,Math.min(9-k,1)));
+  return Math.round(Math.max(0,Math.min(1,v))*255).toString(16).padStart(2,'0');
+ };
+ return '#'+f(0)+f(8)+f(4);
+}
+
+/* Hue moved the short way round the wheel. Going the long way is how a red pulled toward a violet
+   passes through green on the way, which is not a subtlety anybody misses. */
+function v81Toward(hex,targetHue,amount,desat){
+ const c=v81Hsl(hex);
+ let d=targetHue-c.h;
+ if(d>.5)d-=1;
+ if(d<-.5)d+=1;
+ const h=(c.h+d*amount+1)%1;
+ return v81Hex(h,Math.max(0,c.s*(1-desat)),c.l);
+}
+
+/* Cached per world, because the target hue is the world's own enemy colour and nothing else in the
+   expression changes. Rebuilt only when the world does. */
+let v81SkinCache=null,v81SkinWorld=-1;
+
+const v81Skin=v15Skin;
+v15Skin=function(o){
+ const pal=v81Skin(o);
+ if(V77.on||o.type==='rival')return pal;
+ const world=game.world%worlds.length;
+ if(v81SkinWorld!==world){v81SkinWorld=world;v81SkinCache=new Map();}
+ const key=o.type+'|'+pal.body;
+ let out=v81SkinCache.get(key);
+ if(!out){
+  const target=v81Hsl(worlds[world].enemy).h;
+  out={
+   body:v81Toward(pal.body,target,V81.converge,V81.desaturate),
+   trim:v81Toward(pal.trim,target,V81.converge,V81.desaturate*.6),
+   /* Glow and eye are left alone. With the body halo gone they are small marks -- the eye, a
+      spark, the tether on a committing diver -- and those are readouts the player uses. */
+   glow:pal.glow,
+   eye:pal.eye
+  };
+  v81SkinCache.set(key,out);
+ }
+ return out;
+};
+
+/* ---- The edge and the rim ---------------------------------------------------------------------
+
+   Hooked on `v15Carapace` because it is the one function every creature's body passes through and
+   it receives the outline points, which is the thing this needs and the thing a `drawOrb` wrapper
+   would not have.
+
+   Called through rather than replaced: V48 adds its own pass over whatever the chain draws, and
+   replacing the fill outright would throw that away to solve a problem that is about the edge. */
+
+const v81Carapace=v15Carapace;
+v15Carapace=function(c,pal,points,x0,y0,x1,y1){
+ if(V77.on)return v81Carapace(c,pal,points,x0,y0,x1,y1);
+
+ /* Behind the fill, so the body covers its inner half and what is left is a clean outer boundary.
+    Drawn before rather than after for that reason -- an outline stroked afterwards straddles the
+    path and eats 1.8 points of the creature's own colour all the way round. */
+ c.save();
+ c.strokeStyle=V81.edgeInk;
+ c.lineWidth=V81.edge;
+ c.lineJoin='round';
+ v14Art.poly(c,points);
+ c.stroke();
+ c.restore();
+
+ const out=v81Carapace(c,pal,points,x0,y0,x1,y1);
+
+ /* The rim: the same outline offset up and to the left, stroked bright, clipped to the shape so it
+    appears only along the edge facing the light. One clip and one stroke. */
+ c.save();
+ v14Art.poly(c,points);
+ c.clip();
+ c.globalAlpha=V81.rimAlpha;
+ c.strokeStyle=pal.trim;
+ c.lineWidth=V81.rim;
+ c.lineJoin='round';
+ c.translate(-V81.rimOffset,-V81.rimOffset);
+ v14Art.poly(c,points);
+ c.stroke();
+ c.restore();
+
+ return out;
+};
+
+/* ---- The halo that was doing the reading -------------------------------------------------------
+
+   Skipped by size rather than by call site. There are six call sites and they fall cleanly into two
+   groups: the body halo at 34-40 points, and eye and spark halos at 13-19. A radius test is not a
+   heuristic here, it is the actual distinction -- a halo wider than the creature replaces it, and a
+   halo smaller than it decorates it. */
+
+const v81Halo=v15Halo;
+v15Halo=function(c,color,radius){
+ if(!V77.on&&radius>=V81.bodyHalo)return;
+ return v81Halo(c,color,radius);
+};
+
+/* ---- The ground steps back ---------------------------------------------------------------------
+
+   One flat wash after the world art, so the planet, the nebula, the stars and the skyline all sit
+   below anything in the play field. Cheaper and more even than desaturating each of them, and it
+   cannot drift out of step with a world added later. */
+
+const v81Background=drawBackground;
+drawBackground=function(w){
+ const out=v81Background(w);
+ if(V77.on)return out;
+ ctx.save();
+ ctx.globalAlpha=V81.wash;
+ ctx.fillStyle=V81.washInk;
+ ctx.fillRect(0,0,W,H);
+ ctx.restore();
+ return out;
+};

@@ -1,0 +1,42 @@
+/* V32 — offer enough augments for a build to exist.
+
+   V24 built a run-shaping layer: augment families, resonance between related picks, and
+   commendations spent to elevate a card. It was shipped without the bot comparison that every
+   other gameplay layer here was justified by, so I went back and measured it. The comparison could
+   not separate the configurations — the spread within a single configuration (116k and 524k on
+   consecutive runs of the identical build) was wider than any gap between them, and picking a
+   coherent family did not beat picking arbitrarily.
+
+   What the runs did say clearly was why. Every run, in every configuration, took between **one and
+   three** augments. `nextWave` offers one on `wave % 3` while a boss takes `wave % 4`, so the
+   offers land on waves 3, 6, 9 — and a hundred-second run reaches wave 4 to 10.
+
+   You cannot build an identity out of two cards. Resonance needs two of a family before it fires,
+   so on a typical run it either never triggers or triggers once at the very end, and the choice
+   between three cards is a choice between three isolated modifiers. The layer was not failing to
+   shape runs because the cards were wrong; it was failing because the player was never dealt a
+   hand.
+
+   So the offer is moved to every second wave, with the first one pulled forward to wave 2. A run
+   that reaches wave 10 now sees five offers instead of three, and — the part that matters — it
+   sees its second and third early enough for a family to actually form while the run is still
+   being played.
+
+   This is deliberately not a claim that the game is now better. It is the precondition for the
+   V24 layer to be testable at all: with one to three picks there was nothing to measure. */
+
+const v32NextWaveBase=nextWave;
+nextWave=function(){
+ const before=game.wave;
+ v32NextWaveBase();
+ if(!game.running)return;
+ const wave=game.wave;
+ if(wave===before)return;
+ /* The base already offered on this wave, or a boss owns it. Bosses keep priority: interrupting a
+    titan's arrival with a menu is worse than a slightly uneven offer cadence. */
+ if(wave%4===0||wave%3===0)return;
+ if(wave!==2&&wave%2!==0)return;
+ /* Deferred by a frame so it lands after the base has finished setting up the wave — opening the
+    picker mid-setup leaves the objective row showing the previous wave's target behind it. */
+ setTimeout(()=>{if(game.running&&!game.paused&&!game.boss)chooseAugment();},60);
+};

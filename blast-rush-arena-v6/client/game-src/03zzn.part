@@ -1,0 +1,87 @@
+/* V66 — what a cascade sounds like, and what a shell sounds like.
+
+   V63 and V65 shipped with placeholder cues, and the cascade one had a real fault behind it that is
+   worth writing down because it is invisible from reading the code.
+
+   `audio.impact` carries a voice budget: more than three impacts inside a 45ms window and the rest
+   return silently. That limit is correct — sustained voices mask each other badly, and V34 added it
+   after a chain turned into a chord nobody asked for. But a cascade resolves *synchronously*. Six
+   hostiles die inside the same millisecond, so the fourth, fifth and sixth kills are simply not
+   heard. The bigger the cascade, the more of it is silent. The single best moment the game can
+   produce was the one the mixer was throwing away.
+
+   The fix is not to raise the budget. It is to stop asking for six simultaneous voices at all: a
+   cascade is *scheduled* as a run, one note per link about 55ms apart, climbing the scale. Notes
+   that arrive one at a time do not mask each other, they read as a phrase — and a phrase is what a
+   chain reaction is. It also means a six-link cascade is audibly longer and higher than a two-link
+   one, which the fixed one-second reactor sawtooth it used to borrow could never be.
+
+   Everything is derived from `v34Root()` — the note the arrangement is actually on — so a cascade
+   lands in the current chord rather than beside it. The interval set is the same one the music uses.
+
+   The shell cues are the other half. A plate coming off was borrowing `armor`, which V47 built
+   deliberately as "a ring that starts and refuses to develop" — the sound of nothing happening,
+   because it is what a blocked ward should sound like. A plate coming off is the opposite: it is
+   progress, and it needs to sound like progress or a player will read three working taps as three
+   ignored ones. So the crack rings *up* a step for each plate lost, and the shell shattering under a
+   blast is the same voice an octave up with the ring left open. */
+
+const V66={
+ /* Semitones above the root for successive links. The game's own scale, then repeating an octave
+    up, so a long cascade keeps climbing instead of walking on the spot. */
+ climb:[0,3,5,7,10,12,15,17,19,22],
+ /* Gap between links. Wide enough to clear the 45ms masking window that silenced the old cascade,
+    tight enough to still be one gesture rather than a sequence of separate kills. */
+ step:.055,
+ /* Two octaves above the root puts the run in the band a phone can actually project. Every audio
+    layer in this project has had to learn the same lesson: the fundamental has to be above roughly
+    400Hz or the speaker simply does not reproduce it. */
+ oct:4,
+ gain:.075,
+ /* The resolution under the run. A short low body so the cascade has weight, sent through the
+    missing-fundamental trick rather than as a real sub, for the same reason. */
+ bodyGain:.26
+};
+
+/* ---- The cascade ---- */
+
+v63Sound=function(links){
+ if(!audio.ctx)return;
+ const root=(typeof v34Root==='function'?v34Root():55)*V66.oct;
+ /* links is the number of EXTRA kills, so the run has links+1 notes -- one for the hostile the
+    player actually tapped and one for each thing it took with it. */
+ const notes=Math.min(V66.climb.length,links+1);
+ for(let i=0;i<notes;i++){
+  const freq=root*Math.pow(2,V66.climb[i]/12);
+  /* Each note a little quieter and a little brighter than the last: a run that holds one level
+     sounds like a machine gun, one that tapers sounds like something coming apart. */
+  const level=V66.gain*(1-i*.06);
+  audio.sweepVoice(freq,i*V66.step,.19,level,(i%2?.3:-.3),'triangle',2600+i*180,540,4);
+  if(i===notes-1)audio.strain(freq*2,i*V66.step+.02,level*.5,0,.34);
+ }
+ /* The body arrives with the last note rather than the first, so the cascade resolves downward onto
+    it instead of starting heavy and thinning out. */
+ if(typeof audio.residue==='function')audio.residue(root/4,(notes-1)*V66.step,V66.bodyGain*Math.min(1,.5+links*.18),0,.42);
+};
+
+/* ---- The shell ---- */
+
+v65Sound=function(kind){
+ if(!audio.ctx)return;
+ const root=(typeof v34Root==='function'?v34Root():55)*8;
+ if(kind==='shatter'){
+  /* Under a blast the whole shell goes at once, so this is allowed to be the brighter, longer cue.
+     It has to be distinguishable from the cascade run that is firing around it, which is why it is
+     a single struck ring rather than anything that climbs. */
+  /* Louder than the single-plate crack as well as brighter. Profiled at equal gain the two came out
+     within a decibel of each other in the passband, which is not what the moment is: cracking one
+     plate is progress, taking the whole shell off with a blast is the answer to the puzzle. */
+  audio.sweepVoice(root*1.5,0,.17,.135,0,'square',3400,700,7);
+  audio.strain(root*3,.01,.07,0,.4);
+ }else{
+  /* One plate. Short, metallic, and pitched clearly above the hit cue so it never reads as a normal
+     tap that failed to land. */
+  audio.sweepVoice(root,0,.09,.085,(Math.random()-.5)*.4,'square',2800,620,6);
+  audio.strain(root*2,.008,.035,0,.2);
+ }
+};

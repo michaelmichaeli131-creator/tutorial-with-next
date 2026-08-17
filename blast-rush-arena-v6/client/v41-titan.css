@@ -1,0 +1,188 @@
+/* V41 — the titan's own health bar was covering the titan.
+
+   Measured, not guessed: with a boss on the field its centre sat at y=181 with a radius of 105, so
+   the creature spanned y 76 to 286 — and the health card spanned y 118 to 178, straight across its
+   face. The wave bar crossed its head at the same time. What was left visible was a fraction of a
+   body and a few floating weak points, which is why the fight never read as a fight with anything.
+
+   The card was built like a panel: 60px tall, its own padding, its own title line, parked in the
+   middle of the play area. A boss bar belongs at the edge of the frame, out of the picture. This
+   makes it a strip directly under the combat bar and takes roughly half its height back. */
+
+.boss-hud {
+  /* Directly beneath the combat bar rather than floating in the arena. */
+  top: max(104px, calc(env(safe-area-inset-top) + 96px));
+  width: min(420px, 88vw);
+  padding: 5px 12px 6px;
+  border-radius: 0 0 14px 14px;
+  line-height: 1.15;
+}
+
+/* The name and the phase are reference, not headline — the bar itself is the readout, so it keeps
+   the weight and the two labels shrink to fit beside it. */
+#bossTitle {
+  font-size: 10px;
+  letter-spacing: .14em;
+}
+
+.boss-hud .boss-track {
+  height: 10px;
+  margin: 3px 0 2px;
+}
+
+.boss-hud small {
+  font-size: 8px;
+  letter-spacing: .18em;
+  opacity: .75;
+}
+
+@media (max-width: 800px), (pointer: coarse) {
+  .boss-hud {
+    top: max(100px, calc(env(safe-area-inset-top) + 92px));
+    width: 84vw;
+    padding: 4px 10px 5px;
+  }
+  #bossTitle { font-size: 9px; }
+  .boss-hud .boss-track { height: 9px; }
+}
+
+/* ---- V42: weapon art ----
+   The armory card was name, tag, prose and level pips — nothing you could look at. These are
+   diagrams of behaviour rather than icons, so they need to read at a glance and sit inside the
+   card's own rhythm rather than dominating it. */
+
+/* `position: relative` and `inset: auto` are not decoration. The base sheet styles the *element*
+   — `canvas { position: fixed; inset: 0; width: 100%; height: 100% }` — for the arena surface, and
+   that rule applies to every canvas in the document. Without these two lines all six diagrams were
+   position-fixed and stacked in the top-left corner of the viewport, on top of the header, and the
+   cards showed nothing. The DOM check said six canvases existed and none was blank, which is why
+   this had to be found by reading computed geometry rather than by counting elements. */
+.v42-art {
+  position: relative;
+  inset: auto;
+  display: block;
+  width: 100%;
+  max-width: 168px;
+  height: auto;
+  margin: 8px 0 4px;
+  border: 1px solid rgba(114, 215, 255, .18);
+  border-radius: 12px;
+  background: radial-gradient(ellipse at 50% 95%, rgba(30, 70, 120, .35), rgba(2, 6, 18, .6) 70%);
+}
+
+/* In combat the chip is small and sits beside the ability row, so the diagram is a thumbnail whose
+   only job is to match what the player is watching come out of the reactor. */
+.v42-chip-art {
+  position: relative;
+  inset: auto;
+  display: block;
+  width: 54px;
+  height: 30px;
+  margin: 0 auto 2px;
+  opacity: .95;
+}
+
+/* ---- V45: the daily board line ----
+   Sits under V37's personal-best line. That one is about you, this one is about everybody, so it is
+   quieter and shorter — the rank is the payload and the rest is scaffolding. */
+
+.v45-board {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #8fb6cf;
+  font-weight: 600;
+}
+
+.v45-board b {
+  color: #cfe4f3;
+  font-weight: 1000;
+}
+
+/* Being first on a shared field is the one outcome this mode exists to produce. */
+.v45-board.lead b { color: #ffe25e; }
+
+/* Before the round trip lands there is nothing true to say, so it says so rather than showing a
+   rank that is about to change. */
+.v45-board.pending { opacity: .55; font-style: italic; }
+
+/* The daily board rows reuse the live-arena table so the two lists on the social screen read as one
+   surface. Only two things are added: which row is yours, and which is the lead. */
+.v45-note { margin: 2px 0 10px; text-align: left; font-size: 12px; }
+/* The mobile sheet hides `code` inside a table row, because for a live arena that column is the
+   room code and the space is better spent on the name. Here the same column is the *score*, which
+   is the entire reason the board exists, so it is put back. */
+.v45-row code {
+  display: block !important;
+  font-variant-numeric: tabular-nums;
+  color: #cfe4f3;
+  font-weight: 1000;
+  font-size: 15px;
+}
+.v45-row small { display: block; margin-top: 2px; }
+.v45-row.first code { color: #ffe25e; }
+.v45-row.mine { border-color: #62e5ff88; background: rgba(98, 229, 255, .09); }
+.v45-row.mine b { color: #9ff6ff; }
+
+/* V55 — the weapon's numbers, under its diagram in the armory. A three-column grid rather than a
+   flex row so DAMAGE / TITAN / TARGETS line up across every card in the list; cards with a fourth
+   stat wrap onto a second row rather than squeezing the first. */
+.v55-stats {
+  display: grid !important;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px 8px;
+  margin: 8px 0 10px;
+  padding: 8px 10px;
+  border: 1px solid rgba(126, 232, 255, .16);
+  border-radius: 10px;
+  background: rgba(8, 18, 38, .55);
+}
+.v55-stats span {
+  display: flex !important;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.v55-stats small {
+  display: block !important;
+  font-size: 9px;
+  letter-spacing: .09em;
+  color: rgba(178, 208, 235, .72);
+}
+.v55-stats b {
+  display: block !important;
+  font-size: 15px;
+  font-weight: 800;
+  color: #eaf6ff;
+  line-height: 1.1;
+}
+/* The upgrade delta. Green because it is what the next level buys, and the whole reason this row
+   exists is that a player could not previously see whether it bought anything. */
+.v55-stats em {
+  display: block !important;
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 700;
+  color: #6ee7a8;
+}
+
+/* V58 — the challenge verdict, on the results screen under the daily rank line. Three states: a win,
+   a gap, and "we could not reach it", because a silent failure on a friend's challenge reads as
+   nobody caring rather than as a network problem. */
+.v58-challenge:empty { display: none; }
+.v58-challenge {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #b8d4ea;
+}
+.v58-challenge b { color: #eaf6ff; }
+.v58-challenge small {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: rgba(178, 208, 235, .66);
+}
+.v58-challenge.won b { color: #6ee7a8; }
+.v58-challenge.lost b { color: #ffc46b; }
+.v58-challenge.pending { color: rgba(178, 208, 235, .62); }

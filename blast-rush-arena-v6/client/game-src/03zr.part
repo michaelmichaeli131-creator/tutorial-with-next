@@ -1,0 +1,138 @@
+/* V39 — the daily arena.
+
+   The last of the four original priorities was "reasons to come back", and the honest description
+   of the game before this is that **nothing changes between sessions**. Solo is the same endless
+   ladder every time you open it; the campaign has fifteen stages and then it is finished. V37 gave
+   the results screen a personal best to chase, which is a reason to press PLAY AGAIN — but nothing
+   anywhere was a reason to open the app tomorrow.
+
+   The answer this genre settled on long ago is a daily seeded run, and it works because it turns a
+   score into a *comparable* score: everyone is playing the same field, so "42,000" means something
+   it cannot mean when every run is a different arena. It also expires, which is the part that
+   brings people back — today's field is gone tomorrow.
+
+   The machinery was already here. `begin(mode,seed)` takes a seed, `rng()` is seeded from it, and
+   V20 already made spawns deterministic so two duellists meet identical enemies. What was missing
+   was a reason to use it.
+
+   Verified before building anything on top of it, because "everyone gets the same arena" is not
+   worth saying unless it is true: the same seed run twice produced an identical sequence of 19
+   spawns — type, position, speed, radius and elite modifier — while a different seed diverged, so
+   the check can actually fail. The `Math.random()` calls that remain are all cosmetic: particle
+   angles, stereo pan, the launch scene. */
+
+/* UTC, so the arena turns over at the same instant everywhere and nobody gets a second attempt by
+   changing timezone. */
+function v39Day(date=new Date()){
+ return `${date.getUTCFullYear()}-${String(date.getUTCMonth()+1).padStart(2,'0')}-${String(date.getUTCDate()).padStart(2,'0')}`;
+}
+
+/* A cheap avalanche hash of the date string. It only has to be well distributed and stable — every
+   client must derive the identical seed from the identical day with no round trip. */
+function v39Seed(day=v39Day()){
+ let h=2166136261>>>0;
+ for(let i=0;i<day.length;i++){
+  h^=day.charCodeAt(i);
+  h=Math.imul(h,16777619)>>>0;
+ }
+ h^=h>>>15;h=Math.imul(h,2246822507)>>>0;
+ h^=h>>>13;h=Math.imul(h,3266489909)>>>0;
+ return (h^(h>>>16))>>>0||1;
+}
+
+function v39State(){
+ if(!save.daily||typeof save.daily!=='object')save.daily={day:'',best:0,streak:0,last:''};
+ const d=save.daily;
+ if(typeof d.day!=='string')d.day='';
+ if(!Number.isFinite(d.best))d.best=0;
+ if(!Number.isFinite(d.streak))d.streak=0;
+ if(typeof d.last!=='string')d.last='';
+ /* A new day wipes today's best but never the streak — the streak is decided when a run finishes,
+    not when the clock rolls over, or simply opening the app would extend it. */
+ const today=v39Day();
+ if(d.day!==today){d.day=today;d.best=0;}
+ return d;
+}
+
+function v39Yesterday(){
+ const d=new Date();
+ d.setUTCDate(d.getUTCDate()-1);
+ return v39Day(d);
+}
+
+const v39BeginDaily=begin;
+begin=function(mode='solo',seed){
+ /* A daily is solo with a fixed seed, so the base is entered as solo — that keeps every layer that
+    switches on the mode (heat, wards, divers, the hush) behaving exactly as in a normal run, which
+    is the point: the daily has to be the same game, not a variant.
+
+    The mode is then stamped back to 'daily' because RESTART and PLAY AGAIN both call
+    `begin(game.mode)`. Leaving it as 'solo' meant pressing PLAY AGAIN on a daily result silently
+    started a *random* arena — the one thing a daily must never do, since the whole proposition is
+    that you can attack the same field again. Nothing else reads 'solo' specifically; every check in
+    the codebase tests for 'duel', 'campaign' or 'gauntlet'. */
+ const daily=mode==='daily';
+ if(daily)v39State();
+ v39BeginDaily(daily?'solo':mode,daily?v39Seed():seed);
+ game.v39Daily=daily;
+ if(daily)game.mode='daily';
+ /* Cosmetic randomness seeded from the run too, so a replayed seed reproduces the crowd it drew the
+    first time and not merely the crowd's behaviour. V33's comment claimed this and was wrong: its
+    counter was module-level and never reset, so two runs of one seed produced identically-behaving
+    hostiles that looked different. */
+ if(typeof v33Seed!=='undefined')v33Seed=(game.seed>>>0)||1;
+};
+
+/* Recorded when a run ends rather than when it starts, so opening the daily and quitting does not
+   count as having played it. */
+const v39FinishDaily=finish;
+finish=function(victory=false,duelData=null){
+ const daily=game.running&&game.v39Daily;
+ const score=Math.floor(game.score);
+ v39FinishDaily(victory,duelData);
+ if(!daily)return;
+ const d=v39State();
+ const today=v39Day();
+ if(d.last!==today){
+  /* Consecutive days only. Miss one and the streak starts again at one — that is what makes it
+     worth protecting. */
+  d.streak=d.last===v39Yesterday()?d.streak+1:1;
+  d.last=today;
+ }
+ d.best=Math.max(d.best,score);
+ persist();
+ v39Menu();
+};
+
+/* The button has to say what today holds and what you have already done with it, or it is just
+   another mode nobody picks. */
+function v39Menu(){
+ const hint=$('dailyBtnHint');
+ if(!hint)return;
+ const d=v39State();
+ const bits=[];
+ bits.push(d.best>0?`Today's best ${format(d.best)}`:'One field. Everyone gets the same one.');
+ if(d.streak>0&&d.last===v39Day())bits.push(`${d.streak} day streak`);
+ else if(d.streak>0&&d.last===v39Yesterday())bits.push(`${d.streak} day streak — keep it alive`);
+ hint.textContent=bits.join(' • ');
+}
+
+const v39UpdateMenu=updateMenu;
+updateMenu=function(){
+ v39UpdateMenu();
+ v39Menu();
+};
+
+/* The results screen compares against today rather than against all time: a daily is a fixed field,
+   so the only meaningful question is whether this attempt beat your earlier attempts at it. V37
+   reads its comparison through this function, so overriding it is the whole integration. */
+const v39PriorBestBase=v37PriorBest;
+v37PriorBest=function(){
+ if(game.v39Daily){
+  const d=v39State();
+  return{value:d.best,label:"TODAY'S BEST"};
+ }
+ return v39PriorBestBase();
+};
+
+bind('dailyBtn',()=>begin('daily'));

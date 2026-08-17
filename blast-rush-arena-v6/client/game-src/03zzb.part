@@ -1,0 +1,136 @@
+/* V54 — make it actually louder.
+
+   V52 fixed *where* the music sat in the spectrum, which was a real problem, and moved the bus from
+   curve*0.5 to curve*0.9. The note back is that it is still heard very weakly. That is a level
+   request and it should be answered as one, so this is about loudness rather than balance.
+
+   Three places the level was being given away, all of them measured:
+
+   1. **The bus gain.** At the default slider it worked out to 0.68, and the music bus measured about
+      -28dBFS RMS. Game music normally sits nearer -18. That is roughly ten decibels missing.
+   2. **The master gain was 0.78.** Two decibels of headroom thrown away at the last stage for no
+      stated reason, on a graph that already has a compressor to catch peaks.
+   3. **The compressor was doing nothing.** Measured gain reduction was under a tenth of a decibel
+      across a whole run. A compressor that never engages is not protecting anything; it is just
+      headroom sitting unused. The reason the music could not simply be turned up to use it is the
+      next problem.
+
+   **Music and sound effects share one compressor.** Both buses feed the same
+   `DynamicsCompressor`, so as soon as either one is loud enough to trigger reduction it ducks the
+   other. Turning the music up ten decibels into that graph would mean every kill audibly pumps the
+   music, and the louder music would flatten the kills — the two things the player is meant to hear
+   would start fighting each other. That coupling is exactly why the safe thing to do previously was
+   to leave both quiet.
+
+   So the music gets its own compressor first. A gentle one — threshold well down, ratio 3, soft knee
+   — which lets the arrangement be pushed hard and stay glued while presenting a controlled, fairly
+   constant level to the shared stage downstream. That is the ordinary way this is built, and with it
+   in place the bus can be raised properly instead of cautiously. */
+
+const V54={
+ /* Applied to the same curve the slider already produces, so the control keeps its whole range and
+    a player who turned the music down still gets it down. */
+ bus:2.3,
+ /* Reclaiming the headroom the last stage was discarding. Not 1.0: the shared compressor's output
+    plus the reverb and delay returns need somewhere to go. */
+ master:.94,
+ /* Deliberately low threshold and modest ratio. The job is not to squash the music, it is to stop
+    the arrangement's peaks from reaching the shared compressor and dragging the sound effects down
+    with them. */
+ threshold:-21,
+ knee:14,
+ ratio:3,
+ attack:.008,
+ release:.2,
+ /* Make-up gain after the compressor, since compression costs level by definition. */
+ makeup:1.7,
+ /* A limiter on the very last edge, before the destination.
+
+    Measured: with the bus and master raised as above, the output true peak reached 1.062 — hard
+    clipping, caught by holding the peak in-page because a clipped sample lasts microseconds and
+    cannot be found by polling. The wrong response is to give the level back, since more level is the
+    entire request. The right one is the stage this graph never had: the shared compressor sits
+    *before* the master gain, so nothing at all was protecting the output.
+
+    Ratio 20 with a 1ms attack and no knee is a limiter rather than a compressor — it is not there to
+    shape anything, only to guarantee the last sample cannot exceed the ceiling. */
+ /* Measured post-limiter at a -1.6dB threshold the output true peak was 0.977, which is not clipping
+    but is only two tenths of a decibel from it -- and Web Audio's DynamicsCompressor is known to
+    overshoot on fast transients, so two tenths is not a margin. Dropped to -3, which costs almost no
+    perceived loudness because it only touches peaks. */
+ limitThreshold:-3,
+ limitRatio:20,
+ limitAttack:.001,
+ limitRelease:.06
+};
+
+/* Inserted rather than replacing anything: the arrangement, the V49 bed and the delay return all
+   already feed `music`, so putting this between `musicFilter` and the shared compressor picks up
+   everything that is meant to be music and nothing that is not. */
+audio.v54=null;
+audio.v54Install=function(){
+ if(!this.ctx||this.v54)return;
+ const comp=this.ctx.createDynamicsCompressor();
+ comp.threshold.value=V54.threshold;
+ comp.knee.value=V54.knee;
+ comp.ratio.value=V54.ratio;
+ comp.attack.value=V54.attack;
+ comp.release.value=V54.release;
+ const makeup=this.ctx.createGain();
+ makeup.gain.value=V54.makeup;
+ /* The original edge is removed so the music passes through the new stage instead of around it. If
+    the graph ever changes shape and this edge is not there, the disconnect throws and the insert is
+    abandoned rather than leaving the music routed twice. */
+ try{this.musicFilter.disconnect(this.compressor);}
+ catch(e){return;}
+ this.musicFilter.connect(comp);
+ comp.connect(makeup);
+ makeup.connect(this.compressor);
+
+ /* The output limiter. Inserted after the master gain, which is where a ceiling has to be — a
+    limiter before the master can be undone by the master. */
+ const limiter=this.ctx.createDynamicsCompressor();
+ limiter.threshold.value=V54.limitThreshold;
+ limiter.knee.value=0;
+ limiter.ratio.value=V54.limitRatio;
+ limiter.attack.value=V54.limitAttack;
+ limiter.release.value=V54.limitRelease;
+ try{this.master.disconnect(this.ctx.destination);}
+ catch(e){/* already rerouted by something else; the music insert above still stands */}
+ this.master.connect(limiter);
+ limiter.connect(this.ctx.destination);
+
+ this.v54={comp,makeup,limiter};
+};
+
+const v54Start=audio.start.bind(audio);
+audio.start=function(){
+ v54Start();
+ this.v54Install();
+ if(this.master)this.master.gain.setTargetAtTime(V54.master,this.ctx.currentTime,.1);
+};
+
+/* The bus level. Set after the base call so this is the last writer on the parameter each frame —
+   03zk sets curve*0.9 sixty times a second, and a value written once would simply be overwritten. */
+const v54Update=audio.update.bind(audio);
+audio.update=function(g){
+ v54Update(g);
+ if(!this.ctx)return;
+ const level=typeof v12MusicCurve==='function'?v12MusicCurve(save.music):save.music/100;
+ this.music.gain.setTargetAtTime(level*V54.bus,this.ctx.currentTime,.15);
+ this.master.gain.setTargetAtTime(V54.master,this.ctx.currentTime,.15);
+};
+
+/* And the other writer, so touching a setting does not drop the music for a moment. This is the
+   third time these two have had to be brought into step; they are both left pointing at the same
+   constant now rather than at two literals that can drift apart again. */
+const v54ApplyLevels=typeof v12ApplyAudioLevels==='function'?v12ApplyAudioLevels:null;
+if(v54ApplyLevels){
+ v12ApplyAudioLevels=function(){
+  v54ApplyLevels();
+  if(!audio.ctx)return;
+  const level=v12MusicCurve(save.music);
+  audio.music.gain.setTargetAtTime(level*V54.bus,audio.ctx.currentTime,.05);
+  audio.master.gain.setTargetAtTime(V54.master,audio.ctx.currentTime,.05);
+ };
+}

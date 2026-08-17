@@ -1,0 +1,39 @@
+/* V26 WORLD LIGHT — put the arena's light onto the things standing in it.
+
+   With the six worlds finally looking like six places, the creatures stopped belonging to any of
+   them. Every species carries a fixed palette, so a Void Scout in the Solar Temple is lit exactly
+   as it is in the Void Cathedral: cool violet plating over a navy underside, in a world where the
+   only light for miles is an orange sun sitting on the horizon. That is the tell. Real art
+   direction is not six palettes, it is one light doing different things in six rooms.
+
+   The species colours themselves stay put, deliberately. Red means it detonates, green means it
+   splits into shards, amber means it splits in two — recolouring those by world would trade a
+   gameplay signal for a mood, and the player is reading them at a glance under pressure. What
+   changes is the lighting: the world's accent bounces up off the horizon onto every creature's
+   underside, which is where the light actually is now that the sky's bright band sits at the
+   ground line rather than in the middle of the screen.
+
+   This lives after 03v because 03v owns the carapace helper, and after the art-pack hooks in 03t
+   so an installed pack is unaffected — a painted sprite already carries its own lighting. */
+
+const v26CarapaceBase=v15Carapace;
+v15Carapace=function(c,pal,points,x0,y0,x1,y1){
+ v26CarapaceBase(c,pal,points,x0,y0,x1,y1);
+ const world=worlds[game.world%worlds.length];
+ c.save();
+ c.globalCompositeOperation='lighter';
+ /* Keyed on the world and on the shape's own extent, both of which are fixed for the life of a
+    species, so this is one gradient per creature type per world rather than one per creature per
+    frame. Filling the body path directly avoids a second clip on top of the one V19 already takes
+    for its seams. */
+ c.fillStyle=v15Grad(c,`v26bounce|${world.accent}|${Math.round(y0)}|${Math.round(y1)}`,()=>{
+  const g=c.createLinearGradient(0,y1,0,y0+(y1-y0)*.3);
+  g.addColorStop(0,world.accent+'3a');
+  g.addColorStop(.45,world.accent+'12');
+  g.addColorStop(1,world.accent+'00');
+  return g;
+ });
+ v14Art.poly(c,points);
+ c.fill();
+ c.restore();
+};

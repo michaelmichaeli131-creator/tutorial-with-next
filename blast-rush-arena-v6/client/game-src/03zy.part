@@ -1,0 +1,324 @@
+/* V49 — dread belongs in the bed, definition belongs in the hit.
+
+   The note was that the sounds should be mysterious, frightening and tense, and to go and find out
+   what actually does that. So I did, and the reading changes two things: it adds four techniques
+   the game did not have, and it says one thing I did in V47 was aimed at the wrong layer.
+
+   ---- What the literature actually says ----
+
+   **Close-interval dissonance.** Two tones about a semitone apart do not beat pleasantly, they
+   *clash*: the frequencies fall inside one critical band and the result is rough and refuses to
+   resolve. This is the most reliably unsettling interval there is, and it is the one V35
+   deliberately rejected — "a minor second in the bass is pure fright", which was correct when the
+   brief was tension with only a trace of fright. The brief is now explicitly frightening, so it
+   comes back.
+
+   **Low, unsteady sound.** The infrasound result is real but is routinely overstated, and for this
+   game it is unusable as stated: the documented stress response sits around 18–19Hz, and no phone
+   speaker reproduces 18Hz at any volume. Pretending otherwise would be writing a tone nobody can
+   hear. What survives a phone speaker is a low bed that is *unstable* — so the sub is amplitude
+   modulated a few times a second, which is audible on any speaker and reads as something wrong
+   with the floor rather than as a note.
+
+   **The Shepard–Risset glissando.** A stack of octave-spaced voices, each gliding upward, each
+   fading in at the bottom of its sweep and out at the top, so the pitch appears to rise forever
+   while the mix never gets louder. This is the technique for mounting pressure that does not
+   consume headroom, recommended at roughly 0.1–0.2Hz. It is a near-perfect fit for a wave arena:
+   pressure is exactly what this game has and exactly what it was not expressing.
+
+   **Dynamic range, and silence to sit in.** Start quiet so that loud lands. V35 already built the
+   hush, which is the hard part; what it lacked was anything sustained for the hush to be a hole in.
+
+   ---- And what it says about V47 ----
+
+   V47 removed the noise from the kill, which was right — the drum complaint was accurate. But it
+   also gave the kill an eighteen-millisecond attack and no transient at all, and that overshot. The
+   game-feel literature is consistent that player-action feedback has to *confirm*: a hit sound
+   carries information, and a hit with no edge on the front of it reads as mushy rather than as
+   tense. Tension and confirmation are not in conflict, because they are not the same layer.
+
+   So the division of labour is now explicit, which is what every adaptive-audio guide describes:
+   **the bed carries the dread, the hit carries the information.** The kill gets an edge back — a
+   pitched ping, three milliseconds, not noise, so it does not become a drum again — and everything
+   frightening moves into a sustained layer underneath where it can be continuous, which is the one
+   thing a per-kill sound can never be. */
+
+const V49={
+ /* One semitone. The interval itself is the effect. */
+ minor2:Math.pow(2,1/12),
+ /* Slow enough to be heard as unsteadiness rather than as a tremolo effect. */
+ wobble:4.6,
+ /* Octaves the Risset spans, and how long one octave of apparent rise takes. 7s is inside the
+    0.1–0.2Hz the literature recommends. */
+ rissetVoices:4,
+ rissetPeriod:7,
+ /* The bed is meant to be felt and not noticed. Anything above about .1 and it stops being a floor
+    and starts being a part. */
+ bedGain:.085,
+ rissetGain:.05
+};
+
+/* ---- The bed --------------------------------------------------------------------------------
+
+   Built once and held, rather than scheduled per event. That is the whole point: a one-shot cue is
+   a scare, and a scare is not tension. Tension is the thing that was already there when you
+   started paying attention.
+
+   Routed through `audio.music` rather than `audio.sfxGain` so it obeys the music slider and so
+   V35's dread filter closes over it — when things go badly the bed loses its top end along with
+   the arrangement, which is free and is exactly right. */
+audio.v49=null;
+
+audio.bedStart=function(){
+ if(!this.ctx||this.v49)return;
+ const t=this.ctx.currentTime;
+ const root=typeof v34Root==='function'?v34Root():55;
+ const out=this.ctx.createGain();
+ out.gain.value=.0001;
+ const filter=this.ctx.createBiquadFilter();
+ filter.type='lowpass';
+ filter.frequency.value=700;
+ filter.Q.value=.7;
+ filter.connect(out);
+ out.connect(this.music);
+
+ const nodes=[];
+
+ /* 1. The floor. A clean sub, then an LFO on its own gain so it never sits still. This is the
+       honest substitute for the infrasound result — same intent, at a frequency that exists on the
+       device the game is played on. */
+ const sub=this.ctx.createOscillator();
+ const subGain=this.ctx.createGain();
+ sub.type='sine';
+ sub.frequency.value=root;
+ subGain.gain.value=.0001;
+ const lfo=this.ctx.createOscillator();
+ const lfoDepth=this.ctx.createGain();
+ lfo.type='sine';
+ lfo.frequency.value=V49.wobble;
+ lfoDepth.gain.value=0;
+ lfo.connect(lfoDepth);
+ lfoDepth.connect(subGain.gain);
+ sub.connect(subGain);
+ subGain.connect(filter);
+ sub.start(t);lfo.start(t);
+ nodes.push(sub,lfo);
+
+ /* 2. The clash. Two voices a semitone apart, each detuned a few cents off its partner so the pair
+       also drifts slowly — the semitone supplies the roughness, the detune supplies the
+       unsteadiness, and neither on its own does both. Two octaves up from the sub, because in the
+       bass a minor second is just mud on a small speaker. */
+ const clash=this.ctx.createGain();
+ clash.gain.value=.0001;
+ clash.connect(filter);
+ for(const [mult,cents] of [[4,-7],[4*V49.minor2,6]]){
+  const osc=this.ctx.createOscillator();
+  osc.type='triangle';
+  osc.frequency.value=root*mult;
+  osc.detune.value=cents;
+  osc.connect(clash);
+  osc.start(t);
+  nodes.push(osc);
+ }
+
+ /* 3. The rise. Octave-spaced sines whose frequency and level are set from one shared phase every
+       update — a real endless glissando rather than a sample of one, so it can be held for as long
+       as the pressure lasts and can stop the moment it does not. */
+ const risset=this.ctx.createGain();
+ risset.gain.value=.0001;
+ risset.connect(filter);
+ const voices=[];
+ for(let i=0;i<V49.rissetVoices;i++){
+  const osc=this.ctx.createOscillator();
+  const g=this.ctx.createGain();
+  osc.type='sine';
+  osc.frequency.value=root*Math.pow(2,i);
+  g.gain.value=.0001;
+  osc.connect(g);g.connect(risset);
+  osc.start(t);
+  voices.push({osc,g});
+  nodes.push(osc);
+ }
+
+ this.v49={out,filter,subGain,lfoDepth,clash,risset,voices,nodes,root,phase:0,at:0};
+};
+
+audio.bedStop=function(){
+ const bed=this.v49;
+ if(!bed||!this.ctx)return;
+ this.v49=null;
+ const t=this.ctx.currentTime;
+ /* Faded rather than cut. A drone that stops instantly is a glitch, and the release is also the
+    last half-second of a run, which is not a moment to put a click in. */
+ bed.out.gain.cancelScheduledValues(t);
+ bed.out.gain.setTargetAtTime(.0001,t,.25);
+ for(const node of bed.nodes){try{node.stop(t+1.2);}catch(e){/* already stopped */}}
+ setTimeout(()=>{try{bed.out.disconnect();}catch(e){/* context gone */}},1600);
+};
+
+/* Pressure is not dread. V35's dread is about what you have left to lose and it decays slowly;
+   pressure is about what is on the field right now, so it climbs through a wave and falls the
+   moment the field is cleared. The rise tracks pressure because an endless glissando that never
+   resolves is unbearable — it has to be allowed to stop, and a cleared field is what earns that. */
+function v49Pressure(){
+ if(!game.running||game.paused)return 0;
+ const line=H-(isMobile?105:72);
+ let closest=0;
+ let live=0;
+ for(const o of game.orbs){
+  if(o.y<0)continue;
+  live++;
+  closest=Math.max(closest,Math.min(1,o.y/line));
+ }
+ return Math.min(1,
+  Math.min(1,live/9)*.45
+  +Math.pow(closest,2)*.4
+  +(game.boss?.35:0));
+}
+
+/* Parameters are driven at 12Hz rather than per frame. Every one of these is either a filter sweep
+   or a slow glissando — none of them can change meaningfully inside 80ms — and the update runs
+   inside the frame loop of a game whose speed is a standing complaint. */
+const V49_TICK=1/12;
+
+const v49AudioUpdate=audio.update.bind(audio);
+audio.update=function(g){
+ v49AudioUpdate(g);
+ const bed=this.v49;
+ if(!bed||!this.ctx)return;
+ const now=this.ctx.currentTime;
+ if(now-bed.at<V49_TICK)return;
+ const step=Math.min(.5,now-bed.at||V49_TICK);
+ bed.at=now;
+
+ const dread=Math.max(0,Math.min(1,g.v35Dread||0));
+ const pressure=v49Pressure();
+ const live=g.running&&!g.paused;
+ const tc=.22;
+
+ /* The bed ducks out of the hush instead of playing through it. V35 bought a beat of nothing and
+    the whole value of it is that it is nothing — a drone running underneath would spend it. */
+ const open=live&&!(g.v35Hush>0)?1:0;
+ bed.out.gain.setTargetAtTime(Math.max(.0001,V49.bedGain*open),now,tc);
+
+ /* The floor is always there; how unsteady it is tracks dread. At zero it is a held note, and by
+    the last life it is visibly breathing. */
+ bed.subGain.gain.setTargetAtTime(.5+dread*.22,now,tc);
+ bed.lfoDepth.gain.setTargetAtTime(.1+dread*.42,now,tc);
+
+ /* The clash is the frightening element, so it is the one that is rationed. Near-silent while a
+    run is going well, and it only really arrives when the player is in trouble — which is what
+    makes it mean something when it does. */
+ bed.clash.gain.setTargetAtTime(Math.max(.0001,.05+Math.pow(dread,1.6)*.85),now,tc);
+ bed.filter.frequency.setTargetAtTime(400+(1-dread)*900,now,tc);
+
+ /* The rise runs on pressure. Measured over a real run its level moves across a threefold range
+    and does reach zero, but a wave arena almost always has something on the field, so in practice
+    this swells and subsides rather than switching off — the thing that actually silences it is the
+    hush, which ducks the whole bed. */
+ bed.risset.gain.setTargetAtTime(Math.max(.0001,Math.pow(pressure,1.4)*V49.rissetGain/V49.bedGain),now,tc);
+ if(pressure<=.02)return;
+
+ bed.phase=(bed.phase+step/V49.rissetPeriod)%1;
+ const span=V49.rissetVoices;
+ for(let i=0;i<span;i++){
+  /* Each voice climbs one octave per period and wraps. Because the set is octave-spaced and the
+     wrap point is masked by the envelope, the ear hears one tone rising without end rather than
+     four tones looping. */
+  const pos=(bed.phase+i)%span;
+  const voice=bed.voices[i];
+  voice.osc.frequency.setTargetAtTime(bed.root*Math.pow(2,pos),now,.08);
+  /* Zero at both ends of the sweep: a voice must be inaudible at the moment it jumps back to the
+     bottom, or the illusion collapses into an obvious sawtooth of pitch. */
+  const bell=Math.pow(Math.sin(Math.PI*(pos/span)),2);
+  voice.g.gain.setTargetAtTime(Math.max(.0001,bell*.5),now,.1);
+ }
+};
+
+/* ---- Lifecycle ---- */
+
+const v49Begin=begin;
+begin=function(mode='solo',seed){
+ v49Begin(mode,seed);
+ if(audio.ctx&&save.music>0)audio.bedStart();
+};
+
+const v49Finish=finish;
+finish=function(victory=false,duelData=null){
+ v49Finish(victory,duelData);
+ audio.bedStop();
+};
+
+/* Leaving to a menu mid-run has to stop it too, or the drone follows the player out of the arena
+   and plays under the launch screen. */
+const v49ShowScreen=showScreen;
+showScreen=function(id){
+ if(id!=='gameScreen')audio.bedStop();
+ return v49ShowScreen(id);
+};
+
+/* ---- The hush gets its minor second back ----
+
+   V35 chose a perfect fifth here over a minor second, and said why: the brief at the time was
+   tension with only a trace of fright, and a minor second in the bass is pure fright. That
+   reasoning was sound and the brief has since changed. The fifth stays as the body of the swell —
+   it is what makes the hush read as a system spooling up rather than as a jump scare — and the
+   minor second goes underneath it, quiet, as the thing that stops the swell from resolving. */
+const v49Dread=audio.dread.bind(audio);
+audio.dread=function(){
+ v49Dread();
+ if(!this.ctx||!save.sfx)return;
+ const root=typeof v34Root==='function'?v34Root():55;
+ const t=this.ctx.currentTime;
+ const g=this.ctx.createGain();
+ g.gain.setValueAtTime(.0001,t);
+ g.gain.exponentialRampToValueAtTime(.075,t+V35.hush*.8);
+ g.gain.exponentialRampToValueAtTime(.0001,t+V35.hush+.45);
+ for(const mult of [2,2*V49.minor2]){
+  const osc=this.ctx.createOscillator();
+  osc.type='triangle';
+  osc.frequency.setValueAtTime(root*mult,t);
+  osc.connect(g);
+  osc.start(t);osc.stop(t+V35.hush+.5);
+ }
+ g.connect(this.sfxGain);
+};
+
+/* ---- The hit gets its edge back ----
+
+   Three milliseconds of a pitched ping on the front of the kill. It is a tone and not a noise
+   burst, so the drum does not come back; what it restores is the moment of confirmation, which is
+   the part of a hit sound that carries information rather than mood. The sweep's own attack comes
+   down from eighteen milliseconds to nine for the same reason — eighteen was chosen to be as far
+   from a click as possible, and that was further than it needed to go. */
+V47.attack=.009;
+
+audio.edge=function(freq,gain,pan){
+ if(!this.ctx)return;
+ const t=this.ctx.currentTime;
+ const osc=this.ctx.createOscillator();
+ const g=this.ctx.createGain();
+ const p=this.ctx.createStereoPanner?this.ctx.createStereoPanner():null;
+ osc.type='triangle';
+ osc.frequency.setValueAtTime(freq*2,t);
+ osc.frequency.exponentialRampToValueAtTime(Math.max(30,freq*1.4),t+.05);
+ g.gain.setValueAtTime(.0001,t);
+ g.gain.exponentialRampToValueAtTime(Math.max(.0002,gain),t+.003);
+ g.gain.exponentialRampToValueAtTime(.0001,t+.055);
+ osc.connect(g);
+ if(p){p.pan.value=Math.max(-1,Math.min(1,pan));g.connect(p);p.connect(this.sfxGain);}
+ else g.connect(this.sfxGain);
+ osc.start(t);osc.stop(t+.08);
+};
+
+const v49Impact=audio.impact.bind(audio);
+audio.impact=function(type,power=1,combo=0,perfect=false){
+ if(!this.ctx)return;
+ /* Read before the base call, because the base call is what advances the window counter — and a
+    kill that the budget is about to drop should not get an edge either. */
+ const dropped=(this.ctx.currentTime-v34LastAt<.045)&&v34InWindow>=3;
+ v49Impact(type,power,combo,perfect);
+ if(dropped)return;
+ const kit=V34_KITS[type]||V34_KITS.normal;
+ this.edge(v34Note(kit,combo),Math.min(.34,kit.gain*power*.3),(Math.random()-.5)*.8);
+};

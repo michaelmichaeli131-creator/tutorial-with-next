@@ -1,0 +1,231 @@
+/* V17 — the chrome system.
+   Distilled from the reference mockups. What makes those read as premium is not the illustration,
+   it is the framing language repeated everywhere: chamfered corners, a hard dark outer edge with a
+   bright inner rule, a metallic fill with one sheen band, and small ornaments (rivets, level
+   badges, rarity stars). This file defines that language once so every surface can wear it. */
+:root{
+ --f-cut:11px;                                  /* corner chamfer */
+ --f-ink:#04060e;
+ --f-edge:#0a1020;
+ --f-rule:rgba(126,214,255,.55);
+ --f-rule-dim:rgba(126,214,255,.22);
+ --f-gold:#ffc247;--f-gold-lt:#ffe9a8;--f-gold-dk:#a35f06;
+ --f-steel-1:#2b4478;--f-steel-2:#16244a;--f-steel-3:#0a1128;
+ --f-danger:#ff3d63;
+ --f-plate:linear-gradient(168deg,#2b4478 0%,#1a2a55 34%,#0d1734 62%,#0a1128 100%);
+}
+
+/* The frame primitive: a chamfered plate with a dark rim, an inner rule and a sheen band. */
+.f-plate{
+ position:relative;
+ background:var(--f-plate);
+ clip-path:polygon(var(--f-cut) 0,calc(100% - var(--f-cut)) 0,100% var(--f-cut),100% calc(100% - var(--f-cut)),calc(100% - var(--f-cut)) 100%,var(--f-cut) 100%,0 calc(100% - var(--f-cut)),0 var(--f-cut));
+ box-shadow:0 4px 14px rgba(0,0,0,.55);
+}
+/* Rim + inner rule are drawn as a pseudo so the chamfer stays a single clip-path. */
+.f-plate:before{
+ content:"";position:absolute;inset:0;pointer-events:none;
+ background:
+  linear-gradient(180deg,rgba(255,255,255,.16) 0 1px,transparent 1px),
+  linear-gradient(180deg,transparent calc(100% - 1px),rgba(0,0,0,.5) calc(100% - 1px));
+ clip-path:inherit;
+ border:1px solid var(--f-rule-dim);
+}
+/* One diagonal sheen band is what sells "metal" over "flat gradient". */
+.f-plate:after{
+ content:"";position:absolute;inset:0;pointer-events:none;clip-path:inherit;
+ background:linear-gradient(104deg,transparent 30%,rgba(255,255,255,.11) 44%,rgba(255,255,255,.02) 52%,transparent 60%);
+}
+.f-plate.gold{--f-plate:linear-gradient(168deg,#6b4708 0%,#4a3006 40%,#2a1b04 100%);border-color:rgba(255,194,71,.4)}
+.f-plate.gold:before{border-color:rgba(255,194,71,.42)}
+.f-plate.danger{--f-plate:linear-gradient(168deg,#6b1024 0%,#440a17 44%,#26060e 100%)}
+.f-plate.danger:before{border-color:rgba(255,61,99,.42)}
+
+/* Bright rule along the top edge — used on headers and active states. */
+.f-rule-top:before{background:linear-gradient(90deg,transparent,var(--f-rule),transparent) top/100% 2px no-repeat,linear-gradient(180deg,rgba(255,255,255,.14) 0 1px,transparent 1px)}
+
+/* Corner rivets. Four dots inset from the chamfer, cheap and very effective. */
+.f-rivets{position:relative}
+.f-rivets:after{
+ content:"";position:absolute;inset:5px;pointer-events:none;
+ background-image:radial-gradient(circle,rgba(190,225,255,.5) 0 1.1px,transparent 1.4px);
+ background-position:0 0,100% 0,0 100%,100% 100%;
+ background-size:3px 3px;background-repeat:no-repeat;
+}
+
+/* Portrait frame: square plate, glowing rule, level badge tucked into the bottom-left chamfer. */
+.f-portrait{position:relative;flex:0 0 auto;width:46px;height:46px}
+.f-portrait canvas{position:relative!important;inset:auto;display:block;width:100%;height:100%;background:radial-gradient(circle at 50% 38%,rgba(56,110,190,.4),rgba(3,7,18,.95) 72%);clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px)}
+.f-portrait:before{content:"";position:absolute;inset:0;pointer-events:none;border:1.5px solid var(--f-rule);clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px);box-shadow:0 0 14px rgba(96,200,255,.35)}
+.f-lvl{position:absolute;left:-4px;bottom:-4px;min-width:19px;height:19px;display:grid;place-items:center;padding:0 3px;border:1.5px solid #2a1a02;border-radius:5px;background:linear-gradient(180deg,var(--f-gold-lt),var(--f-gold) 52%,var(--f-gold-dk));color:#3a2200;font:1000 10px/1 system-ui;box-shadow:0 2px 0 rgba(0,0,0,.5)}
+
+/* Rarity stars. */
+.f-stars{display:flex;gap:1px;font:900 9px/1 system-ui;color:var(--f-gold);text-shadow:0 1px 2px rgba(0,0,0,.8)}
+.f-stars i{font-style:normal;opacity:.24}
+.f-stars i.on{opacity:1}
+
+/* Segmented bar: the tick overlay is what makes a plain fill read as a game meter. */
+.f-bar{position:relative;height:14px;overflow:hidden;background:linear-gradient(180deg,#070d1e,#040812);border:1.5px solid rgba(8,14,30,.95);box-shadow:inset 0 2px 5px rgba(0,0,0,.75)}
+/* `position:relative` is load-bearing: the bright leading edge below is absolutely positioned, and
+   without it the edge anchors to the track and pins itself to the far right of an empty bar. */
+.f-bar>i{position:relative;display:block;height:100%;width:0;background:linear-gradient(180deg,#ff8f6b,#ff2f52 46%,#c0102f);box-shadow:0 0 12px rgba(255,72,102,.6);transition:width .22s cubic-bezier(.2,.8,.2,1)}
+.f-bar>i:after{content:"";position:absolute;top:0;bottom:0;width:3px;right:0;background:#fff;box-shadow:0 0 10px #fff}
+.f-bar.cyan>i{background:linear-gradient(180deg,#9bf0ff,#2fc8ff 46%,#1274c8);box-shadow:0 0 12px rgba(64,200,255,.6)}
+.f-bar.gold>i{background:linear-gradient(180deg,var(--f-gold-lt),var(--f-gold) 48%,var(--f-gold-dk));box-shadow:0 0 12px rgba(255,194,71,.55)}
+.f-bar:after{
+ content:"";position:absolute;inset:0;pointer-events:none;
+ background:repeating-linear-gradient(90deg,transparent 0 11px,rgba(0,0,0,.5) 11px 12.5px);
+}
+/* The objective count sits ON the fill, and the fill is a bright cyan gradient. White 9px text with
+   a single soft shadow over that was unreadable in a captured play frame -- the one piece of the HUD
+   that says how close the wave is to ending, and it could not be read while the wave was in
+   progress. A stacked hard outline works where a blur does not: the text keeps a dark edge whether
+   it is over the lit fill or the dark track behind it. */
+.f-bar>span{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+ padding:1px 8px;border-radius:8px;background:rgba(2,7,20,.66);
+ font:1000 10px/1 system-ui;letter-spacing:.06em;color:#fff;
+ text-shadow:0 0 2px #000814,0 1px 0 #000814,0 -1px 0 #000814,1px 0 0 #000814,-1px 0 0 #000814}
+
+/* Numeric display: heavy gold with a dark outline, the way scores read in the references. */
+.f-num{font:1000 clamp(20px,6vw,30px)/1 system-ui;letter-spacing:.01em;
+ background:linear-gradient(180deg,#fffdf4 0%,#ffe488 34%,#ffb52e 62%,#ff9412 100%);
+ -webkit-background-clip:text;background-clip:text;color:transparent;
+ filter:drop-shadow(0 2px 0 rgba(70,34,0,.95)) drop-shadow(0 4px 8px rgba(0,0,0,.8))}
+.f-num.plain{background:linear-gradient(180deg,#ffffff,#cfe6ff 60%,#8fbde8);-webkit-background-clip:text;background-clip:text}
+
+/* ============================ COMBAT HUD LAYOUT ============================ */
+.v17-hud{position:fixed;z-index:9;left:0;right:0;top:max(4px,env(safe-area-inset-top));display:flex;flex-direction:column;gap:6px;padding:0 max(8px,env(safe-area-inset-right)) 0 calc(50px + max(6px,env(safe-area-inset-left)));pointer-events:none}
+.v17-hud.hidden{display:none!important}
+.v17-row{display:flex;align-items:stretch;gap:8px}
+.v17-pilot{display:flex;align-items:center;gap:7px;padding:5px 10px 5px 5px;min-width:0}
+.v17-pilot-meta{display:flex;flex-direction:column;gap:3px;min-width:0}
+.v17-pilot-meta>b{max-width:19vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:900 10px/1 system-ui;letter-spacing:.06em;color:#dcecff}
+.v17-score{flex:1;display:grid;place-items:center;font-size:clamp(19px,5.6vw,27px)}
+.v17-lives-wrap{display:grid;place-items:center;padding:6px 9px}
+.v17-lives-wrap .v15-lives{padding:0;border:0;background:none;backdrop-filter:none}
+.v17-mission{display:flex;flex-direction:column;gap:5px;padding:6px 10px 8px}
+.v17-mission-head{display:flex;align-items:baseline;gap:8px;min-width:0}
+.v17-mission-head small{flex:0 0 auto;color:var(--f-gold);font:900 8px/1 system-ui;letter-spacing:.16em}
+.v17-mission-head b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:900 11px/1 system-ui;letter-spacing:.07em;color:#eaf6ff}
+
+/* Rival card. It used to live in .hud-cluster.right, which sits at the same coordinates as the
+   V17 lives plate — so during a duel the rival score and your own reactor health were stacked on
+   top of each other and neither was readable. It now flows as a third row of the combat bar. */
+.v17-rival{display:flex!important;align-items:center;gap:8px;padding:5px 10px!important;min-width:0;
+ position:static!important;transform:none!important;border-radius:0!important;background:none;
+ --f-plate:linear-gradient(168deg,#5a1430 0%,#3a0d20 44%,#1a0510 100%)}
+.v17-rival.hidden{display:none!important}
+.v17-rival:before{border-color:rgba(255,90,130,.4)}
+.v17-rival-tag{flex:0 0 auto;padding:2px 6px;border-radius:4px;background:#ff2f52;color:#fff;font:1000 7px/1.4 system-ui;letter-spacing:.12em}
+.v17-rival small{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:900 10px/1 system-ui!important;letter-spacing:.08em;color:#ffd0da;display:block}
+.v17-rival b{font:1000 15px/1 system-ui!important;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.9)}
+.v17-rival span:last-child{flex:0 0 auto;font:900 7px/1 system-ui!important;letter-spacing:.1em;color:#ff9db0;display:block}
+/* A duel adds a HUD row, so the elements pinned below it move down to match. */
+body.duel-active .boss-hud:not(.hidden){top:calc(max(4px,env(safe-area-inset-top)) + 158px)!important}
+body.duel-active .v17-combo{top:calc(max(4px,env(safe-area-inset-top)) + 212px)}
+
+/* Combo banner: floating type on the right, exactly as the references present it. */
+/* Stacked below the boss bar so the two never overlap on a phone. */
+.v17-combo{position:fixed;z-index:9;right:max(9px,env(safe-area-inset-right));top:calc(max(4px,env(safe-area-inset-top)) + 168px);display:flex;flex-direction:column;align-items:flex-end;gap:1px;pointer-events:none;text-align:right;transition:opacity .2s ease,transform .2s ease}
+.v17-combo.hidden{opacity:0;transform:translateX(14px);display:flex!important}
+.v17-combo small{font:900 9px/1 system-ui;letter-spacing:.22em;color:#8fb6d8;text-shadow:0 1px 3px rgba(0,0,0,.9)}
+.v17-combo b{font:1000 clamp(30px,9vw,44px)/.9 system-ui;
+ background:linear-gradient(180deg,#fffdf4 0%,#ffe488 32%,#ffb52e 60%,#ff8f12 100%);
+ -webkit-background-clip:text;background-clip:text;color:transparent;
+ filter:drop-shadow(0 2px 0 rgba(70,34,0,.95)) drop-shadow(0 5px 10px rgba(0,0,0,.85))}
+.v17-combo em{font:1000 10px/1 system-ui;font-style:normal;letter-spacing:.14em;color:var(--f-gold-lt);text-shadow:0 1px 3px rgba(0,0,0,.9)}
+.v17-combo span{font:900 11px/1 system-ui;color:#7dffb0;text-shadow:0 1px 3px rgba(0,0,0,.9)}
+.v17-combo.peak b{filter:drop-shadow(0 2px 0 rgba(90,0,30,.95)) drop-shadow(0 0 16px rgba(255,90,140,.7));animation:v17Pulse .5s ease-in-out infinite}
+@keyframes v17Pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.07)}}
+
+/* The old combo chip is superseded by the banner. */
+.combo-hud{display:none!important}
+
+/* Boss bar rebuilt on the plate: name above, segmented meter with a percentage, phase below. */
+/* Cleared below the two-row combat plate above it. `:not(.hidden)` matters: an unscoped
+   `display:flex!important` here beats `.hidden{display:none!important}` on cascade order and
+   would pin the boss bar on screen for every stage. */
+.boss-hud:not(.hidden){display:flex!important;flex-direction:column;align-items:center;gap:4px;padding:6px 12px 8px!important;background:none!important;border:0!important;border-radius:0!important;width:min(420px,78vw)!important;left:50%!important;transform:translateX(-50%)!important;top:calc(max(4px,env(safe-area-inset-top)) + 114px)!important}
+.boss-hud #bossTitle{font:1000 11px/1 system-ui;letter-spacing:.16em;color:#ffd9e2;text-shadow:0 1px 4px rgba(0,0,0,.9)}
+.boss-hud .boss-track{width:100%;height:15px}
+.boss-hud #bossPhase{font:900 8px/1 system-ui;letter-spacing:.2em;color:#ff8fa6}
+
+/* ============================ ABILITY CARDS ============================ */
+/* The reference presents abilities as collectible-style cards: framed art, a charge ring and a
+   cost/state badge — not flat text buttons. */
+.powers-hud{display:flex!important;gap:8px;justify-content:center;align-items:flex-end;padding:7px max(8px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left))!important}
+.v17-ability{position:relative;flex:1 1 0;max-width:104px;min-width:0;display:flex;flex-direction:column;align-items:center;gap:1px;padding:7px 4px 5px;border:0;overflow:visible;pointer-events:auto;cursor:pointer;
+ --tone:#7ee8ff;--charge:0;
+ filter:saturate(.85) brightness(.92);transition:filter .18s ease,transform .1s ease}
+.v17-ability[data-tone="orange"]{--tone:#ffa63a}
+.v17-ability[data-tone="cyan"]{--tone:#5ce8ff}
+.v17-ability[data-tone="violet"]{--tone:#b985ff}
+.v17-ability[data-tone="red"]{--tone:#ff5f7f}
+.v17-ability.ready{filter:none}
+.v17-ability.ready:before{border-color:var(--tone)}
+.v17-ability:active{transform:translateY(3px)}
+
+/* Charge ring: a conic sweep behind the art, masked to a ring. */
+.v17-ab-ring{position:absolute;top:5px;left:50%;width:42px;height:42px;margin-left:-21px;border-radius:50%;pointer-events:none;
+ background:conic-gradient(var(--tone) calc(var(--charge) * 1%),rgba(120,160,205,.16) 0);
+ -webkit-mask:radial-gradient(circle,transparent 61%,#000 63%);mask:radial-gradient(circle,transparent 61%,#000 63%);
+ filter:drop-shadow(0 0 6px var(--tone))}
+.v17-ab-art{position:relative!important;inset:auto;width:34px;height:34px;margin:4px 0 2px;display:block;background:transparent}
+.v17-ab-name{font:900 8px/1.1 system-ui;letter-spacing:.08em;color:#cfe4ff;text-align:center;text-shadow:0 1px 2px rgba(0,0,0,.9)}
+.v17-ab-pct{font:1000 13px/1 system-ui;color:var(--tone);text-shadow:0 1px 3px rgba(0,0,0,.95)}
+.v17-ability.ready .v17-ab-pct{color:#fff}
+/* A ready ability announces itself rather than just brightening. */
+.v17-ability.ready:after{content:"";position:absolute;inset:-3px;pointer-events:none;clip-path:inherit;box-shadow:0 0 18px var(--tone),inset 0 0 12px var(--tone);opacity:.55;animation:v17Ready 1.2s ease-in-out infinite}
+@keyframes v17Ready{0%,100%{opacity:.3}50%{opacity:.75}}
+.powers-hud .power-button.duel-only.hidden{display:none!important}
+
+/* ============================ BOTTOM NAV ============================ */
+/* Pinned to the viewport so it stays reachable while the menu panel scrolls behind it. */
+#menuNav{position:fixed;left:0;right:0;bottom:0;z-index:22;clip-path:none;padding-bottom:calc(6px + env(safe-area-inset-bottom));border-top:1px solid var(--f-rule-dim)}
+#menuScreen .panel{padding-bottom:calc(96px + env(safe-area-inset-bottom))!important}
+.v17-nav{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;padding:6px 4px}
+.v17-nav button{display:flex;flex-direction:column;align-items:center;gap:3px;min-height:56px;padding:6px 2px;border:0;background:none;color:#8fb0d0;cursor:pointer;font:900 9px/1 system-ui;letter-spacing:.08em;border-radius:10px;transition:background .16s ease,color .16s ease}
+.v17-nav button i{font-style:normal;font-size:19px;line-height:1;filter:drop-shadow(0 2px 4px rgba(0,0,0,.7))}
+.v17-nav button.on{color:#fff;background:linear-gradient(180deg,rgba(64,132,224,.34),rgba(12,26,58,.5));box-shadow:inset 0 1px 0 rgba(255,255,255,.18)}
+.v17-nav button.on i{filter:drop-shadow(0 0 10px rgba(110,210,255,.9))}
+.v17-nav .v17-nav-count{font:900 9px/1 system-ui;color:var(--f-gold-lt)}
+
+/* Currency pill. */
+.f-coin{display:inline-flex;align-items:center;gap:4px;padding:2px 7px 2px 3px;border:1.5px solid rgba(8,14,30,.9);border-radius:99px;background:linear-gradient(180deg,rgba(30,48,88,.95),rgba(9,16,38,.96))}
+.f-coin em{display:grid;place-items:center;width:14px;height:14px;border-radius:50%;background:linear-gradient(180deg,var(--f-gold-lt),var(--f-gold-dk));color:#3a2200;font:1000 9px/1 system-ui;font-style:normal}
+.f-coin b{font:900 11px/1 system-ui;color:var(--f-gold-lt)}
+
+/* ============================ DUEL SEND TRAY ============================ */
+/* Sits above the ability row so a threat can be chosen without covering the play field. */
+.v19-tray{position:fixed;z-index:10;left:max(8px,env(safe-area-inset-left));right:max(8px,env(safe-area-inset-right));bottom:calc(104px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:6px;padding:9px;border:1px solid var(--f-rule-dim);border-radius:16px;background:linear-gradient(168deg,rgba(10,20,44,.96),rgba(3,7,18,.97));box-shadow:0 18px 44px rgba(0,0,0,.7)}
+.v19-tray.hidden{display:none!important}
+.v19-tray-head{display:flex;align-items:center;justify-content:space-between}
+.v19-tray-head span{font:900 9px/1 system-ui;letter-spacing:.2em;color:#8fb6d8}
+.v19-tray-head b{font:1000 12px/1 system-ui;color:var(--f-gold-lt)}
+.v19-tray-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.v19-send{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:8px 10px;border:0;cursor:pointer;text-align:left;min-height:52px;
+ --f-plate:linear-gradient(168deg,rgba(30,48,88,.95),rgba(8,15,34,.96));
+ filter:saturate(.5) brightness(.72);transition:filter .15s ease,transform .1s ease}
+.v19-send.ready{filter:none}
+.v19-send.ready:before{border-color:var(--tone)}
+.v19-send:disabled{cursor:default}
+.v19-send:not(:disabled):active{transform:translateY(2px)}
+.v19-send b{font:1000 11px/1 system-ui;letter-spacing:.08em;color:var(--tone)}
+.v19-send span{font:600 9px/1.25 system-ui;color:#9db3cf}
+.v19-send em{position:absolute;top:7px;right:9px;font-style:normal;font:1000 12px/1 system-ui;color:var(--f-gold-lt)}
+/* The most expensive threat gets the full width — it is the decision worth pausing over. */
+.v19-send[data-kind="titan"]{grid-column:1/-1}
+
+/* V23 — an overcharged Blast and a running Overdrive are states worth reading at a glance,
+   because banking charge is only a decision if the player can see the bank growing. The tone
+   override has to beat the [data-tone] rules above, which are equally specific and come first. */
+.v17-ability.v23-over[data-tone]{--tone:#ffe27a;filter:none}
+.v17-ability.v23-over .v17-ab-pct{color:#ffe27a;text-shadow:0 0 12px rgba(255,226,122,.6)}
+.v17-ability.v23-over:after{
+ content:'';position:absolute;inset:-2px;border-radius:12px;pointer-events:none;
+ border:1px solid rgba(255,226,122,.6);
+ animation:v23Bank 1.4s ease-in-out infinite}
+.v17-ability.v23-active[data-tone]{--tone:#8affc8;filter:none}
+.v17-ability.v23-active .v17-ab-pct{color:#8affc8}
+@keyframes v23Bank{0%,100%{opacity:.2}50%{opacity:.95}}
+@media (prefers-reduced-motion:reduce){.v17-ability.v23-over:after{animation:none;opacity:.65}}

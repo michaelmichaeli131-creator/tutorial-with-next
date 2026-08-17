@@ -1,0 +1,73 @@
+/* V60 — the band you could not see, then the band that was too loud.
+
+   V57 pays up to 4.6x for kills deep in the arena, and the design rests on the player seeing where
+   that starts. Captured against a populated arena, it did not.
+
+   The cause was a rendering mistake worth naming because it is easy to repeat: the band was drawn
+   with `globalCompositeOperation='lighter'`, an additive wash, which only shows over something dark.
+   Three of the four worlds put a lit skyline or a bright planet exactly where the band sits, and
+   adding a few percent of light to an already-bright cityscape produces nothing the eye can find. It
+   was legible in the empty test arena I checked it in and invisible in the game. Check a visual
+   change against a representative background, not a convenient one.
+
+   The first fix over-corrected. It added a dark wash above the band, two rules, tick marks down both
+   edges and two text labels — to a screen already carrying a wave bar, a boss bar, a combo readout,
+   two ability buttons, a weapon chip and an avatar. Play feedback was that the game does not look
+   good, and that is fair: legibility was real but it was bought with clutter, and clutter is its own
+   kind of unreadable.
+
+   What is left is the part that carries the meaning. One dashed line where the payout starts, drawn
+   with normal compositing so it survives a bright background, and the number — small, at the left
+   edge, and only while hostiles are actually in the zone. At rest the arena carries no extra text at
+   all. */
+
+const V60={
+ /* Kept as one knob in case the line needs to come back up, but the wash, the ticks and the second
+    label are gone -- see the note above. */
+ lineAlpha:.16
+};
+
+/* Replaces V57's own drawing wrapper rather than layering over it — two bands drawn on top of each
+   other would be worse than either. V57's scoring is untouched; this is only how it is shown. */
+const v60DrawBase=v57Draw;
+drawReactor=function(){
+ const line=v57Line();
+ const top=line*V57.start;
+  let live=0;
+ for(const o of game.orbs)if(v57Depth(o.y)>.15)live++;
+ const heat=Math.min(1,live/4);
+ const world=worlds[game.world%worlds.length];
+
+ ctx.save();
+
+ /* Reduced after play feedback that the screen does not look good. The first version added a dark
+    wash, two rules, tick marks down both edges and two text labels -- to a screen that already
+    carries a wave bar, a boss bar, a combo readout, two ability buttons, a weapon chip and an
+    avatar. Legibility was real but it was bought with clutter, and clutter is itself a way of being
+    unreadable.
+
+    What survives is the part that carries the meaning: one line where the payout starts, and the
+    number, shown small and only while the zone is actually doing something. The dark wash, the side
+    ticks and the second label are gone. */
+ ctx.strokeStyle=world.accent;
+ ctx.lineCap='round';
+ ctx.globalAlpha=V60.lineAlpha+heat*.34;
+ ctx.lineWidth=1.2;
+ ctx.setLineDash([7,11]);
+ ctx.beginPath();ctx.moveTo(0,top);ctx.lineTo(W,top);ctx.stroke();
+ ctx.setLineDash([]);
+
+ /* The number fades in only when hostiles are actually in the zone. At rest the arena carries no
+    extra text at all. */
+ if(heat>.05){
+  ctx.globalAlpha=heat*.7;
+  ctx.fillStyle=world.accent;
+  ctx.font=`800 ${isMobile?9:10}px system-ui`;
+  ctx.textAlign='left';
+  ctx.textBaseline='bottom';
+  ctx.fillText(`×${V57.pay.toFixed(1)} ZONE`,10,top-4);
+ }
+ ctx.restore();
+
+ v60DrawBase();
+};

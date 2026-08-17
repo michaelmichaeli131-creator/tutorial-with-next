@@ -1,0 +1,216 @@
+/* V16 CHALLENGE — pressure, variety and something to lose.
+   A curve that only ever rises is predictable, and predictable is what "boring" actually means.
+   The arena now breathes: calm windows where you can set up, surge windows where you are behind,
+   elites that demand priority, and enemies that shoot back so the reactor is not the only clock. */
+const V16_SURGE={calm:12,surge:4.2};
+
+function v16Combat(){return game.running&&!game.paused;}
+
+const v16BeginChallenge=begin;
+begin=function(mode='solo',seed){
+ v16BeginChallenge(mode,seed);
+ game.v16Phase='calm';
+ game.v16PhaseTimer=V16_SURGE.calm*1.6;
+ game.v16Surges=0;
+ game.v16ComboClock=0;
+ game.v16Shooters=0;
+};
+
+/* Elites: a small slice of spawns get a modifier worth reacting to, marked clearly enough that a
+   player can pick them out of a crowd at a glance. */
+const V16_ELITES=[
+ {id:'shielded',name:'SHIELDED',color:'#7fd4ff',hp:2,speed:1,reward:1.7},
+ {id:'swift',name:'SWIFT',color:'#ffe06b',hp:0,speed:1.75,reward:1.5},
+ {id:'siege',name:'SIEGE',color:'#ff7a9c',hp:1,speed:.82,reward:1.8,shoots:true}
+];
+
+function v16EliteChance(){
+ const stage=game.mode==='campaign'&&game.v14?game.v14.stage.index:game.wave;
+ return Math.min(.22,.02+stage*.013);
+}
+
+const v16SpawnOrbBase=spawnOrb;
+spawnOrb=function(type){
+ v16SpawnOrbBase(type);
+ const o=game.orbs.at(-1);
+ if(!o||o.type==='rival')return;
+ if(rng()>v16EliteChance())return;
+ const stage=game.mode==='campaign'&&game.v14?game.v14.stage.index:game.wave;
+ /* Shooters are held back until the player has met plain elites first. */
+ const pool=stage>=4?V16_ELITES:V16_ELITES.filter((e)=>!e.shoots);
+ const elite=pool[Math.floor(rng()*pool.length)];
+ o.elite=elite;
+ o.hp+=elite.hp;
+ o.maxHp+=elite.hp;
+ o.speed*=elite.speed;
+ o.r*=1.08;
+ if(elite.shoots)o.v16FireIn=1.6+rng()*1.4;
+};
+
+/* Siege elites and armoured ranks fire back. The shots are slow and interceptable with a tap, so
+   they add a second thing to watch rather than unavoidable damage. */
+function v16EnemyShot(o){
+ const w=worlds[game.world%worlds.length];
+ const targetY=H-(isMobile?92:70);
+ const angle=Math.atan2(targetY-o.y,W/2-o.x)+(rng()-.5)*.24;
+ const speed=118+game.wave*3;
+ game.projectiles.push({
+  x:o.x,y:o.y+o.r*.5,
+  vx:Math.cos(angle)*speed,
+  vy:Math.sin(angle)*speed,
+  r:(10+(isMobile?2:0)),
+  life:7,
+  color:o.elite?o.elite.color:w.enemy,
+  hostile:true
+ });
+ ring(o.x,o.y+o.r*.5,o.elite?o.elite.color:w.enemy,16);
+ if(audio.ctx)audio.tone(300,.14,'square',.07,audio.sfxGain,0,.6);
+}
+
+const v16UpdateChallenge=update;
+update=function(dt){
+ v16UpdateChallenge(dt);
+ if(!v16Combat())return;
+
+ /* Surge cycle. The announcement matters as much as the spawn rate: knowing a wall is coming is
+    what turns difficulty into tension instead of frustration. */
+ game.v16PhaseTimer-=dt;
+ if(game.v16PhaseTimer<=0){
+  if(game.v16Phase==='calm'){
+   game.v16Phase='surge';
+   game.v16PhaseTimer=V16_SURGE.surge;
+   game.v16Surges++;
+   const count=Math.min(8,2+Math.floor((game.wave||1)/2.5));
+   toast('SURGE INCOMING');
+   if(audio.ctx){audio.tone(210,.2,'square',.1);audio.tone(160,.28,'square',.09,audio.sfxGain,.14);}
+   for(let i=0;i<count;i++)setTimeout(()=>{if(v16Combat())spawnOrb();},i*170);
+  }else{
+   game.v16Phase='calm';
+   game.v16PhaseTimer=V16_SURGE.calm+rng()*3;
+  }
+ }
+
+ /* Combo decays if you stop killing, so holding a streak is an active choice. */
+ game.v16ComboClock+=dt;
+ if(game.combo>0&&game.v16ComboClock>3.1){
+  game.combo=0;
+  game.v16ComboClock=0;
+ }
+
+ for(const o of game.orbs){
+  if(!o.elite||!o.elite.shoots)continue;
+  if(o.y<40)continue;
+  o.v16FireIn-=dt;
+  if(o.v16FireIn<=0){
+   o.v16FireIn=2.4+rng()*1.6;
+   v16EnemyShot(o);
+  }
+ }
+};
+
+/* Any kill refreshes the combo clock. */
+const v16HitCombo=hitOrb;
+hitOrb=function(o,x,y,chain=false){
+ const before=game.kills;
+ v16HitCombo(o,x,y,chain);
+ if(game.kills>before)game.v16ComboClock=0;
+};
+
+/* Combos pay. Without a payout the streak is just a number in the corner. */
+const v16ScoreBase=score;
+score=function(delta,event='hit'){
+ const multiplier=1+Math.min(50,game.combo||0)*.02;
+ v16ScoreBase(delta*multiplier,event);
+};
+
+/* Elites read at a glance: a coloured ring plus a tag. Registered as an overlay so the marking
+   survives an installed art pack — it is a readout the player needs, not decoration. */
+v19OrbOverlays.push((o)=>{
+ if(!o.elite)return;
+ const pulse=.55+.45*Math.sin(game.elapsed*5+(o.anim||0));
+ ctx.save();
+ ctx.globalCompositeOperation='lighter';
+ ctx.globalAlpha=.35+pulse*.4;
+ ctx.strokeStyle=o.elite.color;
+ ctx.lineWidth=2.6;
+ ctx.setLineDash([7,6]);
+ ctx.beginPath();ctx.arc(o.x,o.y,o.r*1.62,0,Math.PI*2);ctx.stroke();
+ ctx.restore();
+ ctx.save();
+ ctx.globalAlpha=.9;
+ ctx.fillStyle=o.elite.color;
+ ctx.font=`900 ${isMobile?8:9}px system-ui`;
+ ctx.textAlign='center';
+ ctx.shadowBlur=8;
+ ctx.shadowColor=o.elite.color;
+ ctx.fillText(o.elite.name,o.x,o.y-o.r*1.95);
+ ctx.restore();
+});
+
+/* Elites are worth taking out of turn. */
+const v16EliteReward=hitOrb;
+hitOrb=function(o,x,y,chain=false){
+ const elite=o.elite;
+ const hpBefore=o.hp;
+ const scoreBefore=game.score;
+ v16EliteReward(o,x,y,chain);
+ if(elite&&hpBefore<=1){
+  const bonus=Math.round((game.score-scoreBefore)*(elite.reward-1));
+  if(bonus>0){
+   game.score+=bonus;
+   floating(o.x,o.y-24,elite.name+' +'+format(bonus),elite.color);
+  }
+  game.v14Credits=(game.v14Credits||0)+3;
+ }
+};
+
+/* Hostile fire is drawn as an obvious threat with a tell, not just another dot. */
+const v16DrawProjectileBase=drawProjectile;
+drawProjectile=function(p){
+ if(!p.hostile){v16DrawProjectileBase(p);return;}
+ const t=game.elapsed*9;
+ ctx.save();
+ ctx.translate(p.x,p.y);
+ ctx.globalCompositeOperation='lighter';
+ ctx.shadowBlur=22;
+ ctx.shadowColor=p.color;
+ const glow=ctx.createRadialGradient(0,0,1,0,0,p.r*2.6);
+ glow.addColorStop(0,'#ffffff');
+ glow.addColorStop(.3,p.color);
+ glow.addColorStop(1,'transparent');
+ ctx.fillStyle=glow;
+ ctx.beginPath();ctx.arc(0,0,p.r*2.6,0,Math.PI*2);ctx.fill();
+ ctx.rotate(t*.6);
+ ctx.strokeStyle='#ffffff';
+ ctx.lineWidth=2;
+ ctx.setLineDash([5,5]);
+ ctx.beginPath();ctx.arc(0,0,p.r+7,0,Math.PI*2);ctx.stroke();
+ ctx.restore();
+};
+
+/* Bosses gain a telegraphed fan volley from phase two, so titans stop being a static punching bag. */
+const v16BossUpdate=update;
+update=function(dt){
+ v16BossUpdate(dt);
+ const b=game.boss;
+ if(!v16Combat()||!b||b.phase<2)return;
+ b.v16Volley=(b.v16Volley||4)-dt;
+ if(b.v16Volley>0)return;
+ b.v16Volley=b.phase>=3?3.4:4.8;
+ const w=worlds[game.world%worlds.length];
+ cinematic('TITAN VOLLEY');
+ const shots=b.phase>=3?5:3;
+ for(let i=0;i<shots;i++){
+  setTimeout(()=>{
+   if(!v16Combat()||game.boss!==b)return;
+   const spread=(i-(shots-1)/2)*.26;
+   const angle=Math.atan2(H-(isMobile?92:70)-b.y,W/2-b.x)+spread;
+   const speed=150+b.phase*28;
+   game.projectiles.push({
+    x:b.x,y:b.y+b.r*.4,
+    vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,
+    r:13,life:7,color:w.accent,hostile:true
+   });
+  },260+i*110);
+ }
+};

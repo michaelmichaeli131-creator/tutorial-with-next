@@ -1,0 +1,144 @@
+/* V38 — the two screens the design pass never reached.
+
+   Captured rather than assumed, and they came back very different from each other.
+
+   **Settings** was the weak one. On an 844px phone the content stopped a third of the way down and
+   left the rest of the panel empty, which is the single most reliable "unfinished" signal a UI can
+   send — no amount of polish above it compensates. Worse, not one control said what it did.
+   "COMFORT FX" is meaningless to anyone who has not read the source, and a toggle whose effect the
+   player cannot predict is a toggle they will not touch.
+
+   **Pause** was fine as a composition — centred, clear hierarchy, the blurred arena behind it doing
+   real work. What it did not do was answer the question people actually pause to ask. In a
+   score-attack game you pause to find out how you are doing, and the panel said nothing about the
+   run it had just interrupted.
+
+   So: sections and explanations on one, a status row on the other, and a haptics toggle that
+   should have existed all along — `haptic()` has been firing unconditionally on every mobile
+   device with no way to turn it off, which is an accessibility problem and not only a preference. */
+
+/* The haptics row, the build stamp and the pause status row live in index.html, not here. My first
+   pass created all three at runtime and the build validator rejected it — every id reached through
+   `$()` has to exist in the markup, so that the check that these elements are still there keeps
+   working. That check was right and the instinct to dodge it would have been wrong: these are
+   static structure, and only the decoration below has any reason to be built in JavaScript. */
+/* The hint goes *after* the row, not inside it.
+
+   The first attempt moved the row's children into a wrapper div so the hint could sit within the
+   row's border. That quietly destroyed the audio rows: `.audio-row` is a three-column grid whose
+   columns are sized for the label, the slider and the percentage, and once those three were nested
+   one level deeper the wrapper itself became the first grid item — squeezed into the 60px label
+   column, collapsing the slider to six pixels wide with the percentage printed over the text. The
+   fix is not a more specific selector; it is to stop restructuring a layout that was already
+   correct. */
+function v38Hint(row,hint){
+ if(!row||row.nextElementSibling?.classList?.contains('v38-hint'))return;
+ const note=document.createElement('p');
+ note.className='v38-hint';
+ note.textContent=hint;
+ row.parentNode.insertBefore(note,row.nextSibling);
+ row.classList.add('v38-explained');
+}
+
+function v38Section(before,label){
+ if(!before||before.previousElementSibling?.classList?.contains('v38-section'))return;
+ const head=document.createElement('div');
+ head.className='v38-section';
+ head.textContent=label;
+ before.parentNode.insertBefore(head,before);
+}
+
+/* Plain language, and specific about the trade rather than about the feature. "Reduces flashes"
+   tells the player what changes; "Comfort FX" tells them nothing. */
+const V38_HINTS=[
+ ['hapticsToggle','The short buzz on a kill, a breach and an ability firing. Off saves battery and is quieter in a pocket.'],
+ ['musicSlider','The arrangement behind the arena. It thins out and holds a single bass note when a run turns against you.'],
+ ['sfxSlider','Impacts, alerts and the destruction of each hostile. Every kill is a note in the soundtrack’s key.'],
+ ['comfortToggle','Cuts the drifting motes, heavy flashes and the worst of the screen motion. Turn this on if the arena makes you queasy.'],
+ ['shakeToggle','The camera punch on a kill and on losing the reactor. Independent of Comfort FX so you can keep one without the other.']
+];
+
+function v38BuildSettings(){
+ const panel=document.querySelector('.settings-panel');
+ if(!panel||panel.dataset.v38)return;
+ panel.dataset.v38='1';
+
+ for(const [id,hint] of V38_HINTS){
+  const control=$(id);
+  const row=control&&control.closest('label');
+  if(row)v38Hint(row,hint);
+ }
+
+ const music=$('musicSlider')?.closest('label');
+ const comfort=$('comfortToggle')?.closest('label');
+ if(music)v38Section(music,'AUDIO');
+ if(comfort)v38Section(comfort,'MOTION & COMFORT');
+
+ /* Haptics. `haptic()` fired on every mobile device with no way to refuse it, which is an
+    accessibility problem rather than a missing preference. */
+ const haptics=$('hapticsToggle');
+ if(haptics){
+  haptics.checked=save.haptics!==false;
+  haptics.addEventListener('change',()=>{
+   save.haptics=haptics.checked;
+   persist();
+   if(haptics.checked&&navigator.vibrate)navigator.vibrate(12);
+  });
+ }
+
+ const fullscreen=$('fullscreenBtn');
+ if(fullscreen)v38Section(fullscreen,'DEVICE');
+
+ /* Build stamp. This is the honest answer to "is the thing on my screen the thing that was
+    deployed", which cannot otherwise be answered from inside the app and is the first thing worth
+    knowing when a change appears to have had no effect. The id is read from the response header the
+    server already sets; a HEAD request costs nothing and never blocks the screen from opening. */
+ const stamp=$('v38Build');
+ if(stamp){
+  fetch('/index.html',{method:'HEAD',cache:'no-store'})
+   .then((r)=>{
+    const id=r.headers.get('x-build');
+    stamp.innerHTML=`BUILD <b>${id?String(id).slice(0,12):'LOCAL'}</b>`;
+   })
+   .catch(()=>{stamp.innerHTML='BUILD <b>OFFLINE</b>';});
+ }
+}
+
+/* Honour the new toggle. Wrapping rather than editing `haptic` keeps the default — vibration on —
+   for every save written before this existed. */
+const v38HapticBase=haptic;
+haptic=function(pattern=12){
+ if(save.haptics===false)return;
+ return v38HapticBase(pattern);
+};
+
+/* ---- Pause ---------------------------------------------------------------------------------- */
+
+/* Sits under the title and above the buttons in the markup: it is context for the decision, not a
+   decision itself. */
+function v38ShowPauseStatus(){
+ const row=$('v38Status');
+ if(!row)return;
+ const lives=Math.max(0,Math.min(3,game.lives));
+ const objective=game.mode==='campaign'&&game.v14
+  ? `${Math.min(game.v14.progress,game.v14.target)}/${game.v14.target}`
+  : `${Math.min(game.waveKills,game.waveTarget)}/${game.waveTarget}`;
+ row.innerHTML=
+  `<div><small>SCORE</small><b>${format(game.score)}</b></div>`+
+  `<div><small>WAVE ${game.wave}</small><b>${objective}</b></div>`+
+  /* The one number that is coloured, because it is the one that decides whether resuming is worth
+     doing carefully. */
+  `<div class="${lives<=1?'v38-low':''}"><small>REACTOR</small><b>${'♥'.repeat(lives)||'—'}</b></div>`;
+}
+
+/* Both ways into the pause screen — the HUD button and the P key — go through `showScreen`, and so
+   does settings, so one hook covers every entry point. There is no separate pause function to wrap.
+   The panels are built the first time they are opened rather than at load, so a player who never
+   opens settings never pays for it. */
+const v38ShowScreenBase=showScreen;
+showScreen=function(id){
+ const out=v38ShowScreenBase(id);
+ if(id==='settingsScreen')v38BuildSettings();
+ if(id==='pauseScreen'&&game.running)v38ShowPauseStatus();
+ return out;
+};

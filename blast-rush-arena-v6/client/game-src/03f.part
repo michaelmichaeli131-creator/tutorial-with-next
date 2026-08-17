@@ -1,0 +1,253 @@
+/* V14 FOUNDATION — campaign data model, progression, inventory and currency. */
+const V14_SAVE_KEY='blastRushV14';
+const V14_SCHEMA=1;
+
+const v14Characters=[
+ {id:'vanguard',name:'NOVA VANGUARD',frame:'knight',role:'ALL-ROUND',cost:0,c1:'#58e8ff',c2:'#2f5cff',accent:'#dcf7ff',
+  perk:'PERFECT window widened by 12%',mods:{perfect:1.12}},
+ {id:'lancer',name:'EMBER LANCER',frame:'striker',role:'AGGRESSION',cost:1200,c1:'#ffd25e',c2:'#ff3f43',accent:'#fff0c4',
+  perk:'Weapon damage output raised by 15%',mods:{damage:1.15}},
+ {id:'specter',name:'ORCHID SPECTER',frame:'specter',role:'TEMPO',cost:2000,c1:'#ff72ed',c2:'#743dff',accent:'#ffd9fb',
+  perk:'Overdrive charges 30% faster',mods:{overdrive:1.3}},
+ {id:'warden',name:'FROST WARDEN',frame:'warden',role:'DEFENCE',cost:2800,c1:'#eaffff',c2:'#3cb6ff',accent:'#cdf3ff',
+  perk:'Deploys with one Phase Shield already online',mods:{shields:1}},
+ {id:'reaper',name:'VOID REAPER',frame:'reaper',role:'ECONOMY',cost:3600,c1:'#bba5ff',c2:'#2a0b52',accent:'#e6dcff',
+  perk:'Earns 35% more credits from offline stages',mods:{credits:1.35}},
+ {id:'omega',name:'OMEGA PRIME',frame:'omega',role:'MASTERY',cost:5400,c1:'#ffffff',c2:'#ff3b62',accent:'#ffd9e2',
+  perk:'+12% score and 25% faster Reactor Blast',mods:{score:1.12,blast:1.25}}
+];
+
+/* Weapons are lateral, not a straight power ladder: every one wins in a different situation and
+   every special effect is rate limited so no purchase can turn into a fire-rate advantage. */
+const v14Weapons=[
+ {id:'pulse',name:'PULSE DRIVER',tag:'STARTER',cost:0,upgrade:260,max:5,
+  desc:'Dependable single-target driver. Levels add raw punch and titan damage.',
+  stats:(l)=>({damage:1+Math.floor(l/2),bossMult:1+l*.28,splash:0,splashHits:0,chain:0,aoe:0,credits:1,cooldown:0})},
+ {id:'scatter',name:'SCATTER VOLLEY',tag:'CROWD',cost:900,upgrade:340,max:5,
+  desc:'Splits each shot into nearby hostiles. Built for dense swarm stages.',
+  stats:(l)=>({damage:1,bossMult:.8+l*.12,splash:78+l*16,splashHits:1+l,chain:0,aoe:0,credits:1,cooldown:.24})},
+ {id:'lance',name:'VOID LANCE',tag:'ARMOUR',cost:1500,upgrade:420,max:5,
+  desc:'Heavy piercing lance. Shreds armour and titans, slower against swarms.',
+  stats:(l)=>({damage:2+Math.floor(l/2),bossMult:1.7+l*.42,splash:0,splashHits:0,chain:0,aoe:0,credits:1,cooldown:.3})},
+ {id:'arc',name:'ARC CHAIN',tag:'CHAIN',cost:2100,upgrade:460,max:5,
+  desc:'Electric arc that jumps between hostiles and keeps long combos alive.',
+  stats:(l)=>({damage:1,bossMult:.9+l*.16,splash:0,splashHits:0,chain:1+l,aoe:0,credits:1,cooldown:.28})},
+ {id:'siphon',name:'SHARD SIPHON',tag:'ECONOMY',cost:2400,upgrade:400,max:5,
+  desc:'Converts kills into credits. Lower damage, far better stage payouts.',
+  stats:(l)=>({damage:1+Math.floor(l/3),bossMult:.85+l*.14,splash:0,splashHits:0,chain:0,aoe:0,credits:1+l*.18,cooldown:0})},
+ {id:'nova',name:'NOVA CANNON',tag:'BLAST',cost:2900,upgrade:520,max:5,
+  desc:'Detonates a shockwave at the impact point. Huge area, long recharge.',
+  stats:(l)=>({damage:1,bossMult:1.1+l*.2,splash:0,splashHits:0,chain:0,aoe:70+l*20,credits:1,cooldown:.66-l*.05})}
+];
+
+const v14HazardTypes={
+ gravity:{name:'GRAVITY WELL',desc:'Hostiles fall considerably faster.'},
+ meteor:{name:'METEOR FIELD',desc:'Burning debris rains down — tap it before it lands.'},
+ fog:{name:'ION FOG',desc:'Visibility collapses around the reactor.'},
+ emp:{name:'EMP PULSES',desc:'Overdrive and Blast go offline in bursts.'},
+ swarm:{name:'SWARM SURGE',desc:'Sudden reinforcement waves between objectives.'}
+};
+
+/* Fifteen hand-tuned stages. `kind` decides the objective, everything else layers on top of the
+   shared difficulty curve in v14StageCurve so the ramp stays readable in one place. */
+const v14StageBlueprints=[
+ {name:'FIRST CONTACT',world:0,kind:'purge',target:12,brief:'Scout wave inbound. Clear the approach vector.'},
+ {name:'FORGE PATROL',world:0,kind:'purge',target:16,brief:'Heavier patrol rotation. Keep the reactor clean.'},
+ {name:'IRON TIDE',world:0,kind:'elite',target:8,brief:'Iron Sentinels lead the push. Break the armour.',pool:['armored','armored','normal','splitter']},
+ {name:'WARDEN AWAKENS',world:0,kind:'boss',brief:'The Singularity Warden has woken. Shatter every weak point.'},
+ {name:'RIFT CROSSING',world:1,kind:'purge',target:20,hazards:['gravity'],brief:'Rift gravity is dragging hostiles down twice as fast.'},
+ {name:'CRYSTAL STORM',world:1,kind:'survive',duration:45,hazards:['meteor'],brief:'Hold the line for 45 seconds through the debris field.'},
+ {name:'PRISM HUNT',world:1,kind:'perfect',target:14,brief:'Precision contract: land 14 PERFECT strikes.'},
+ {name:'HYDRA PROTOCOL',world:1,kind:'boss',brief:'The Prism Hydra splits its cores. Track them and strike.'},
+ {name:'SOLAR APPROACH',world:2,kind:'purge',target:26,hazards:['fog'],brief:'Ion fog blinds the outer ring. Trust the silhouettes.'},
+ {name:'EMBER SIEGE',world:2,kind:'elite',target:12,hazards:['meteor'],brief:'Siege armour under a meteor field. Prioritise ruthlessly.',pool:['armored','armored','bomb','normal']},
+ {name:'TEMPLE OF FIRE',world:2,kind:'survive',duration:60,hazards:['emp','swarm'],brief:'EMP pulses will cut your powers. Survive a full minute.'},
+ {name:'SOLAR COLOSSUS',world:2,kind:'boss',brief:'A titan of the temple. Three phases, no mercy.'},
+ {name:'VOID DESCENT',world:3,kind:'purge',target:32,hazards:['fog','gravity'],brief:'Blind descent under crushing gravity.'},
+ {name:'SERAPH TRIAL',world:3,kind:'perfect',target:20,hazards:['emp'],brief:'Twenty PERFECT strikes while the EMP field cycles.'},
+ {name:'OMEGA GATE',world:3,kind:'gauntlet',target:2,hazards:['swarm'],brief:'Two titans guard the gate. Bring everything you own.'}
+];
+
+function v14StageCurve(index){
+ const t=(index-1)/Math.max(1,v14StageBlueprints.length-1);
+ return{
+  speed:1+t*.85,
+  hp:1+Math.round(t*2),
+  spawn:Math.max(.42,1-t*.44),
+  projectile:1+t*.6,
+  bossHp:1+t*1.15
+ };
+}
+
+function v14Stage(index){
+ const blueprint=v14StageBlueprints[index-1];
+ if(!blueprint)return null;
+ const curve=v14StageCurve(index);
+ const boss=blueprint.kind==='boss'||blueprint.kind==='gauntlet';
+ return Object.assign({
+  index,
+  id:'stage'+index,
+  hazards:[],
+  pool:['normal','normal','normal','armored','bomb','shard','splitter'],
+  target:blueprint.kind==='survive'?0:12,
+  duration:0,
+  reward:Math.round((140+index*52)*(boss?1.45:1)),
+  shards:boss?18:6+Math.floor(index/2),
+  curve
+ },blueprint);
+}
+
+const v14StageCount=v14StageBlueprints.length;
+
+function v14Defaults(){
+ return{
+  schema:V14_SCHEMA,
+  unlocked:1,
+  lastStage:1,
+  stars:{},
+  best:{},
+  credits:300,
+  weapon:'pulse',
+  weapons:{pulse:{owned:true,level:1}},
+  character:'vanguard',
+  characters:{vanguard:{owned:true}},
+  totals:{stagesCleared:0,kills:0,creditsEarned:0},
+  updatedAt:0
+ };
+}
+
+/* Tolerance is not the same as trust. `Math.round('abc')` is NaN and `Math.max(0,NaN)` is NaN,
+   so the old clamps let a non-numeric field through intact, and a NaN is worse than a missing
+   value: v14Spend tests `credits<amount`, which is false for NaN, so every purchase succeeds
+   for free and the wallet renders "NaN"; a NaN `unlocked` fails every `index<=unlocked` test and
+   locks the whole ladder; a NaN weapon level makes stats() return NaN damage so taps stop
+   killing anything. Coerce first, fall back when the result is not finite, then clamp. */
+function v14Num(value,fallback,min,max){
+ const n=typeof value==='number'?value:Number(value);
+ if(!Number.isFinite(n))return fallback;
+ return Math.max(min,Math.min(max,Math.round(n)));
+}
+
+/* Stage-keyed maps are rebuilt entry by entry rather than copied, so a string or array payload
+   cannot leak non-numeric values into star totals, and keys outside the ladder are dropped. */
+function v14StageMap(raw,max){
+ const out={};
+ if(!raw||typeof raw!=='object')return out;
+ for(const key of Object.keys(raw)){
+  const index=v14Num(key,0,1,v14StageCount);
+  if(String(index)!==String(key).trim())continue;
+  const value=v14Num(raw[key],0,0,max);
+  if(value>0)out[index]=value;
+ }
+ return out;
+}
+
+/* Only ids this build actually defines survive, so a tampered save cannot equip a weapon with
+   no stats function behind it or a pilot with no frame to draw. */
+function v14OwnedMap(raw,defs,levelled){
+ const out={};
+ const source=raw&&typeof raw==='object'?raw:{};
+ for(const def of defs){
+  const entry=source[def.id];
+  if(!entry||typeof entry!=='object')continue;
+  out[def.id]=levelled?{owned:Boolean(entry.owned),level:v14Num(entry.level,1,1,def.max)}:{owned:Boolean(entry.owned)};
+ }
+ return out;
+}
+
+/* Migration is deliberately tolerant: a partially written or older payload still boots with
+   defaults filled in rather than wiping a player's progress. It is also the seam v14ImportSave
+   hands an arbitrary server payload to, so every field is validated, not just filled. */
+function v14Migrate(raw){
+ const next=v14Defaults();
+ if(!raw||typeof raw!=='object')return next;
+ next.stars=v14StageMap(raw.stars,3);
+ next.best=v14StageMap(raw.best,Number.MAX_SAFE_INTEGER);
+ for(const key of Object.keys(next.totals))next.totals[key]=v14Num(raw.totals?.[key],0,0,Number.MAX_SAFE_INTEGER);
+ next.weapons=v14OwnedMap(raw.weapons,v14Weapons,true);
+ next.characters=v14OwnedMap(raw.characters,v14Characters,false);
+ next.weapons.pulse={owned:true,level:next.weapons.pulse?.level||1};
+ next.characters.vanguard={owned:true};
+ next.weapon=next.weapons[raw.weapon]?.owned?raw.weapon:'pulse';
+ next.character=next.characters[raw.character]?.owned?raw.character:'vanguard';
+ /* A save that never wrote a wallet is a new player, so the fallback is the starting grant. */
+ next.credits=v14Num(raw.credits,next.credits,0,Number.MAX_SAFE_INTEGER);
+ next.unlocked=v14Num(raw.unlocked,1,1,v14StageCount);
+ next.lastStage=v14Num(raw.lastStage,1,1,next.unlocked);
+ next.updatedAt=v14Num(raw.updatedAt,0,0,Number.MAX_SAFE_INTEGER);
+ return next;
+}
+
+let v14Save=v14Defaults();
+try{v14Save=v14Migrate(JSON.parse(localStorage.getItem(V14_SAVE_KEY)||'null'));}catch{v14Save=v14Defaults();}
+
+function v14Persist(){
+ v14Save.updatedAt=Date.now();
+ try{localStorage.setItem(V14_SAVE_KEY,JSON.stringify(v14Save));}catch{}
+}
+
+/* Server-side saves are the next step for this data; these two are the seam it will plug into. */
+function v14ExportSave(){return JSON.stringify(v14Save);}
+function v14ImportSave(payload){
+ try{
+  v14Save=v14Migrate(typeof payload==='string'?JSON.parse(payload):payload);
+  v14Persist();
+  return true;
+ }catch{return false;}
+}
+
+/* The whole build lives inside one IIFE, so the seam above was documented as the hook for a
+   server-side save while being unreachable from outside it. Publish exactly that seam — read the
+   save, replace the save, know which schema it is — and nothing else. */
+window.BlastRushSave={
+ schema:V14_SCHEMA,
+ export:v14ExportSave,
+ import:v14ImportSave,
+ key:V14_SAVE_KEY
+};
+
+function v14Character(id=v14Save.character){return v14Characters.find((c)=>c.id===id)||v14Characters[0];}
+function v14WeaponDef(id=v14Save.weapon){return v14Weapons.find((w)=>w.id===id)||v14Weapons[0];}
+function v14WeaponLevel(id=v14Save.weapon){return v14Save.weapons[id]?.level||1;}
+function v14WeaponStats(id=v14Save.weapon){const def=v14WeaponDef(id);return def.stats(v14WeaponLevel(def.id));}
+function v14UpgradeCost(id){const def=v14WeaponDef(id);return Math.round(def.upgrade*Math.pow(1.55,v14WeaponLevel(def.id)-1));}
+function v14Owned(collection,id){return Boolean(v14Save[collection][id]?.owned);}
+
+/* Duels strip the economic and damage perks so a bigger wallet can never out-stat a rival.
+   Only the feel-based perks (PERFECT window, charge rates) carry into live play. */
+function v14Mods(duel=false){
+ const character=v14Character();
+ const mods=Object.assign({perfect:1,damage:1,overdrive:1,shields:0,credits:1,score:1,blast:1},character.mods);
+ if(duel){mods.damage=1;mods.credits=1;mods.score=1;}
+ return mods;
+}
+
+function v14Stars(index){return v14Save.stars[index]||0;}
+function v14StageUnlocked(index){return index<=v14Save.unlocked;}
+function v14TotalStars(){return Object.values(v14Save.stars).reduce((sum,value)=>sum+value,0);}
+
+function v14AddCredits(amount){
+ const gain=v14Num(amount,0,0,Number.MAX_SAFE_INTEGER);
+ v14Save.credits+=gain;
+ v14Save.totals.creditsEarned+=gain;
+ return gain;
+}
+
+/* Written as "can afford" rather than "cannot afford" on purpose: a NaN on either side makes
+   every comparison false, so the negated form would have approved the purchase. */
+function v14Spend(amount){
+ const cost=v14Num(amount,Number.NaN,0,Number.MAX_SAFE_INTEGER);
+ if(!(Number.isFinite(cost)&&v14Save.credits>=cost))return false;
+ v14Save.credits-=cost;
+ v14Persist();
+ return true;
+}
+
+function v14RecordStage(index,stars,scoreValue){
+ v14Save.stars[index]=Math.max(v14Stars(index),stars);
+ v14Save.best[index]=Math.max(v14Save.best[index]||0,Math.floor(scoreValue));
+ v14Save.lastStage=index;
+ if(index>=v14Save.unlocked&&index<v14StageCount)v14Save.unlocked=index+1;
+ v14Save.totals.stagesCleared++;
+ v14Persist();
+}

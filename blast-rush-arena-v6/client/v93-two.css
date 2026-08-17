@@ -1,0 +1,180 @@
+/* V93 — two doors on the home screen.
+
+   The six original mode buttons stay in the DOM with their handlers attached and are hidden here;
+   the new controls click them. See the part header for why forwarding beats rewiring. */
+
+/* The whole old block goes, six buttons and all. They keep their handlers and the new doors click
+   them; `.click()` works on a hidden element. */
+#menuScreen .mode-command { display: none !important; }
+
+/* The doors live in their own container, a sibling of the block they replace, and take over its
+   slot in the home screen's flex order. See the part header: four stylesheets have layered rules
+   onto `.mode-command` and three of them use !important, so styling inside it meant winning an
+   argument rather than writing a rule. */
+/* `margin-top:auto` rather than a fixed gap. Six buttons filled the panel; two left roughly 180px of
+   dead space under them, with the primary action stranded in the middle of the screen — the one
+   place on a phone a thumb cannot reach without regripping. Pushed to the bottom of the panel the
+   slack becomes breathing room above rather than a hole below, and PLAY lands where the hand
+   already is, which is the same argument V90 used to pin the retry bar. */
+#menuScreen .v93-doors {
+  order: 5;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 18px;
+}
+
+.v93-door {
+  width: 100%;
+  padding: 18px;
+  border: 1px solid transparent;
+  border-radius: 18px;
+  color: #fff;
+  text-align: center;
+  cursor: pointer;
+  transition: .18s transform, .18s filter, .18s box-shadow;
+}
+
+.v93-door:hover { transform: translateY(-2px); filter: brightness(1.1); }
+.v93-door:active { transform: translateY(2px) scale(.99); }
+
+/* PLAY is half again the height of DUEL and it is the only gold thing on the screen. Two buttons of
+   equal weight is the six-equal-buttons problem with a smaller number — if the screen does not say
+   which one a first-time player should press, it has not answered the question this part exists to
+   answer. */
+#v93PlayBtn {
+  min-height: 128px;
+  background: linear-gradient(180deg, #ffd84c, #ff8b16);
+  color: #201200;
+  box-shadow: 0 18px 44px rgba(255, 155, 40, .3), inset 0 0 40px rgba(255, 255, 255, .16);
+}
+
+#v93DuelBtn {
+  min-height: 84px;
+  background: linear-gradient(180deg, #1b4b8c, #0b1c38);
+  border-color: rgba(75, 207, 255, .42);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .45);
+}
+
+.v93-door b {
+  display: block;
+  font-size: 38px;
+  font-weight: 1000;
+  font-style: italic;
+  letter-spacing: -.02em;
+  line-height: 1;
+}
+
+#v93DuelBtn b { font-size: 26px; }
+
+.v93-door small {
+  display: block;
+  margin-top: 9px;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .12em;
+  line-height: 1.35;
+  opacity: .8;
+}
+
+#v93PlayBtn small { color: rgba(48, 25, 4, .82); opacity: 1; }
+#v93DuelBtn small { color: #9fc4dd; }
+
+/* ---- The three chips on the map ----
+
+   Deliberately quiet. These are what you do with the game once you have it, not what the game is,
+   and if they compete with the map path for attention they have been given the wrong weight. */
+
+.v93-rail {
+  margin: 4px 0 18px;
+}
+
+.v93-rail-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .22em;
+  color: #7c93a8;
+  text-align: center;
+}
+
+.v93-rail-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.v93-rail-chip {
+  padding: 11px 8px;
+  border: 1px solid rgba(114, 215, 255, .22);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, .04);
+  color: #fff;
+  text-align: center;
+  transition: .16s border-color, .16s background;
+}
+
+.v93-rail-chip:hover { border-color: rgba(114, 215, 255, .5); background: rgba(255, 255, 255, .08); }
+
+.v93-rail-chip b {
+  display: block;
+  font-size: 13px;
+  font-weight: 1000;
+  letter-spacing: .12em;
+}
+
+/* The hint is the part that makes a chip worth pressing — ENDLESS on its own is a word, "BEAT 28,450"
+   is a reason. Two lines allowed, because the daily's hint carries a streak on some days and
+   clipping it would drop the half that brings people back. */
+.v93-rail-chip small {
+  display: block;
+  margin-top: 3px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  line-height: 1.3;
+  color: #8fa8bc;
+  /* Cased here rather than at the source: TODAY's hint is V39's, written in sentence case for the
+     button it used to live on, and it is still V39's to word — including the streak line, which is
+     the half of it that brings people back. This row is a caps row; the transform makes it one
+     without either part having to know about the other. */
+  text-transform: uppercase;
+}
+
+/* ---- Quick match on the duel screen ---- */
+
+.v93-quick {
+  width: 100%;
+  margin-bottom: 14px;
+  min-height: 74px;
+  font-size: 19px;
+  letter-spacing: .08em;
+  text-align: center;
+}
+
+.v93-quick b {
+  display: block;
+  font-size: 22px;
+  font-weight: 1000;
+  font-style: italic;
+  letter-spacing: -.01em;
+  line-height: 1;
+}
+
+.v93-quick small {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  opacity: .82;
+}
+
+@media (max-width: 800px), (pointer: coarse) {
+  #v93PlayBtn { min-height: 86px; font-size: 23px; }
+  #v93DuelBtn { min-height: 66px; font-size: 17px; }
+  .v93-rail-chip b { font-size: 12px; }
+  .v93-rail-chip small { font-size: 8.5px; }
+}

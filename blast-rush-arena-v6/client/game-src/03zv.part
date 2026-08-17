@@ -1,0 +1,145 @@
+/* V45 — the daily board.
+
+   V39 built the daily arena: one seeded field per UTC day, verified identical across runs, with a
+   local best and a streak. What it could not do was the thing that makes a daily worth playing.
+
+   A daily's whole proposition is that a score becomes *comparable* — everyone is on the same field,
+   so a number finally means something it cannot mean when every run is a different arena. Left
+   local, that proposition is unredeemed: you are comparing your score to your own earlier score,
+   which the results screen already did for every other mode. The field being shared bought nothing.
+
+   So the run posts, and the results screen says where you placed. The board is per-day and stored
+   separately from the all-time leaderboard on purpose: the all-time board answers "who is best",
+   this answers "how did I do on the field everyone else played today" — and it stops mattering when
+   the seed rolls over, which is exactly why it brings people back.
+
+   Everything here fails quietly. A run that cannot reach the network is still a run, the local best
+   and the streak are still recorded, and the daily stays playable with no server at all. */
+
+let v45Rank=null;
+let v45Sending=false;
+
+/* Posted on finish rather than on a timer, and only for a daily — a solo run has nothing to
+   compare against, and posting one would put an unrelated field's score on today's board. */
+const v45FinishDaily=finish;
+finish=function(victory=false,duelData=null){
+ const daily=game.running&&game.v39Daily;
+ const score=Math.floor(game.score);
+ const wave=game.wave;
+ v45FinishDaily(victory,duelData);
+ if(!daily)return;
+ v45Rank=null;
+ v45Paint();
+ if(v45Sending)return;
+ v45Sending=true;
+ Promise.resolve()
+  .then(()=>BlastNetwork.submitDaily(v39Day(),score,wave))
+  .then((res)=>{
+   v45Rank=res&&typeof res.rank==='number'?{rank:res.rank,total:res.total,entries:res.entries||[]}:null;
+   v45Paint();
+  })
+  .catch(()=>{/* Offline, or no server. The local best and the streak already recorded the run. */})
+  .finally(()=>{v45Sending=false;});
+};
+
+/* Sits under V37's best line, which for a daily already reads "TODAY'S BEST … SHORT". That line is
+   about you; this one is about everybody, and the pair is the whole point of the mode. */
+function v45Paint(){
+ const row=$('v45Board');
+ if(!row)return;
+ if(!game.v39Daily){row.textContent='';return;}
+ if(!v45Rank){
+  row.className='v45-board pending';
+  row.textContent='Posting to today’s board…';
+  return;
+ }
+ const {rank,total,entries}=v45Rank;
+ const top=entries[0];
+ row.className='v45-board'+(rank===1?' lead':'');
+ /* The leader's score is the useful number when you are not first: it is the target for the next
+    attempt, and today's field is still there to attempt it on. */
+ row.innerHTML=rank===1
+  ? `<b>1st of ${total}</b> on today’s field.`
+  : `<b>${v45Ordinal(rank)} of ${total}</b> on today’s field${top?` · leader ${format(top.score)}`:''}.`;
+}
+
+function v45Ordinal(n){
+ const rem100=n%100;
+ if(rem100>=11&&rem100<=13)return `${n}th`;
+ return `${n}${['th','st','nd','rd'][n%10]||'th'}`;
+}
+
+/* The menu hint gains today's leader, so the reason to open the daily is visible before entering
+   it. Fetched once per menu visit and ignored if it fails. */
+let v45MenuAt=0;
+const v45MenuDaily=v39Menu;
+v39Menu=function(){
+ v45MenuDaily();
+ const hint=$('dailyBtnHint');
+ if(!hint)return;
+ const now=Date.now();
+ if(now-v45MenuAt<60_000)return;
+ v45MenuAt=now;
+ BlastNetwork.dailyBoard(v39Day())
+  .then((res)=>{
+   const top=(res&&res.entries||[])[0];
+   if(!top||!hint.textContent)return;
+   /* Appended rather than replacing, so the local best and streak the player earned stay first. */
+   hint.textContent=`${hint.textContent} • Leader ${format(top.score)}`;
+  })
+  .catch(()=>{});
+};
+
+/* ---- The board itself ----
+
+   The rank line on the results screen says "5th of 40", which is half a hook: it tells you that you
+   lost without telling you to whom or by how much. The number that makes somebody press PLAY AGAIN
+   is the one immediately above theirs, and that requires actually showing the board.
+
+   It lives on the social screen next to the live arenas, because that screen is already the place
+   where you look at other people. */
+
+function v45Rows(entries,me){
+ const list=$('dailyBoardList');
+ if(!list)return;
+ if(!entries.length){
+  list.innerHTML='<p>Nobody has posted a run today. Be first.</p>';
+  return;
+ }
+ list.innerHTML='';
+ entries.slice(0,10).forEach((entry,i)=>{
+  const row=document.createElement('div');
+  /* Your own row is marked so the board can be read at a glance rather than searched. */
+  row.className='table-row v45-row'+(entry.name===me?' mine':'')+(i===0?' first':'');
+  row.innerHTML=
+   `<span><b>${escapeHtml(String(i+1))}. ${escapeHtml(entry.name)}</b>`+
+   `<small>WAVE ${escapeHtml(String(entry.wave))}</small></span>`+
+   `<code>${escapeHtml(format(entry.score))}</code>`;
+  list.append(row);
+ });
+}
+
+async function v45LoadBoard(silent=false){
+ const list=$('dailyBoardList');
+ if(!list)return;
+ if(!silent)list.innerHTML='<p class="scan-line">Reading today\u2019s board\u2026</p>';
+ try{
+  const res=await BlastNetwork.dailyBoard(v39Day());
+  v45Rows(res.entries||[],BlastNetwork.playerName);
+ }catch(e){
+  /* The daily is playable with no server at all, so a board that cannot load says so plainly
+     rather than looking like an empty board — those are very different facts. */
+  list.innerHTML='<p>Today\u2019s board is unreachable. Your run still counts locally.</p>';
+ }
+}
+
+bind('refreshDailyBtn',()=>v45LoadBoard());
+
+/* Loaded when the screen opens rather than on a timer: the board only changes when somebody
+   finishes a run, and this screen already refreshes the arena list on its own schedule. */
+const v45ShowScreen=showScreen;
+showScreen=function(id){
+ const out=v45ShowScreen(id);
+ if(id==='socialScreen')v45LoadBoard();
+ return out;
+};

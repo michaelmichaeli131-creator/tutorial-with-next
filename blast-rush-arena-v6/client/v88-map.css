@@ -1,0 +1,201 @@
+/* V88 — the map screen.
+
+   The whole file is scoped to `#stageList.v88-map` and the campaign screen, because it is the last
+   stylesheet in the bundle and anything unscoped here would win against every deliberate override
+   V17 and V19 make everywhere else.
+
+   The chrome vocabulary is V17's and is reused rather than restated: chamfered silhouettes, a dark
+   rim with a bright inner rule, one gold accent, `--f-danger` for anything that can kill you. The
+   node "rim" is two clipped boxes rather than a border, because `clip-path` has no border — the
+   outer box is the rule colour, the inner box is inset by 2px and inherits the same polygon, which
+   percentage geometry rescales into a perfect inset. That is also why glow is a `drop-shadow`
+   filter rather than a `box-shadow`: box-shadow follows the (rectangular) border box and would
+   halo a square around a hexagon. */
+
+#campaignScreen .panel{overflow-x:hidden}
+/* V19's sticky title bar fades to transparent over its bottom 30% and does not cover the panel's
+   own top padding. On a list of cards that is invisible; on a map that scrolls continuously under
+   it, node numbers and star rows slide out of the top of it. Opaque, and extended upward past the
+   panel padding so nothing surfaces above the title. */
+#campaignScreen .scr-head{position:sticky;background:linear-gradient(180deg,#050b1c 0,#050b1c 86%,rgba(5,11,28,0))}
+#campaignScreen .scr-head:before{content:"";position:absolute;left:-14px;right:-14px;bottom:100%;height:28px;background:#050b1c}
+/* The head carried a CLEARED/STARS card and a CONTINUE button. The map header states the first two
+   and the current node is the third, so this is duplication taking up a fifth of the screen. */
+#campaignScreen .v14-campaign-head{display:none}
+
+/* `.v14-stage-list` is a grid, and at >=760px a two-column one. Both have to be undone at this
+   specificity or the map header and the track become grid items side by side. */
+#stageList.v88-map,
+#stageList.v88-map .v88-track{display:block;grid-template-columns:none;gap:0}
+
+:root{
+ --v88-rule:rgba(126,214,255,.5);
+ --v88-dim:rgba(126,214,255,.16);
+ --v88-gold:#ffc247;
+ --v88-ink:#8ea6c9;
+}
+
+/* ---------- Header ---------- */
+.v88-head{margin:0 0 6px;padding:12px 14px 13px;border:1px solid var(--v88-dim);border-radius:16px;
+ background:linear-gradient(158deg,rgba(18,38,76,.92),rgba(4,10,24,.94));
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
+.v88-head-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.v88-head-eyebrow{color:#7fa8cf;font:900 9px/1 system-ui;letter-spacing:.22em}
+.v88-head-stats{display:flex;align-items:baseline;gap:9px}
+.v88-head-stats b{font:900 13px/1 system-ui;color:#eaf6ff}
+.v88-head-stats i{font-style:normal;font:900 12px/1 system-ui;color:var(--v88-gold)}
+.v88-head-name{margin:9px 0 0;font:1000 21px/1.02 system-ui;letter-spacing:.01em;color:#f2fbff}
+.v88-head-sub{margin:5px 0 0;color:var(--v88-ink);font:700 10px/1.35 system-ui;letter-spacing:.13em}
+
+/* The switcher is deliberately a pair of small chips and not a tab bar. Most players own one map
+   for a long time, and it does not render at all until a second one opens. */
+.v88-switch{display:flex;flex-wrap:wrap;gap:7px;margin-top:11px}
+.v88-chip{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 15px;
+ border:1px solid var(--v88-dim);border-radius:99px;background:rgba(8,18,40,.8);
+ color:#9fb6d4;font:900 10px/1 system-ui;letter-spacing:.14em}
+.v88-chip.is-on{border-color:rgba(255,194,71,.62);background:linear-gradient(180deg,#3a2a06,#1b1204);color:var(--v88-gold)}
+.v88-chip.is-locked{opacity:.55}
+
+/* ---------- Track ---------- */
+.v88-track{position:relative;width:100%;margin-top:4px}
+.v88-path{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.v88-seg{fill:none;stroke-linecap:round}
+.v88-seg.is-walked{stroke:rgba(120,206,255,.72);stroke-width:4;filter:drop-shadow(0 0 6px rgba(90,196,255,.5))}
+.v88-seg.is-pending{stroke:rgba(126,170,220,.24);stroke-width:2.5;stroke-dasharray:2 9}
+.v88-seg.is-gate{stroke:rgba(255,194,71,.75);stroke-width:4;stroke-dasharray:9 8;filter:drop-shadow(0 0 7px rgba(255,180,60,.55));animation:v88Crawl 1.5s linear infinite}
+@keyframes v88Crawl{to{stroke-dashoffset:-17}}
+
+/* Titan fields. Visible several hundred pixels away, which is the point: the silhouette does the
+   work when the node is on screen, this does it when the node is still three gaps down. */
+/* Kept inside the track rather than bled past it: the panel is the scroller, and anything wider
+   than the track gives it a horizontal scrollbar on a screen that must only ever scroll down. */
+.v88-band{position:absolute;left:0;right:0;height:172px;transform:translateY(-50%);pointer-events:none;
+ background:radial-gradient(ellipse 62% 48% at var(--at) 50%,rgba(255,61,99,.22),rgba(255,61,99,.06) 52%,transparent 74%)}
+.v88-band.gauntlet{background:radial-gradient(ellipse 66% 48% at var(--at) 50%,rgba(255,120,225,.22),rgba(180,70,255,.07) 52%,transparent 74%)}
+
+.v88-world{position:absolute;left:0;right:0;transform:translateY(-50%);display:flex;align-items:center;gap:10px;
+ color:#5f7ba6;font:900 8px/1 system-ui;letter-spacing:.26em;pointer-events:none}
+.v88-world:before,.v88-world:after{content:"";flex:1;height:1px;background:linear-gradient(90deg,transparent,rgba(126,214,255,.22),transparent)}
+
+/* ---------- Nodes ---------- */
+/* The button box IS the tap target and is never smaller than 58px, which clears the 44px floor with
+   room for a thumb that is not aimed carefully. Labels are pointer-events:none so a long stage name
+   overhanging a neighbour can never eat that neighbour's tap. */
+.v88-node{position:absolute;transform:translate(-50%,-50%);width:58px;height:58px;padding:0;border:0;
+ background:none;color:#fff;z-index:2}
+.v88-node.is-big{width:84px;height:84px}
+.v88-node.kind-gauntlet{width:92px;height:92px}
+.v88-node.is-current{z-index:5}
+
+.v88-shape{position:absolute;inset:0;display:block;
+ clip-path:polygon(50% 0%,94% 26%,94% 74%,50% 100%,6% 74%,6% 26%);
+ background:var(--v88-rule);
+ filter:drop-shadow(0 3px 8px rgba(0,0,0,.6))}
+.v88-shape-in{position:absolute;inset:2px;clip-path:inherit;
+ background:linear-gradient(168deg,#223c72 0%,#132348 42%,#0a1128 100%)}
+.v88-glyph{position:absolute;inset:0;display:grid;place-items:center;
+ font:1000 15px/1 system-ui;letter-spacing:.02em;color:#cfe6ff;text-shadow:0 1px 2px rgba(0,0,0,.75)}
+
+/* Titans and gauntlets are a different silhouette, not just a bigger one — the shape is what makes
+   them legible at a glance while everything else is a hexagon. */
+.v88-node.kind-boss .v88-shape{
+ clip-path:polygon(50% 0%,63% 13%,87% 13%,87% 37%,100% 50%,87% 63%,87% 87%,63% 87%,50% 100%,37% 87%,13% 87%,13% 63%,0% 50%,13% 37%,13% 13%,37% 13%);
+ background:#ff5c7c;filter:drop-shadow(0 0 12px rgba(255,61,99,.5)) drop-shadow(0 3px 8px rgba(0,0,0,.6))}
+.v88-node.kind-boss .v88-shape-in{background:linear-gradient(168deg,#6d1228 0%,#3c0a17 46%,#16050c 100%)}
+.v88-node.kind-boss .v88-glyph{font-size:19px;color:#ffd3dc}
+
+.v88-node.kind-gauntlet .v88-shape{
+ clip-path:polygon(50% 0%,78% 13%,100% 50%,78% 87%,50% 100%,22% 87%,0% 50%,22% 13%);
+ background:#ff8be0;filter:drop-shadow(0 0 13px rgba(230,90,220,.5)) drop-shadow(0 3px 8px rgba(0,0,0,.6))}
+.v88-node.kind-gauntlet .v88-shape-in{background:linear-gradient(168deg,#5a1258 0%,#33093a 46%,#170520 100%)}
+.v88-node.kind-gauntlet .v88-glyph{font-size:20px;color:#ffd6f6}
+
+/* Cleared: still lit, still readable, but it has stopped asking for anything. */
+.v88-node.is-cleared .v88-shape{background:rgba(126,214,255,.42)}
+.v88-node.is-cleared .v88-glyph{color:#9fc2e4}
+
+/* Locked: dark, desaturated and carrying a padlock instead of a number. Titans keep enough of their
+   red to still read as titans — a fully grey lock wall is exactly the information this screen is
+   supposed to give back. */
+.v88-node.is-locked{opacity:.6}
+.v88-node.is-locked .v88-shape{background:rgba(140,175,215,.26);filter:saturate(.45) brightness(.72) drop-shadow(0 2px 6px rgba(0,0,0,.55))}
+.v88-node.is-locked .v88-shape-in{background:linear-gradient(168deg,#121c31 0%,#0a1120 50%,#05080f 100%)}
+.v88-node.is-locked .v88-label b{color:#7b91b0}
+
+/* Current: the loudest thing on the screen. Solid gold against a blue-black page, scaled up, with a
+   ring that keeps pinging outward so the eye is dragged to it before anything is read. */
+.v88-node.is-current{transform:translate(-50%,-50%) scale(1.14)}
+.v88-node.is-current .v88-shape{background:#ffe9a8;
+ filter:drop-shadow(0 0 16px rgba(255,190,60,.7)) drop-shadow(0 4px 10px rgba(0,0,0,.6))}
+.v88-node.is-current .v88-shape-in{background:linear-gradient(168deg,#ffe07f 0%,#ffab24 52%,#c96c02 100%)}
+.v88-node.is-current .v88-glyph{color:#3a2200;text-shadow:0 1px 0 rgba(255,255,255,.45)}
+.v88-ping{position:absolute;inset:-9px;pointer-events:none;
+ clip-path:polygon(50% 0%,94% 26%,94% 74%,50% 100%,6% 74%,6% 26%);
+ background:rgba(255,194,71,.5);animation:v88Ping 1.9s ease-out infinite}
+.v88-node.kind-boss .v88-ping,.v88-node.kind-gauntlet .v88-ping{clip-path:polygon(50% 0%,78% 13%,100% 50%,78% 87%,50% 100%,22% 87%,0% 50%,22% 13%)}
+@keyframes v88Ping{0%{transform:scale(.9);opacity:.55}70%{transform:scale(1.32);opacity:0}100%{opacity:0}}
+
+/* ---------- Labels ---------- */
+/* Beside the node, in the half of the track the winding leaves empty. Big nodes sit on the centre
+   line and have no empty half, so theirs goes underneath. */
+.v88-label{position:absolute;top:50%;transform:translateY(-50%);width:132px;
+ display:flex;flex-direction:column;gap:3px;pointer-events:none}
+.v88-label.right{left:100%;margin-left:10px;align-items:flex-start;text-align:left}
+.v88-label.left{right:100%;margin-right:10px;align-items:flex-end;text-align:right}
+.v88-label.below{top:100%;left:50%;transform:translateX(-50%);margin-top:9px;width:172px;align-items:center;text-align:center}
+.v88-label b{font:900 10px/1.2 system-ui;letter-spacing:.07em;color:#dcecff}
+.v88-stars{font:900 10px/1 system-ui;letter-spacing:.14em;color:var(--v88-gold);opacity:.9}
+.v88-label em{font-style:normal;font:900 8px/1 system-ui;letter-spacing:.16em;color:#7fa8cf}
+.v88-node.kind-boss .v88-label em{color:#ff8ca2}
+.v88-node.kind-gauntlet .v88-label em{color:#ff9fe6}
+
+/* The current node's label is a card, because it is the only one carrying a briefing. */
+.v88-node.is-current .v88-label{width:150px;padding:8px 10px;gap:4px;
+ border:1px solid rgba(255,194,71,.42);border-radius:12px;
+ background:linear-gradient(158deg,rgba(28,22,6,.95),rgba(6,10,22,.95));
+ box-shadow:0 6px 18px rgba(0,0,0,.55);transform:translateY(-50%) scale(.878)}
+.v88-node.is-current .v88-label.below{transform:translateX(-50%) scale(.878)}
+.v88-node.is-current .v88-label b{color:#fff3d2;font-size:11px}
+.v88-haz{font:800 8px/1.3 system-ui;letter-spacing:.1em;color:#ffb193}
+.v88-go{font:900 8px/1 system-ui;letter-spacing:.18em;color:var(--v88-gold)}
+
+/* ---------- Padlock ---------- */
+/* Two boxes, no font. An emoji padlock renders at a different size on every device and is missing
+   entirely on some Android builds. */
+.v88-lock{position:relative;display:block;width:13px;height:10px;border-radius:2px;background:#93aacb}
+.v88-lock:before{content:"";position:absolute;left:50%;bottom:100%;transform:translateX(-50%);
+ width:9px;height:7px;border:2px solid #93aacb;border-bottom:0;border-radius:5px 5px 0 0}
+.v88-chip .v88-lock{width:9px;height:7px;background:#9fb6d4}
+.v88-chip .v88-lock:before{width:7px;height:5px;border-width:1.5px;border-color:#9fb6d4}
+
+/* ---------- Gateway ---------- */
+/* V87 announces the next map with a 1.25s toast. This is the part that lasts: the path runs on past
+   the last node into a door with the new region's name on it. */
+.v88-gate{position:absolute;left:50%;transform:translate(-50%,-50%);display:flex;align-items:center;gap:11px;
+ width:min(252px,92%);min-height:64px;padding:11px 14px;text-align:left;
+ border:1px solid rgba(255,194,71,.35);border-radius:16px;
+ background:linear-gradient(158deg,rgba(30,24,8,.94),rgba(6,10,24,.95));
+ box-shadow:0 8px 24px rgba(0,0,0,.55);color:#fff;z-index:4}
+.v88-gate.is-new{border-color:rgba(255,194,71,.85);box-shadow:0 0 26px rgba(255,180,60,.32),0 8px 24px rgba(0,0,0,.55)}
+.v88-gate-ring{flex:0 0 auto;width:34px;height:34px;border-radius:50%;
+ background:radial-gradient(circle,#fff 0 8%,#ffe08a 14% 26%,rgba(255,160,40,.5) 44%,transparent 70%);
+ box-shadow:0 0 18px rgba(255,180,60,.5)}
+.v88-gate.is-new .v88-gate-ring{animation:v88Portal 2.4s ease-in-out infinite}
+@keyframes v88Portal{50%{transform:scale(1.16);filter:brightness(1.3)}}
+.v88-gate-body{min-width:0;display:flex;flex-direction:column;gap:3px}
+.v88-gate-body small{font:900 8px/1 system-ui;letter-spacing:.2em;color:var(--v88-gold)}
+.v88-gate-body b{font:900 13px/1.1 system-ui;letter-spacing:.04em;color:#fff6de}
+.v88-gate-body span{font:700 9px/1.3 system-ui;letter-spacing:.11em;color:var(--v88-ink)}
+
+/* ---------- Wider screens ---------- */
+/* The track is a fixed pixel height with fractional x, so it does not need a breakpoint to work —
+   it just gets very wide. Capping it keeps the winding a walkable path instead of a flat zigzag. */
+@media (min-width:620px){
+ #stageList.v88-map .v88-track{max-width:430px;margin-left:auto;margin-right:auto}
+ .v88-head{max-width:430px;margin-left:auto;margin-right:auto}
+}
+
+@media (prefers-reduced-motion:reduce){
+ .v88-ping,.v88-seg.is-gate,.v88-gate.is-new .v88-gate-ring{animation:none!important}
+ .v88-ping{opacity:.35}
+}

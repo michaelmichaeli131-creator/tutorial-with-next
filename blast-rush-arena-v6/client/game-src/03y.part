@@ -1,0 +1,85 @@
+/* V20 — server-authoritative duel spawning.
+   A duel was simulated locally from a shared seed, which only yields the same field if both clients
+   consume the generator in the same order at the same rate. They do not. dt is clamped to 33ms per
+   frame to avoid a spiral of death, so a client at 20fps advances its world about a third slower
+   than one at 60fps while the match clock keeps real time — the slower player met fewer enemies and
+   had fewer chances to score in the same 120 seconds.
+
+   Duels now replay a schedule the server builds and sends with match_start, indexed against
+   wall-clock time. Both arenas hold identical enemies at identical moments regardless of frame
+   rate, so the score gap reflects play rather than hardware. Solo and campaign are untouched: their
+   local spawner is exactly right for a single player. */
+let v20Schedule=null;
+let v20Cursor=0;
+let v20StartAt=0;
+let v20Entry=null;
+
+BlastNetwork.addEventListener('match_start',(event)=>{
+ const detail=event.detail||{};
+ v20Schedule=Array.isArray(detail.spawns)&&detail.spawns.length?detail.spawns:null;
+ v20Cursor=0;
+ v20StartAt=Number(detail.startsAt)||Date.now();
+ if(!v20Schedule)console.info('[duel] no spawn schedule from server — falling back to local spawning');
+});
+
+/* A reconnecting player rejoins mid-match, so skip the entries that already passed rather than
+   dumping a minute of backlog into their arena at once. */
+function v20Catchup(){
+ if(!v20Schedule)return;
+ const elapsed=Date.now()-v20StartAt;
+ while(v20Cursor<v20Schedule.length&&v20Schedule[v20Cursor].t<elapsed-1500)v20Cursor++;
+}
+
+const v20BeginBase=begin;
+begin=function(mode='solo',seed){
+ v20BeginBase(mode,seed);
+ if(mode==='duel')v20Catchup();
+ else{v20Schedule=null;v20Cursor=0;}
+};
+
+/* Scheduled spawns still go through the normal spawner so every later layer (art, behaviour,
+   elite marking) applies; only the randomised fields are overwritten from the schedule. */
+const v20SpawnOrbBase=spawnOrb;
+spawnOrb=function(type){
+ v20SpawnOrbBase(type);
+ const entry=v20Entry;
+ if(!entry)return;
+ const orb=game.orbs.at(-1);
+ if(!orb)return;
+ const margin=Math.max(52,orb.r+12);
+ orb.x=margin+entry.x*Math.max(1,W-margin*2);
+ orb.speed=(52+game.wave*4+18)*entry.speed;
+ if(!entry.elite)delete orb.elite;
+ else if(!orb.elite){
+  const pool=V16_ELITES;
+  orb.elite=pool[Math.floor(entry.x*pool.length)%pool.length];
+  orb.hp+=orb.elite.hp;
+  orb.maxHp+=orb.elite.hp;
+  orb.speed*=orb.elite.speed;
+  if(orb.elite.shoots)orb.v16FireIn=1.6+entry.speed;
+ }
+};
+
+const v20UpdateBase=update;
+update=function(dt){
+ const scheduled=game.mode==='duel'&&v20Schedule;
+ /* Park the local timer so the base spawner cannot fire alongside the schedule. */
+ if(scheduled)game.spawnTimer=Number.MAX_SAFE_INTEGER;
+ v20UpdateBase(dt);
+ if(!scheduled||!game.running||game.paused)return;
+ const elapsed=Date.now()-v20StartAt;
+ let budget=6;
+ while(v20Cursor<v20Schedule.length&&v20Schedule[v20Cursor].t<=elapsed&&budget-->0){
+  v20Entry=v20Schedule[v20Cursor++];
+  if(!game.boss)spawnOrb(v20Entry.type);
+  v20Entry=null;
+ }
+};
+
+/* Surges are a solo-pacing device. In a duel they would spawn off a local timer and break the
+   schedule's guarantee that both arenas match, so pressure there comes from the rival instead. */
+const v20SurgeUpdate=update;
+update=function(dt){
+ if(game.mode==='duel'&&v20Schedule)game.v16PhaseTimer=Number.MAX_SAFE_INTEGER;
+ v20SurgeUpdate(dt);
+};

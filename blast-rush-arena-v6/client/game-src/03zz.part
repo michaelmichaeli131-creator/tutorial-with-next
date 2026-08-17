@@ -1,0 +1,122 @@
+/* V52 — the music was not quiet, it was mixed for a speaker nobody has.
+
+   The note was that the background music is very weak. Measuring the music bus rather than guessing
+   at it gave a spectrum that explains the complaint completely:
+
+       <200Hz    -56.3 dB
+       200-800   -78.9 dB
+       800-2.4k -101.6 dB
+       2.4-6k   -118.6 dB
+       >6k      -134.7 dB
+
+   That is not a quiet mix, it is a mix with essentially nothing in it above two hundred hertz. And a
+   phone speaker cannot reproduce below roughly three or four hundred hertz at any volume — the
+   driver is a few millimetres across. So almost all of the music's energy was going into the one
+   band the target device physically cannot play. Turning the volume up would not have helped; it
+   would have made a slightly louder nothing.
+
+   Reading the arrangement confirms it from the other direction. `v30Sub` is called at .34 and
+   `v30Kick` at .5, while every melodic and harmonic voice — bass line, pad, hook, sparkle — sits
+   between .014 and .075. The sub is fourteen to twenty-seven decibels above the melody. On
+   headphones or a laptop that is a perfectly reasonable club-style balance, which is presumably why
+   it survived this long; on the device this game is actually played on it means the tune is
+   inaudible and only the thump gets through.
+
+   Three things were also darkening what little was left, and they compound:
+
+   1. Every note passes its own resonant lowpass in `v30Voice`, opening at `cutoff` and closing to
+      `cutoff*.5` over the note.
+   2. The whole bus passes `musicFilter`, which V30 sets to 1700Hz outside combat and
+      `2400 + intensity*5200` inside it — so at wave one, with no combo and no boss, the entire
+      arrangement is behind a 2.4kHz lowpass.
+   3. The bus gain was `curve*0.5`, and a second writer left over from V12 set it to `curve*0.17`,
+      which is nine decibels lower again and would win briefly on every settings change.
+
+   So this is a rebalance rather than a new arrangement. Not a note changes, the harmony and the
+   tension behaviour V36 tuned are untouched, and the sub stays — it is still what gives the track
+   weight on hardware that can produce it. What changes is which part of the spectrum carries the
+   tune. */
+
+const V52={
+ /* A tilt rather than a flat boost. Nothing below the bass register gains anything, and the lift
+    grows with pitch up to three octaves above it, which is the band a phone speaker actually
+    reproduces. This is the same shape as a tilt EQ and it is the whole fix in one number. */
+ pivot:110,
+ octaves:3,
+ /* First pass ran this at 2.4 with a .66 sub trim, which moved the bus level by six decibels but
+    barely moved the *balance* — the gap to close was twenty-seven decibels and change, so eleven
+    was never going to do it. */
+ lift:3.2,
+ /* The sub and kick are not removed. They come down enough to stop owning the mix, and no further:
+    on headphones this track is meant to have a floor. */
+ subTrim:.62,
+ kickTrim:.7,
+ /* The bass pedal was worse than mistuned for the device — it was inaudible on any device. Dumping
+    the arrangement's own output shows the pedal running at 13.75, 16.35, 18.35, 21.83 and 24.50Hz,
+    because it is written as `bass/4` and the world roots are already low. Human hearing gives out
+    around 20Hz. A 13.75Hz sine is not a quiet note, it is not a note; its only audible contribution
+    is whatever intermodulation it causes on the way out.
+
+    Anything under this gets lifted, and the lift has to be a *fixed* number of octaves. The first
+    attempt doubled in a loop until the note cleared the floor, which mapped the five pedal notes to
+    55, 65.4, 36.7, 43.66 and 49Hz — two octaves for some, one for others, which scrambles the
+    intervals of the bass line and is a worse bug than the one it fixed. Every sub call in the
+    arrangement is `bass/4` or `root/4`, so all of them sit between about 10 and 28Hz; one constant
+    two-octave transpose clears the floor for all of them and preserves every pitch relationship in
+    the harmony, including V36's held pedal at high tension. 13.75Hz becomes 55Hz: a real bass note,
+    audible on headphones, felt on a decent speaker, with harmonics a phone can reproduce. */
+ pedalFloor:35,
+ pedalTranspose:4,
+ /* Octave doubling on the melodic voices — the oldest trick there is for making a lead audible on a
+    small speaker, and the reason it works is that the doubled note lands where the driver is
+    efficient while the original keeps the register the composition wants.
+
+    Which voices are melodic is inferred from note length, which needs saying out loud because it is
+    a heuristic and not a fact: the hook and sparkle run between .8 and 3.2 sixteenths, the pads run
+    15 and 30. At this tempo a sixteenth is about 121ms, so anything under three quarters of a second
+    is a melody note. Doubling a thirty-sixteenth pad would thicken it into mud, which is exactly
+    what this threshold exists to avoid. */
+ doubleUnder:.75,
+ doubleGain:.42,
+ /* Per-note filters open further so the lift has something above the fundamental to actually lift.
+    A note boosted behind a closed filter just gets louder and duller. */
+ cutoffOpen:2.1
+};
+
+/* The lift for a given fundamental: 1x at the pivot, V52.lift x three octaves up, smooth between.
+   Above that it flattens off rather than continuing to climb, because a sparkle voice at 4kHz does
+   not need six times the level to be heard — it needs the filter out of its way, which it now has. */
+function v52Lift(freq){
+ const octavesUp=Math.log2(Math.max(1,freq)/V52.pivot);
+ const k=Math.max(0,Math.min(1,octavesUp/V52.octaves));
+ return 1+(V52.lift-1)*k;
+}
+
+/* Assignments, not declarations — V48's lighting was written as a declaration and silently never
+   ran, because an assignment elsewhere in the bundle wins regardless of file order. Every override
+   here follows the convention the rest of the codebase uses. */
+const v52Voice=v30Voice;
+v30Voice=function(freq,when,dur,gain,cutoff,pan,detune,type){
+ const out=v52Voice(freq,when,dur,gain*v52Lift(freq),Math.min(14000,cutoff*V52.cutoffOpen),pan,detune,type);
+ /* The octave up. Panned to the opposite side of its parent so the pair widens rather than simply
+    getting louder, and given the same waveform so it reads as the same instrument an octave higher
+    instead of as a second instrument playing along. */
+ if(dur<V52.doubleUnder&&freq>=150){
+  v52Voice(freq*2,when+.004,dur*.92,gain*v52Lift(freq)*V52.doubleGain,
+   Math.min(14000,cutoff*V52.cutoffOpen*1.4),-pan*.7,detune,type);
+ }
+ return out;
+};
+
+const v52Sub=v30Sub;
+v30Sub=function(freq,when,dur,gain){
+ /* One fixed transpose for the whole pedal, applied only to notes that need it. A note already in
+    audible range is left where it is rather than pushed out of the bass register. */
+ const f=freq<V52.pedalFloor?freq*V52.pedalTranspose:freq;
+ return v52Sub(f,when,dur,gain*V52.subTrim);
+};
+
+const v52Kick=v30Kick;
+v30Kick=function(when,gain){
+ return v52Kick(when,gain*V52.kickTrim);
+};

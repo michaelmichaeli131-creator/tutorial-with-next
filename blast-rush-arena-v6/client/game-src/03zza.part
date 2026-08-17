@@ -1,0 +1,146 @@
+/* V53 — the heavy cues were the quiet ones.
+
+   V52 found the music was putting its energy below what a phone speaker can reproduce. The kill
+   sounds are built out of the same materials — swept lowpasses that close low, a sub swell an octave
+   under the note — so the obvious next question was whether they have the same problem. Profiling
+   each cue by firing it directly and holding the peak per band across its decay:
+
+       cue            below 400Hz   400Hz-6k
+       kill (scout)      -59.3        -39.8    <- fine
+       combo             -94.5        -37.8    <- fine
+       killArmored       -31.0        -40.3    <- 9.3dB the wrong way
+       killBomb          -33.4        -45.9    <- 12.5dB
+       damage            -35.0        -45.9    <- 10.9dB
+       blast             -32.2        -44.9    <- 12.7dB
+
+   So the pattern is not "the sound effects are wrong". The light cues are fine — the scout kill and
+   the combo chain put their energy exactly where a phone can project it, which is why the fast
+   shooting already feels good. It is specifically **the cues built to feel heavy** that fail: the
+   sentinel, the raider, taking damage, and the Reactor Blast. Every one of them expresses weight the
+   way weight is expressed on a full-range system — by going low — and on a phone that band simply
+   does not exist. The four moments meant to hit hardest are the four that arrive thinnest.
+
+   The fix is not to take the low end away. On headphones those cues are right, and V52 made the same
+   call about the music's sub. What is missing is a way for the weight to survive a speaker that
+   cannot produce it, and psychoacoustics supplies one: **the missing fundamental**. Given three or
+   four adjacent harmonics of a tone, the ear reconstructs the pitch of that tone even when the
+   fundamental is not present at all — it is how a telephone conveys a bass voice through a band that
+   starts at 300Hz.
+
+   So each heavy cue gains a quiet stack of adjacent harmonics of its own note, placed in the band a
+   phone reproduces well. Not a substitute low tone and not an added click: harmonics 13, 14 and 15 of
+   a 55Hz swell land at 715, 770 and 825Hz, and the ear fuses them back into 55Hz. On a phone the
+   listener hears weight that the speaker never physically produced. On headphones the real sub is
+   still there underneath and the stack reads as harmonic colour on top of it.
+
+   This is also why it is harmonics rather than the obvious alternative of a mid-range thump: a thump
+   would be a second event, and V47 removed percussion from these cues for a reason. A harmonic stack
+   of the same note is the same event, heard through a smaller window. */
+
+const V53={
+ /* Where the stack sits. Around 700Hz-1.2kHz is where a phone driver is efficient and where the ear
+    is good at residue pitch; much higher and the stack stops fusing with the fundamental and starts
+    being heard as a separate whistle. */
+ target:760,
+ /* Three adjacent harmonics is the documented minimum for the effect to be reliable; a fourth
+    strengthens it without widening the band much. */
+ count:4,
+ /* Quiet. This layer is meant to be heard as the low note, not as a new one on top of it. */
+ gain:.3,
+ dur:.3,
+ /* The raider is the lowest cue in the game -- its weight is a sub swell an octave below an already
+    low note -- so it measured 12.5dB the wrong way where the others were around 10, and one pass of
+    the stack at the shared level only pulled it back to 9.2. It gets a hotter stack. */
+ boomBoost:1.9
+};
+
+/* Adjacent harmonics of `freq` bracketing the target band. `n` is chosen so the stack lands near
+   V53.target, and then consecutive multiples are used — consecutive is the part that matters, since
+   the ear derives the fundamental from the *spacing* between partials, and spacing is `freq`
+   whichever harmonics they are. */
+audio.residue=function(freq,when=0,gain=V53.gain,pan=0,dur=V53.dur,count=V53.count){
+ if(!this.ctx||freq<=0)return;
+ const t=this.ctx.currentTime+when;
+ const n=Math.max(2,Math.round(V53.target/freq));
+ const out=this.ctx.createGain();
+ const p=this.ctx.createStereoPanner?this.ctx.createStereoPanner():null;
+ out.gain.setValueAtTime(.0001,t);
+ /* Same eighteen-millisecond-ish swell V47 settled on, so this arrives with the cue rather than in
+    front of it — a fast attack here would put back exactly the click V47 removed. */
+ out.gain.exponentialRampToValueAtTime(Math.max(.0002,gain),t+.016);
+ out.gain.exponentialRampToValueAtTime(.0001,t+dur);
+ if(p){p.pan.value=Math.max(-1,Math.min(1,pan));out.connect(p);p.connect(this.sfxGain);}
+ else out.connect(this.sfxGain);
+ for(let i=0;i<count;i++){
+  const harmonic=(n+i)*freq;
+  if(harmonic>7000)break;
+  const osc=this.ctx.createOscillator();
+  const g=this.ctx.createGain();
+  osc.type='sine';
+  osc.frequency.setValueAtTime(harmonic,t);
+  /* The stack follows the cue's own downward bend, or the fundamental it implies would drift away
+     from the fundamental actually playing underneath it. */
+  osc.frequency.exponentialRampToValueAtTime(Math.max(20,harmonic*V43.bend),t+dur*.95);
+  /* Upper partials quieter, which is what a natural harmonic series does and what stops the stack
+     sounding like an organ chord. */
+  g.gain.value=1/(1+i*.6);
+  osc.connect(g);g.connect(out);
+  osc.start(t);osc.stop(t+dur+.04);
+ }
+};
+
+/* ---- The four cues ---- */
+
+const v53Impact=audio.impact.bind(audio);
+audio.impact=function(type,power=1,combo=0,perfect=false){
+ if(!this.ctx)return;
+ const dropped=(this.ctx.currentTime-v34LastAt<.045)&&v34InWindow>=3;
+ v53Impact(type,power,combo,perfect);
+ if(dropped)return;
+ const kit=V34_KITS[type]||V34_KITS.normal;
+ /* Only the species whose measured balance was wrong. The scout and the combo chain already read
+    correctly on a small speaker and adding to them would just make the mix busier. */
+ if(!kit.boom&&!kit.metal)return;
+ const note=v34Note(kit,combo);
+ const level=Math.min(1.1,kit.gain*power);
+ /* The raider's weight is its sub swell an octave down, so that is the frequency whose harmonics
+    have to be implied — not the note itself. */
+ const boost=kit.boom?V53.boomBoost:1;
+ this.residue(kit.boom?note/2:note,0,level*V53.gain*boost,(Math.random()-.5)*.6,kit.boom?.42:.32);
+};
+
+/* The shot confirmation is the most frequently heard sound in the game and profiled worst of all --
+   19.1dB the wrong way. A harmonic stack is the wrong tool here, and trying it produced a
+   measurement too noisy to claim anything from. The reason it is sub-heavy is much simpler: V49
+   builds it on `v34Root()*4`, which is 220Hz, so its fundamental lands in the 200-400Hz band that a
+   phone cannot project, and a triangle's third harmonic is weak and gets attenuated as the filter
+   closes to 420Hz.
+
+   The fix for a cue whose fundamental is in the wrong place is to move the fundamental. An octave up
+   puts it at 440Hz -- squarely in the passband, still exactly in key, and brighter in a way that
+   suits shot confirmation on a small speaker. One number instead of four extra oscillators on the
+   most frequent cue in the game. */
+const v53HitSfx=audio.sfx.bind(audio);
+audio.sfx=function(name){
+ if(name!=='hit'||!this.ctx)return v53HitSfx(name);
+ this.sweepVoice(v34Root()*8,0,.1,.09,(Math.random()-.5)*.5,'triangle',2600,620,5);
+};
+
+/* `damage` and `blast` are the two loudest single moments in the game and both were profiled more
+   than ten decibels the wrong way. Their fundamentals are fixed rather than derived from the kit, so
+   they are handled directly. */
+const v53Sfx=audio.sfx.bind(audio);
+audio.sfx=function(name){
+ if(!this.ctx)return;
+ const out=v53Sfx(name);
+ if(name==='damage'){
+  /* The reactor's own note, which is what 03zo bends flat and drops. */
+  const root=typeof v34Root==='function'?v34Root():55;
+  this.residue(root,.02,.26,0,.5);
+ }else if(name==='blast'){
+  /* The blast's fundamental is a fixed 48Hz sawtooth held for a second — the single most
+     phone-inaudible sound in the game, and the reward for a charged ability. */
+  this.residue(48,.01,.3,0,.6);
+ }
+ return out;
+};

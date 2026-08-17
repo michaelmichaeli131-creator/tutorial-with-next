@@ -1,0 +1,158 @@
+/* V55 — an expensive weapon that kills less than the free one.
+
+   Two notes: switching weapons should be felt, and an advanced weapon should kill more. Reading the
+   stats table rather than guessing says both are real faults, and the second one is severe.
+
+   Pulled out of the running client — damage per tap, extra targets the special reaches, and how often
+   the cooldown lets the special fire, at a realistic five taps a second:
+
+       weapon     cost   L5 dmg/tap   extra targets   cooldown   1hp kills/s
+       pulse         0       3.0            0           0.00          5.0
+       scatter     900       1.0            6           0.24         30.0
+       lance      1500       4.0            0           0.30          5.0
+       arc        2100       1.0            6           0.28         26.4
+       siphon     2400       2.0            0           0.00          5.0
+       nova       2900       1.0            6           0.41         19.6
+
+   Three things fall out of that table.
+
+   **Three of the six weapons never gain damage at all.** Scatter, arc and nova are pinned at 1.0
+   through all five levels, while charging 340, 460 and 520 credits per upgrade. Buying a level does
+   nothing to their punch — only to their spread, chain length or blast radius. A player who upgrades
+   arc twice has spent 920 credits and cannot tell.
+
+   **Against a single target, the expensive weapons are worse than the free one.** The 2,900-credit
+   Nova Cannon does 1.0 damage a tap where the starter does 3.0. The 2,400-credit Shard Siphon does
+   2.0. So the game charges nearly three thousand credits for a downgrade at anything that is not a
+   crowd, which is exactly the complaint.
+
+   **Nova's cooldown made it a 1-damage weapon most of the time.** At level 1 it was 0.61s, so its
+   blast — the entire reason to own it — fired on barely a third of taps.
+
+   And the feel problem has a single cause. Every piece of tactile feedback in the game is a function
+   of *what you killed*: `v16Detonate` takes its power from the hostile's type and whether the hit was
+   perfect. Nothing in the freeze, the camera punch, the shake, the flash or the haptic pulse depends
+   on the weapon at all. Six weapons that hit with identical force cannot feel different, however
+   different their projectiles look — and V42 gave them distinct art, which is why the sameness now
+   reads as a feel problem rather than a visual one. */
+
+/* ---- Kills more ----
+
+   Rewritten so that cost buys power, while each weapon keeps the shape that makes it worth choosing.
+   The rule applied: no weapon has a flat damage curve, and every paid weapon beats the free starter
+   at what it is for. */
+const V55_STATS={
+ /* The baseline. Unchanged — everything else is balanced against it, so moving it would move
+    everything. No cooldown, no special: raw single-target damage is its whole identity. */
+ pulse:(l)=>({damage:1+(l-1)*.5,bossMult:1+l*.28,splash:0,splashHits:0,chain:0,aoe:0,credits:1,cooldown:0}),
+ /* The crowd weapon, and the cheapest paid one. It gains damage now, but stays the lowest
+    single-target of the six on purpose: thirty kills a second on a dense field is what it sells, and
+    it would be the strictly best weapon in the game if it also punched hardest. */
+ scatter:(l)=>({damage:1+(l-1)*.35,bossMult:.92+l*.14,splash:78+l*16,splashHits:1+l,chain:0,aoe:0,credits:1,cooldown:.22}),
+ /* Armour and titans. Highest single-target damage in the game, and it should be — it is the only
+    weapon with no crowd tool whatsoever. */
+ lance:(l)=>({damage:2+(l-1)*.75,bossMult:1.7+l*.42,splash:0,splashHits:0,chain:0,aoe:0,credits:1,cooldown:.28}),
+ /* Chains, which keeps combos alive. Now starts above the starter rather than below it, so the 2,100
+    credits buy something on the first tap and not only on a crowded screen. */
+ arc:(l)=>({damage:1.4+(l-1)*.4,bossMult:1.06+l*.18,splash:0,splashHits:0,chain:1+l,aoe:0,credits:1,cooldown:.26}),
+ /* Economy. It trades damage for credits, but "trades" has to mean it is still competitive — being
+    both the second most expensive weapon and the second weakest was not a trade, it was a penalty. */
+ siphon:(l)=>({damage:1.6+(l-1)*.45,bossMult:.99+l*.16,splash:0,splashHits:0,chain:0,aoe:0,credits:1+l*.18,cooldown:0}),
+ /* The blast. Most expensive, so it is now genuinely heavy in the hand as well as wide: real
+    single-target damage, and a cooldown that lets the blast actually fire. */
+ nova:(l)=>({damage:2+(l-1)*.6,bossMult:1.3+l*.22,splash:0,splashHits:0,chain:0,aoe:74+l*22,credits:1,cooldown:.46-l*.042})
+};
+
+for(const weapon of v14Weapons){
+ if(V55_STATS[weapon.id])weapon.stats=V55_STATS[weapon.id];
+}
+
+/* ---- Felt on the first tap ----
+
+   A weight per weapon, driving every channel of feedback at once. One number rather than six
+   separate tunings, because what makes two weapons feel different is that *everything* about the
+   impact differs together — a heavy weapon shakes more, holds the frame longer, flashes bigger and
+   buzzes deeper, and if only one of those moves the brain reads it as a glitch rather than as mass.
+
+   The numbers are ordered by what the weapon is: the lance and the cannon are heavy, the scatter is
+   light and fast because thirty impacts a second must not shake the screen thirty times, and the
+   starter sits at 1.0 so nothing about the opening experience changes. */
+const V55_FEEL={
+ pulse:{weight:1,hitstop:1,haptic:[10],shake:1},
+ /* Deliberately below 1: at four specials a second, full-weight feedback per hit is unplayable. */
+ scatter:{weight:.72,hitstop:.5,haptic:[6],shake:.55},
+ lance:{weight:1.5,hitstop:1.45,haptic:[18,6,10],shake:1.35},
+ arc:{weight:.9,hitstop:.8,haptic:[8,5,8],shake:.85},
+ siphon:{weight:.95,hitstop:.9,haptic:[9,14],shake:.8},
+ nova:{weight:1.7,hitstop:1.6,haptic:[22,8,16],shake:1.55}
+};
+
+function v55Feel(){
+ return V55_FEEL[(typeof v14Save==='object'&&v14Save.weapon)||'pulse']||V55_FEEL.pulse;
+}
+
+/* The detonation is where power becomes feedback, so the weapon's weight is folded into power on the
+   way in. Everything downstream — zoom, punch, roll, chroma, freeze, flash — already scales off it,
+   which means one multiplication here reaches all six channels and they stay in proportion. */
+const v55Detonate=v16Detonate;
+v16Detonate=function(x,y,color,power,combo){
+ const feel=v55Feel();
+ v55Detonate(x,y,color,power*feel.weight,combo);
+ /* Hitstop gets its own scale on top, because it is the one channel where the *duration* rather than
+    the amount is what reads as mass, and V16 clamps it hard at .1s. A heavy weapon is allowed past
+    that clamp; a fast one is pulled well under it. */
+ v16Cam.freeze=Math.min(.16,Math.max(v16Cam.freeze,v16Cam.freeze*feel.hitstop));
+};
+
+/* Shake and haptics are not routed through v16Detonate, so they are set here. Both are guarded by
+   the accessibility settings the base game already respects. */
+const v55HitOrb=hitOrb;
+hitOrb=function(o,x,y,chain=false){
+ const hpBefore=o.hp;
+ v55HitOrb(o,x,y,chain);
+ if(o.hp>0&&hpBefore<=o.hp)return;
+ const feel=v55Feel();
+ /* Chained and splashed hits get a fraction: a scatter volley that fires the full pattern six times
+    would otherwise stack six shakes into one frame. */
+ const scale=chain?.25:1;
+ if(!save.comfort)game.shake=Math.min(26,game.shake+4*feel.shake*scale);
+ if(!chain&&hpBefore<=1)haptic(feel.haptic);
+};
+
+/* ---- Visible before you buy ----
+
+   The armory said "Levels add raw punch and titan damage" in prose and showed five pips. Neither told
+   anyone that upgrading arc used to add no damage at all, which is how a table like the one at the top
+   of this file survives. Numbers do not have that problem. */
+const v55WeaponCard=v14WeaponCard;
+v14WeaponCard=function(weapon){
+ const card=v55WeaponCard(weapon);
+ if(!card||card.querySelector('.v55-stats'))return card;
+ const owned=v14Save.weapons&&v14Save.weapons[weapon.id];
+ const level=owned&&owned.owned?Math.max(1,owned.level||1):1;
+ const now=weapon.stats(level);
+ const next=level<weapon.max?weapon.stats(level+1):null;
+ const row=document.createElement('div');
+ row.className='v55-stats';
+ const cell=(label,value,delta)=>
+  `<span><small>${label}</small><b>${value}</b>${delta?`<em>${delta}</em>`:''}</span>`;
+ const gain=(a,b,digits=1)=>{
+  if(b===null)return '';
+  const d=b-a;
+  if(Math.abs(d)<.005)return '';
+  return `${d>0?'+':''}${d.toFixed(digits).replace(/\.0$/,'')}`;
+ };
+ let html=cell('DAMAGE',now.damage.toFixed(1).replace(/\.0$/,''),next?gain(now.damage,next.damage):'');
+ html+=cell('TITAN',`${now.bossMult.toFixed(1)}x`,next?gain(now.bossMult,next.bossMult):'');
+ if(now.splashHits>0)html+=cell('TARGETS',`+${now.splashHits}`,next?gain(now.splashHits,next.splashHits,0):'');
+ if(now.chain>0)html+=cell('CHAIN',`+${now.chain}`,next?gain(now.chain,next.chain,0):'');
+ if(now.aoe>0)html+=cell('BLAST',`${Math.round(now.aoe)}`,next?gain(now.aoe,next.aoe,0):'');
+ if(now.credits>1)html+=cell('CREDITS',`${now.credits.toFixed(2).replace(/0$/,'')}x`,next?gain(now.credits,next.credits,2):'');
+ row.innerHTML=html;
+ /* Under the diagram V42 added, above the prose: the picture says what it does, the numbers say how
+    much, and the sentence is then only there for flavour. */
+ const art=card.querySelector('.v42-art');
+ if(art&&art.nextSibling)card.insertBefore(row,art.nextSibling);
+ else card.append(row);
+ return card;
+};

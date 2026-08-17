@@ -1,0 +1,87 @@
+/* V86 — the cut.
+
+   The owner's first complaint was "too many monsters, which makes the game uninteresting", and the
+   density of *systems* is a large part of that. This game has twenty-odd mechanics competing for a
+   player's attention across a three-minute run, and several of them were built to solve problems
+   that later parts solved better. Carrying them costs the player attention and costs every future
+   change a compatibility question.
+
+   Switched off at the constant rather than deleted, which is the same choice V83 made with V21's
+   heat and for the same reasons: the parts being disabled contain other things that are not being
+   disabled, the reasoning in their headers is the record of why the game is shaped as it is, and a
+   measurement that disagrees with any of this should cost one line to answer rather than a revert.
+
+   ---- 1. Mines ----
+
+   A do-not-touch object in a game whose only verb is touch, on a touchscreen, where V71's own header
+   admits the ergonomic risk of "a mis-tap on a phone with a thumb in the way". By its own three
+   self-imposed limits it cannot threaten the reactor, cannot cost a life, and must never share a
+   formation with a sealed hostile — so it is a pure punishment with no threat attached, and what it
+   actually teaches is **hesitation**, which is the worst thing to teach in a game whose feel depends
+   on confident fast input.
+
+   Its stated job, making the player look before pressing, is done better by V65's sealed hostile,
+   which asks for a positive action instead. And since V76 the player plants their own rings on the
+   floor of the arena: two objects called mines with opposite meanings, both drawn as a circle at the
+   place you are about to tap, is not shippable.
+
+   ---- 2. Enemy fire that follows the pilot ----
+
+   V73's header is the most honest document in this tree and it contains the argument against itself:
+   "There is nothing to dodge. Damage does not come from being hit. It comes from anything crossing a
+   horizontal line." The fix was to aim every shot at the pilot and then clamp the shooters' timers,
+   which raised enemy fire from 2.7 a minute to between 8.7 and 14.7 — **manufacturing a threat to
+   justify a subsystem.**
+
+   The pilot keeps walking to your last tap. It is charming, it is free, it makes where you tap mean
+   two things, and V83 has since given the arena a real source of pressure that does not need to be
+   invented. What goes is the homing and the clamp. What stays, deliberately against the plan, is the
+   landing test: a shot that arrives away from the pilot still hits plating for nothing, which is the
+   one line that makes the pilot's position matter at all, and it costs nothing to keep.
+
+   ---- 3. V74's impact markers ----
+
+   They exist to read the homing this part just removed, and they draw a second chevron vocabulary
+   across the bottom of the arena — which since V76 and V83 is where the player's wells, their
+   ammunition and their pilot all live. The one part of the screen that has become busy is the one
+   part V74 wanted for itself.
+
+   ---- 4. Three of the four wave directives ----
+
+   PERFECT HUNT and CHAIN REACTION are a scoring system layered on a wave that advances on kills
+   regardless of them, competing for attention with the pool, the multiplier, the strike band, the
+   cascade bonus and the perfect bonus. Neither changes what the player should aim at.
+
+   NO BREACH does — it revalues V22's shard runner — so it stays, and every non-titan wave now runs
+   it. One standing rule the player learns once beats three rotating ones nobody finishes reading,
+   and it is the same rule V82's pool now states in points: what gets through costs you. */
+
+const V86={on:true};
+
+if(V86.on){
+
+ /* Mines: the roll itself, so nothing downstream needs to know. V71's marking, its safe-clear
+    bonus, its heat charge and V67's red chevron all still work and simply never fire. */
+ if(typeof V71==='object')V71.chance=()=>0;
+
+ /* Enemy fire: the clamp first. `fireCap` is applied as a ceiling on every shooter's re-arm timer
+    every frame, so raising it to Infinity restores whatever the base loop rolled — 2.4 to 4.0
+    seconds — rather than freezing the timers where the clamp last left them. */
+ if(typeof V73==='object')V73.fireCap=Infinity;
+ /* And the homing. Left as a live function rather than deleted because V73's update calls it
+    unconditionally, and the WeakSet it guards is what stops a shot being re-aimed every frame. */
+ if(typeof v73Track==='function')v73Track=function(){};
+
+ /* V74: `lead` is the horizon past which a shot is not yet worth marking, tested as
+    `if(eta>V74.lead)continue`. At zero every shot fails the test and the pass draws nothing, which
+    turns the part off through its own vocabulary instead of through a flag bolted onto it. */
+ if(typeof V74==='object')V74.lead=0;
+
+ /* Directives: the rotation is indexed on wave%4 and slot 0 is the titan wave, which is a marker
+    rather than a directive and stays. The other three become the one that changes a decision. */
+ if(typeof V24_DIRECTIVES!=='undefined'&&V24_DIRECTIVES.length>=4){
+  const breach=V24_DIRECTIVES[3];
+  V24_DIRECTIVES[1]=breach;
+  V24_DIRECTIVES[2]=breach;
+ }
+}

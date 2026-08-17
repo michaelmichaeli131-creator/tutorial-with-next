@@ -1,0 +1,258 @@
+/* V23 ABILITIES — turn two buttons into two decisions.
+
+   Measured, and it overturned the assumption behind V21 and V22. Those layers were tuned against
+   bots that never touched Overdrive or Reactor Blast, on the theory that the abilities were
+   decoration. They are not. The same bot, at the same tap rate, with the sole addition of pressing
+   both abilities the instant they light up:
+
+     no abilities   161s, wave  5,   197,973
+     press on sight 240s, wave 13, 1,301,354
+
+   Six and a half times the score. That is not a decoration, it is the dominant mechanic — and it
+   had no decision attached to it. Press-on-sight was strictly optimal, so the ability row was a
+   tax on knowing to press a button rather than a thing to think about. Worse, a Blast that wipes
+   the entire screen every twenty seconds flattens the target priority V22 had just built: it does
+   not matter which hostile you let through if the field is about to be erased anyway.
+
+   Both abilities keep their power. What changes is that spending them early now costs something
+   real.
+
+   Blast overcharges. Charge no longer stops at 100% — it accumulates to 175%, and firing spends
+   all of it. At the minimum it clears the bottom half of the arena, which is the panic button it
+   always was; held to full it reaches the top of the screen. So an early Blast still saves you,
+   it just does not also erase everything you were supposed to be triaging, and the player can see
+   the difference growing on the meter.
+
+   Overdrive suppresses heat. It kept 2x score and gave nothing else, which made it a pure score
+   button with an obvious best moment: immediately. While it runs the reactor no longer heats, so
+   it is also the way out of a field that has outgrown your accuracy. Now it has two uses competing
+   for one charge — bank it against a surge, or spend it on a calm patch to farm the multiplier —
+   and that competition is the decision. */
+
+const V23_BLAST={
+ min:100,
+ max:175,
+ /* Coverage measured upward from the reactor as a fraction of the screen: half the arena at the
+    minimum, all of it at full overcharge. */
+ floor:.5,
+ gain:.67,
+ boss:18,
+ /* The exponent on the number of hostiles a discharge catches, and the size at which a catch stops
+    being housekeeping and becomes the thing you were waiting for. See the note at the score. */
+ crowd:1.55,
+ big:6
+};
+
+/* The base clamps blast charge at 100 and discards the surplus. Overcharge is precisely that
+   discarded surplus, so it is credited back here on every kill. Recomputing the gain duplicates
+   one expression from the base, which is the cheaper of the two evils — the alternative is
+   rewriting hitOrb wholesale and inheriting every later layer's changes by hand. */
+const v23HitBase=hitOrb;
+hitOrb=function(o,x,y,chain=false){
+ const before=game.blast;
+ const wasAlive=game.orbs.includes(o);
+ v23HitBase(o,x,y,chain);
+ if(!wasAlive||game.orbs.includes(o))return;
+ const perfect=Math.hypot(x-o.x,y-o.y)<o.r*game.perfectWindow;
+ const gain=(perfect?9:5)*game.blastGain;
+ /* Math.max guards the case where charge was already overcharged: the base would have clamped it
+    back down to 100, quietly destroying the bank the player was building. */
+ game.blast=Math.min(V23_BLAST.max,Math.max(game.blast,before+gain));
+};
+
+function v23BlastCoverage(charge){
+ const scale=Math.min(V23_BLAST.max,charge)/100;
+ return Math.min(1,V23_BLAST.floor+(scale-1)*V23_BLAST.gain);
+}
+
+/* Replaces rather than wraps the previous activateBlast: the reach rule changes what the ability
+   does at its core, and calling through would fire the old full-screen clear first. The EMP guard
+   the campaign layer added is reproduced here so hazards still switch the ability off. */
+const v23BlastPrev=activateBlast;
+activateBlast=function(){
+ if(!game.running||game.paused||game.blast<V23_BLAST.min)return;
+ if(typeof v14EmpActive==='function'&&v14EmpActive()){toast('EMP FIELD • BLAST OFFLINE');return;}
+ const charge=Math.min(V23_BLAST.max,game.blast);
+ const coverage=v23BlastCoverage(charge);
+ const line=v22Line();
+ const reach=H*coverage;
+ game.blast=0;
+ const caught=game.orbs.filter((o)=>o.y>line-reach);
+ for(const o of caught)hitOrb(o,o.x,o.y,true);
+ if(game.boss&&game.boss.y>line-reach){
+  const power=charge/100;
+  game.boss.hp-=V23_BLAST.boss*power;
+  for(const weak of game.boss.weak)if(weak.alive){
+   weak.hp-=Math.round(power);
+   if(weak.hp<=0)weak.alive=false;
+  }
+ }
+ /* Scored on what it caught, and scored *super*-linearly.
+
+    The linear version was measured and it did not work. On a fixed daily field a bot that pressed
+    both abilities the instant they lit (three Overdrives, three Blasts) scored a median 157,182,
+    and the same bot banking them (one Overdrive, one Blast) scored 147,692 — with the ranges
+    overlapping, so tripling ability use moved the score less than the run-to-run noise. A perfectly
+    timed catch of eight hostiles was worth about five per cent of a run. Two buttons that occupy a
+    quarter of the HUD, glow, pulse and carry their own charge meters were, in outcome terms,
+    decoration.
+
+    The exponent is the fix. At full overcharge one straggler pays about 1,500 and a bank held until
+    ten hostiles are on the field pays about 36,000 — a quarter of a good run in a single press.
+    Waiting is now worth something specific and risky, which is the trade the ability row never had:
+    let the field build and the payoff climbs, but every extra hostile is another chance at a
+    breach. */
+ const crowd=Math.pow(caught.length,V23_BLAST.crowd);
+ const payout=Math.round(600+540*crowd*(charge/100));
+ score(payout,'blast');
+ /* A set-piece has to announce itself, or it is a number going up somewhere off to the side.
+
+    The payout was raised to where a twelve-catch is a quarter of a good run, and the feedback was
+    left exactly as it had been when the same press was worth five per cent. A moment the player is
+    now expected to *set up* has to land like one, so everything here scales with the catch: the
+    hit-stop, the flash, and a wave that crosses the whole arena rather than stopping at the blast's
+    own reach. Capped, because the point is a punch and not a seizure. */
+ if(caught.length>=V23_BLAST.big){
+  const heft=Math.min(1,(caught.length-V23_BLAST.big)/8);
+  floating(W/2,line-70,`${caught.length}x CHAIN +${format(payout)}`,'#7df3ff');
+  toast(`REACTOR DISCHARGE • ${caught.length} CAUGHT`);
+  if(typeof v16Cam==='object'){
+   /* Hit-stop is the cheapest way to say "that mattered" — the brain reads the pause as weight. */
+   v16Cam.freeze=Math.max(v16Cam.freeze,.09+heft*.1);
+   v16Cam.zoom=Math.min(.13,v16Cam.zoom+.03+heft*.04);
+   v16Cam.chroma=Math.min(1,v16Cam.chroma+.5+heft*.5);
+  }
+  game.flash=Math.max(game.flash,Math.min(.5,.2+heft*.28));
+  /* One ring that leaves the screen. The discharge's own wave stops at its reach, which is correct
+     for reading the ability and useless for celebrating it. */
+  ring(W/2,line-10,'#9ff6ff',Math.round(H*(.55+heft*.4)));
+  haptic([26,18,60]);
+ }
+ /* Every kill charges Blast, including the ones Blast itself made — so a discharge that caught
+    eleven hostiles handed back 99% and was ready again immediately. An ability that pays for
+    itself is not a resource, and a bank nobody has to save for is not a decision. Zeroed after
+    the kills rather than before, so the charge those kills generated is discarded too.
+    Overdrive gain is deliberately left alone: a large, well-timed discharge filling the *other*
+    ability is a reward for banking, not a refund of it. */
+ game.blast=0;
+ /* A reactor discharge clears the reactor: firing always leaves you cool and able to shoot. */
+ game.v21Heat=0;
+ game.v21Lock=0;
+ v23BlastWave(line,reach,charge);
+ explode(W/2,line-8,'#61efff',Math.round(70+60*coverage),1.4+coverage*.7);
+ audio.sfx('blast');
+ haptic([20,15,50]);
+};
+
+/* The reach has to be visible or the overcharge meter is a number with no meaning attached. The
+   discharge draws as a wavefront that stops exactly where the kill actually stopped. */
+const v23Waves=[];
+function v23BlastWave(line,reach,charge){v23Waves.push({y:line,reach,life:.5,max:.5,charge});}
+
+/* Overdrive defers heat rather than cancelling it. Cancelling was the first attempt and it was a
+   mistake worth recording: free heat immunity made pressing on sight strictly correct *and*
+   suppressed V21's heat for nearly half the run, so the ability quietly disabled the mechanic the
+   whole difficulty rework was built on — measured at 1,641,664 for press-on-sight against
+   1,278,064 for banking, the wrong way round.
+
+   Heat taken during Overdrive is banked at a discount and lands as one lump when the window
+   closes. So Overdrive buys a burst of unlimited fire and charges for it afterwards: spend it on
+   a surge and you vent through the calm that follows, spend it on a calm patch for the score
+   multiplier and you are venting when the next surge arrives. That is the decision, and it leans
+   on the heat system instead of opting out of it. */
+const V23_OD={debt:.55};
+
+const v23OverdrivePrev=activateOverdrive;
+activateOverdrive=function(){
+ const was=game.overdrive;
+ v23OverdrivePrev();
+ if(game.overdrive<was){
+  game.v23Debt=0;
+  toast('OVERDRIVE • HEAT DEFERRED');
+ }
+};
+
+const v23AddHeatBase=v21AddHeat;
+v21AddHeat=function(amount){
+ if(game.overdriveTime>0){
+  game.v23Debt=Math.min(V21_HEAT.max,(game.v23Debt||0)+amount*V23_OD.debt);
+  return;
+ }
+ v23AddHeatBase(amount);
+};
+
+const v23BeginBase=begin;
+begin=function(mode='solo',seed){
+ v23BeginBase(mode,seed);
+ game.v23Debt=0;
+ v23Waves.length=0;
+};
+
+const v23UpdateBase=update;
+update=function(dt){
+ const burning=game.overdriveTime>0;
+ v23UpdateBase(dt);
+ /* The bill arrives the moment the window shuts. */
+ if(burning&&game.overdriveTime<=0&&(game.v23Debt||0)>0){
+  const owed=game.v23Debt;
+  game.v23Debt=0;
+  v23AddHeatBase(owed);
+  if(game.v21Heat<V21_HEAT.max)toast('OVERDRIVE ENDS • HEAT DUMP');
+ }
+ for(let i=v23Waves.length-1;i>=0;i--){
+  v23Waves[i].life-=dt;
+  if(v23Waves[i].life<=0)v23Waves.splice(i,1);
+ }
+};
+
+const v23DrawReactorBase=drawReactor;
+drawReactor=function(){
+ v23DrawReactorBase();
+ /* Deferred heat is drawn as it accrues, on the same arc it will land on. A bill the player
+    cannot watch running up is a surprise, and a surprise is not a decision — the point is that
+    they can see the cost of the next second of fire before they spend it. */
+ if(game.running&&game.overdriveTime>0&&(game.v23Debt||0)>0){
+  const y=H-(isMobile?104:70);
+  const radius=isMobile?54:64;
+  const from=Math.PI*1.2,span=Math.PI*.6;
+  ctx.save();
+  ctx.lineWidth=isMobile?5:6;
+  ctx.lineCap='round';
+  ctx.globalAlpha=.42+Math.sin(game.elapsed*7)*.12;
+  ctx.strokeStyle='#ffb02e';
+  ctx.setLineDash([4,5]);
+  ctx.beginPath();
+  ctx.arc(reactorAnchorX(),y,radius,from,from+span*Math.min(1,game.v23Debt/V21_HEAT.max));
+  ctx.stroke();
+  ctx.restore();
+ }
+ for(const wave of v23Waves){
+  const t=1-wave.life/wave.max;
+  ctx.save();
+  ctx.globalAlpha=(1-t)*.55;
+  ctx.strokeStyle=wave.charge>=V23_BLAST.max-1?'#ffe27a':'#61efff';
+  ctx.lineWidth=3+(1-t)*4;
+  ctx.beginPath();
+  ctx.arc(W/2,wave.y,Math.max(1,wave.reach*t),Math.PI,Math.PI*2);
+  ctx.stroke();
+  ctx.restore();
+ }
+};
+
+/* The HUD clamped both readouts at 100%, which would have hidden the entire overcharge mechanic
+   behind a meter that looked full the whole time. */
+const v23HudBase=updateHud;
+updateHud=function(){
+ v23HudBase();
+ const charge=Math.min(V23_BLAST.max,game.blast);
+ const over=charge>V23_BLAST.min;
+ setText('blastText',Math.floor(charge)+'%');
+ const button=$('blastBtn');
+ button.classList.toggle('v23-over',over);
+ /* The ring stays full once the ability is usable and the bank is carried by the percentage and
+    the gold border instead. Re-scaling the ring to the overcharge band made it drop from full to
+    40% the instant charge crossed 100 — a meter running backwards at exactly the moment the
+    button becomes usable reads as a bug, whatever it technically encodes. */
+ button.style.setProperty('--charge',Math.min(100,charge).toFixed(0));
+ $('overdriveBtn').classList.toggle('v23-active',game.overdriveTime>0);
+};

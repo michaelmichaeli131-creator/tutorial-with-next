@@ -1,0 +1,94 @@
+/* V38 — settings and pause.
+
+   The settings screen ran out of content a third of the way down an 844px phone and left the rest
+   empty. Empty space at the bottom of a panel is the most reliable "unfinished" signal a UI can
+   send, and no amount of polish above it compensates. The other half of the problem was that not
+   one control said what it did: COMFORT FX is meaningless to anyone who has not read the source. */
+
+.v38-section {
+  margin: 22px 0 10px;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .24em;
+  text-transform: uppercase;
+  color: #5f9bbe;
+}
+
+.v38-section:first-of-type { margin-top: 14px; }
+
+/* The row keeps its own layout untouched — see the note in 03zq for what happened when it did not.
+   Pulling the pair together is done with margins alone. */
+.settings-panel .v38-explained {
+  margin-bottom: 4px;
+}
+
+.v38-hint {
+  margin: 0 0 14px;
+  padding: 0 14px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #86a0b5;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* The build stamp. It is here because it is the honest answer to "is the thing on my screen the
+   thing that was deployed" — the question that cannot otherwise be answered from inside the app,
+   and the first thing worth knowing when a change appears to have had no effect. */
+.v38-build {
+  margin-top: 26px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(114, 215, 255, .16);
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: .18em;
+  color: #4d6c85;
+  font-weight: 800;
+}
+
+.v38-build b {
+  color: #7fa8c4;
+  font-weight: 900;
+}
+
+/* ---- Pause ----
+   A pause in a score-attack game is a "how am I doing" moment, so the panel that answers it should
+   answer it. These are the three numbers the player paused to look at. */
+
+.v38-status {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 0 0 18px;
+}
+
+.v38-status > div {
+  padding: 11px 8px;
+  border: 1px solid rgba(114, 215, 255, .22);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .04);
+  text-align: center;
+}
+
+.v38-status small {
+  display: block;
+  font-size: 9px;
+  letter-spacing: .16em;
+  color: #8ba8be;
+  font-weight: 900;
+}
+
+.v38-status b {
+  display: block;
+  margin-top: 3px;
+  font-size: 20px;
+  font-weight: 1000;
+}
+
+.v38-status .v38-low b { color: #ff6d84; }
+
+@media (max-width: 800px), (pointer: coarse) {
+  .v38-hint { font-size: 11px; }
+  .v38-status b { font-size: 17px; }
+}

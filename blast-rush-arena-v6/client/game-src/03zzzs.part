@@ -1,0 +1,392 @@
+/* V97 — the map is inhabited, and each map is its own page.
+
+   V95 gave the map the worlds' skies and horizons and the owner's reading of it was exact: the
+   background changes between maps and that is not enough, because a place with nobody in it is a
+   backdrop rather than a place. What was missing is figures.
+
+   ---- Where figures that belong in this game come from ----
+
+   Not from inventing decorative art for a menu. The surest way to make a screen look generated is to
+   populate it with things that appear nowhere else in the product — a map covered in ornaments the
+   game itself never shows is a map that was decorated rather than built.
+
+   So the inhabitants of the map are **the game's own creatures**, drawn by the same twelve painters
+   in `v15Creatures` that draw them in the arena, knocked back to silhouettes and stood on the
+   horizons. That has three consequences worth having:
+
+     - They are unmistakably from this game, because they are literally the arena's art.
+     - They change completely on their own when the map does. V87 swaps `v15Creatures` in place and
+       V89 filled the second slot, so THE BLOOM's atlas is populated by drifters, seed galls and
+       bramble thorns without this file naming any of them.
+     - They tell the player something true. The creatures standing on a world's horizon are the ones
+       that live there — the map is a briefing as well as a picture.
+
+   On top of that, one hand-built prop per world band: things that are not creatures and not UI —
+   a wrecked hull, a comms mast, a pod on a stalk. Three per map, chosen by the map's id. These are
+   what stop the population reading as "the same six shapes at different sizes".
+
+   ---- A different page, not a different colour ----
+
+   The second request, and the sharper one. Map two currently is map one with the palette swapped,
+   and a palette swap is a filter. So the map screen now carries the map's identity as a whole
+   layout: THE OUTER REACH is an instrument — a survey chart with a measuring grid, corner brackets
+   and a scan line. THE BLOOM is not an instrument at all; nobody surveyed it. It has no grid, a torn
+   organic edge, and its path is a growing thing rather than a plotted course.
+
+   Two screens that share a structure and share nothing else, which is what "a completely different
+   page" has to mean when both pages are the same fifteen nodes.
+
+   ---- And the turn between them ----
+
+   Switching maps used to swap the contents of a container. It now plays as a page being changed:
+   the old atlas lifts and dims, the new one arrives with its horizons drawing in. Two seconds of
+   the whole point of the feature, on the one screen where the player finds out there is more game. */
+
+const V97={
+ on:true,
+ /* Figures per world band. Three is a population; six is a crowd standing in a menu. */
+ perBand:3,
+ /* How far a silhouette is knocked back toward the sky. Photographed at .46 with a 1.07 rim at half
+    alpha and the population read as ghosts — a coloured copy that far behind a half-darkened
+    creature is a halo, and a halo is what a thing looks like when it is not there. Darker body,
+    tighter and brighter rim: a silhouette with a lit edge is present; a glow around a grey shape is
+    not.
+
+    Then settled at .52 after a third photograph. At .58 the roster's boxier members — the armoured
+    sentinel, the Bloom's bracket husk — stopped reading as creatures and became dark slabs on the
+    horizon, which is what sent this hunting for a rendering bug that was not there: the black
+    rectangle in the picture was a rectangular creature. The answer was not a darker body but a
+    brighter edge, so the ink came back up and the rim went to nearly opaque. */
+ ink:.52,
+ rim:1.04,
+ rimAlpha:.94,
+ figure:60
+};
+
+/* Everything a creature painter reads off an orb, and nothing else. Held as one frozen stub rather
+   than built per figure: the painters mutate nothing, and a fresh object per figure would be twelve
+   allocations for no difference. */
+function v97Stub(type,seed){
+ return {type,r:30,hp:1,maxHp:1,anim:seed*1.7,variant:seed%4,phase:seed*.9,
+  v15T:seed*.6,v11Age:seed*.5,v11Attack:0,skin:'nova'};
+}
+
+/* One creature, as an inhabitant: drawn by its own painter, then flattened toward the sky with a
+   wash clipped to its own silhouette, and given a rim of the world's accent so the shape survives
+   being darkened. `source-atop` is what keeps the wash inside the creature — a rectangle of dark
+   over the top would be a smudge, and the whole value of using the real art is the outline. */
+function v97Figure(type,size,accent,seed,flip){
+ const cv=document.createElement('canvas');
+ cv.className='v97-figure';
+ const S=Math.round(size*2);
+ cv.width=S;cv.height=S;
+ const c=cv.getContext('2d');
+ if(!c||typeof v15Creatures!=='object')return cv;
+ const painter=v15Creatures[type]||v15Creatures.normal;
+ const pal=(typeof v15Palette==='object'&&v15Palette[type])||{body:'#7b5cff',trim:'#c9b8ff',glow:'#a98bff',eye:'#8affe8'};
+
+ c.save();
+ c.translate(S/2,S*.54);
+ /* The arena draws a creature at about ±34 units for a radius of 30. */
+ c.scale((flip?-1:1)*S/86,S/86);
+ try{painter(c,v97Stub(type,seed),pal,seed*.8);}catch(e){/* a roster mid-swap is not worth a crash */}
+ c.restore();
+
+ c.globalCompositeOperation='source-atop';
+ c.fillStyle=`rgba(3,7,16,${V97.ink})`;
+ c.fillRect(0,0,S,S);
+
+ /* The rim: the same drawing again, scaled a hair larger, behind, in the world's colour. Reads as
+    the horizon light catching an edge, and it is the only reason a 46%-darkened creature is still a
+    creature at 37 pixels. */
+ c.globalCompositeOperation='destination-over';
+ c.save();
+ c.translate(S/2,S*.54);
+ c.scale((flip?-1:1)*S/86*V97.rim,S/86*V97.rim);
+ c.globalAlpha=V97.rimAlpha;
+ try{painter(c,v97Stub(type,seed),{body:accent,trim:accent,glow:accent,eye:accent},seed*.8);}catch(e){}
+ c.restore();
+
+ /* Trimmed to a soft disc. The arena's painters call `v15Halo`, which lays a broad glow around the
+    creature — in the arena that glow sits on a lit field and is invisible; on a small transparent
+    sprite it reaches the edges and the figure photographs with a pale rectangle around it, the
+    canvas showing its own bounds. Fading the corners away kills that, and it is the right look
+    anyway: something standing on a horizon several hundred metres off should meet the sky rather
+    than end at a border. */
+ v97Trim(c,S,.54);
+ return cv;
+}
+
+/* Fades a sprite's edges away so it meets the sky instead of ending at a border. Shared by the
+   figures and the props: the props photographed with the same rectangular residue, and whatever
+   leaves it — a painter's halo, a filter's shadow of a faint full-canvas alpha — the answer is the
+   same and it is one the art wants anyway. */
+function v97Trim(c,S,cy){
+ c.globalCompositeOperation='destination-in';
+ /* Tight, and that is the whole point rather than a detail. The arena's painters open with
+    `v15Halo` — a broad soft glow that in the arena sits on a lit field and reads as light. Darkened
+    by 58% on a transparent sprite it becomes a large dark disc, and photographed against the bright
+    green of the Bloom's horizon it read as a black box with a creature in the middle of it. The
+    body is about ±0.4S at this scale, so the cut is placed just outside it: silhouette kept, halo
+    gone. */
+ const trim=c.createRadialGradient(S/2,S*cy,S*.30,S/2,S*cy,S*.44);
+ trim.addColorStop(0,'rgba(0,0,0,1)');
+ trim.addColorStop(.62,'rgba(0,0,0,.9)');
+ trim.addColorStop(1,'rgba(0,0,0,0)');
+ c.fillStyle=trim;
+ c.fillRect(0,0,S,S);
+}
+
+/* ---- Props ------------------------------------------------------------------------------------
+
+   Hand-built, three per map, and deliberately not creatures. A horizon populated only by the roster
+   reads as six shapes at six sizes; one thing that is obviously not alive is what makes the rest
+   read as alive. */
+
+const V97_PROPS={
+ /* THE OUTER REACH — the Legion holds it, so what is left standing is equipment. */
+ reach:[
+  function hull(c,S,accent){
+   /* A broken hull half-buried, nose up. Two plates and a snapped spar. */
+   c.fillStyle='#0b1426';
+   c.beginPath();
+   c.moveTo(S*.1,S);c.lineTo(S*.26,S*.36);c.lineTo(S*.52,S*.2);c.lineTo(S*.66,S*.46);c.lineTo(S*.6,S);
+   c.closePath();c.fill();
+   c.fillStyle='#16233f';
+   c.beginPath();
+   c.moveTo(S*.6,S);c.lineTo(S*.66,S*.5);c.lineTo(S*.9,S*.68);c.lineTo(S*.88,S);
+   c.closePath();c.fill();
+   c.strokeStyle=accent+'66';
+   c.lineWidth=Math.max(1,S*.018);
+   c.beginPath();c.moveTo(S*.3,S*.42);c.lineTo(S*.5,S*.3);c.stroke();
+   c.save();c.globalCompositeOperation='lighter';
+   c.fillStyle=accent+'55';
+   c.beginPath();c.arc(S*.5,S*.28,Math.max(1.5,S*.03),0,Math.PI*2);c.fill();
+   c.restore();
+  },
+  function mast(c,S,accent){
+   /* A comms mast with a lit dish. Vertical against a horizon of horizontals. */
+   c.strokeStyle='#101c33';
+   c.lineWidth=Math.max(1.5,S*.045);
+   c.beginPath();c.moveTo(S*.5,S);c.lineTo(S*.5,S*.16);c.stroke();
+   c.lineWidth=Math.max(1,S*.024);
+   for(const k of [.34,.54,.74]){
+    c.beginPath();c.moveTo(S*.5,S*k);c.lineTo(S*.5-S*.16,S*(k+.16));c.stroke();
+    c.beginPath();c.moveTo(S*.5,S*k);c.lineTo(S*.5+S*.16,S*(k+.16));c.stroke();
+   }
+   c.fillStyle='#16233f';
+   c.beginPath();c.ellipse(S*.5,S*.16,S*.15,S*.09,-.5,0,Math.PI*2);c.fill();
+   c.save();c.globalCompositeOperation='lighter';
+   c.fillStyle=accent+'88';
+   c.beginPath();c.arc(S*.5,S*.16,Math.max(1.4,S*.028),0,Math.PI*2);c.fill();
+   c.restore();
+  },
+  function beacon(c,S,accent){
+   /* A survey beacon: a tripod under a caged lamp. */
+   c.strokeStyle='#101c33';
+   c.lineWidth=Math.max(1.4,S*.036);
+   for(const dx of [-.18,0,.18]){
+    c.beginPath();c.moveTo(S*(.5+dx*1.6),S);c.lineTo(S*.5,S*.42);c.stroke();
+   }
+   c.fillStyle='#16233f';
+   c.beginPath();c.arc(S*.5,S*.34,S*.13,0,Math.PI*2);c.fill();
+   c.save();c.globalCompositeOperation='lighter';
+   const g=c.createRadialGradient(S*.5,S*.34,0,S*.5,S*.34,S*.34);
+   g.addColorStop(0,accent+'99');g.addColorStop(1,'transparent');
+   c.fillStyle=g;c.beginPath();c.arc(S*.5,S*.34,S*.34,0,Math.PI*2);c.fill();
+   c.restore();
+  }
+ ],
+ /* THE BLOOM — nobody built anything here. What stands up is what grew. */
+ bloom:[
+  function pod(c,S,accent){
+   /* A seed pod on a bent stalk, split and glowing. The Bloom's own landmark, at ground scale. */
+   c.strokeStyle='#122a14';
+   c.lineWidth=Math.max(1.5,S*.05);
+   c.lineCap='round';
+   c.beginPath();c.moveTo(S*.46,S);c.quadraticCurveTo(S*.36,S*.6,S*.5,S*.34);c.stroke();
+   c.fillStyle='#1c3a1e';
+   c.beginPath();c.ellipse(S*.52,S*.29,S*.17,S*.24,.2,0,Math.PI*2);c.fill();
+   c.strokeStyle='#0a1a0c';
+   c.lineWidth=Math.max(1,S*.02);
+   c.beginPath();c.moveTo(S*.52,S*.06);c.quadraticCurveTo(S*.44,S*.3,S*.53,S*.52);c.stroke();
+   c.save();c.globalCompositeOperation='lighter';
+   c.strokeStyle=accent+'99';
+   c.lineWidth=Math.max(1,S*.014);
+   c.beginPath();c.moveTo(S*.52,S*.1);c.quadraticCurveTo(S*.46,S*.3,S*.53,S*.48);c.stroke();
+   c.restore();
+  },
+  function arch(c,S,accent){
+   /* A vine arch: two stems that met and fused. Something you walk under. */
+   c.strokeStyle='#122a14';
+   c.lineWidth=Math.max(1.6,S*.055);
+   c.lineCap='round';
+   c.beginPath();c.moveTo(S*.12,S);c.quadraticCurveTo(S*.5,S*.05,S*.88,S);c.stroke();
+   c.lineWidth=Math.max(1,S*.026);
+   c.beginPath();c.moveTo(S*.3,S);c.quadraticCurveTo(S*.52,S*.3,S*.74,S);c.stroke();
+   c.save();c.globalCompositeOperation='lighter';
+   c.fillStyle=accent+'77';
+   for(const k of [.28,.5,.72]){
+    c.beginPath();c.arc(S*k,S*(.28+Math.abs(.5-k)*.9),Math.max(1.3,S*.024),0,Math.PI*2);c.fill();
+   }
+   c.restore();
+  },
+  function caps(c,S,accent){
+   /* A cluster of caps, lit at the crown. The one prop that is low and wide, so a band that gets it
+      does not read as another vertical. */
+   for(const [x,w,h] of [[.28,.17,.13],[.5,.24,.2],[.72,.14,.1]]){
+    c.fillStyle='#16321a';
+    c.beginPath();c.ellipse(S*x,S,S*w,S*h*2.4,0,Math.PI,Math.PI*2);c.fill();
+    c.save();c.globalCompositeOperation='lighter';
+    c.fillStyle=accent+'55';
+    c.beginPath();c.ellipse(S*x,S-S*h*1.5,S*w*.42,S*h*.6,0,Math.PI,Math.PI*2);c.fill();
+    c.restore();
+   }
+  }
+ ]
+};
+
+function v97Prop(mapId,index,size,accent){
+ const set=V97_PROPS[mapId]||V97_PROPS.reach;
+ const cv=document.createElement('canvas');
+ cv.className='v97-prop';
+ const S=Math.round(size*2);
+ cv.width=S;cv.height=S;
+ const c=cv.getContext('2d');
+ if(c){
+  try{set[index%set.length](c,S,accent);}catch(e){}
+  /* Centred low, because a prop stands on the ground: its mass is at the bottom of its own box. */
+  v97Trim(c,S,.7);
+ }
+ return cv;
+}
+
+/* ---- Populating the atlas ----------------------------------------------------------------------
+
+   Placed against the same band table V95 built, so the figures stand on the horizons rather than
+   near them. Seeded off the map id and the band, so a map's population is the same every time it is
+   opened — a screen whose scenery rearranges on every visit is a screen nobody can form a memory of.
+*/
+
+function v97Types(){
+ const keys=(typeof v15Creatures==='object')?Object.keys(v15Creatures):[];
+ /* The rival wears the player's own skin and is not an inhabitant of anywhere. */
+ return keys.filter((k)=>k!=='rival');
+}
+
+function v97Populate(){
+ if(!V97.on)return;
+ const list=$('stageList');
+ const track=list&&list.querySelector('.v88-track');
+ if(!track||track.querySelector('.v97-figure'))return;
+ const bands=track.querySelectorAll('.v95-band');
+ if(!bands.length)return;
+
+ const plan=v88Layout();
+ const mapId=String((v87Map()||{}).id||'reach');
+ const types=v97Types();
+ if(!types.length)return;
+ const rnd=v26Rand(v88Hash(mapId)>>>3);
+ const frag=document.createDocumentFragment();
+
+ /* One pass per band. `bands` and V95's band list are in the same order and built from the same
+    layout, so the world index can be recovered by walking the plan the same way V95 did. */
+ let bandIndex=0;
+ let world=-1;
+ for(const node of plan.nodes){
+  const w=node.stage.world%worlds.length;
+  if(w===world)continue;
+  world=w;
+  const el=bands[bandIndex];
+  bandIndex++;
+  if(!el)break;
+  const top=parseFloat(el.style.top)||0;
+  const height=parseFloat(el.style.height)||0;
+  if(height<120)continue;
+  const accent=(worlds[w]||worlds[0]).accent;
+  /* The horizon of this band, which is where the ridge sits and therefore where anything standing
+     in this world has its feet. The last band has no ridge, so its population stands on the floor
+     of the map instead. */
+  const ground=top+height-(bandIndex<bands.length?V95.ridge*.42:40);
+
+  for(let i=0;i<V97.perBand;i++){
+   const type=types[Math.floor(rnd()*types.length)];
+   const size=V97.figure*(.62+rnd()*.5);
+   /* Slotted, not scattered. The middle third is where the path and the node labels live, so the
+      figures go in the outer margins — but a random x within a margin let two of them land on the
+      same spot at the track's edge, where both were clipped by `overflow:hidden` and the pair
+      photographed as one dark slab. It took hunting a rendering bug that did not exist to notice
+      that the black rectangle was two creatures standing on top of each other.
+
+      Three fixed slots — left, right, left again but further in — with a small jitter that cannot
+      reach a neighbour, and each pushed clear of the edge by more than half its own width. */
+   const slots=[[13,false],[87,true],[24,false]];
+   const [base,right]=slots[i%slots.length];
+   const x=base+(rnd()-.5)*7;
+   const fig=v97Figure(type,size,accent,Math.floor(rnd()*97),right);
+   fig.style.left=x+'%';
+   fig.style.width=size+'px';
+   fig.style.height=size+'px';
+   fig.style.top=(ground-size*(.5+rnd()*.35))+'px';
+   fig.style.opacity=String(.78+rnd()*.22);
+   frag.append(fig);
+  }
+
+  const psize=V97.figure*(1.1+rnd()*.5);
+  const prop=v97Prop(mapId,bandIndex-1,psize,accent);
+  prop.style.left=(rnd()<.5?6:78)+'%';
+  prop.style.width=psize+'px';
+  prop.style.height=psize+'px';
+  prop.style.top=(ground-psize*.86)+'px';
+  prop.style.opacity=String(.74+rnd()*.22);
+  frag.append(prop);
+ }
+
+ /* Behind the path and the nodes, in front of the sky. The ridges are z-index 1, so the population
+    sits with them on the ground rather than floating over the route. */
+ const anchor=track.querySelector('.v88-path');
+ if(anchor)track.insertBefore(frag,anchor);
+ else track.append(frag);
+}
+
+/* ---- The page ---------------------------------------------------------------------------------
+
+   One class carrying the map's identity, so the stylesheet can make the two screens different
+   artefacts rather than the same artefact in two colours. */
+
+function v97Skin(){
+ const list=$('stageList');
+ if(!list||!V97.on)return;
+ const id=String((v87Map()||{}).id||'reach');
+ list.classList.remove('v97-reach','v97-bloom');
+ list.classList.add(V97_PROPS[id]?('v97-'+id):'v97-reach');
+}
+
+const v97Render=v14RenderStages;
+v14RenderStages=function(){
+ const out=v97Render();
+ v97Skin();
+ v97Populate();
+ return out;
+};
+
+/* The turn. `v87Install` is what every route into a map change goes through — the switcher chips,
+   the gateway door, and the boot path — so the animation is attached there rather than to any one
+   of them. Re-triggered by removing the class and forcing a reflow, because adding a class that is
+   already present animates nothing. */
+const v97Install=v87Install;
+v87Install=function(index,announce){
+ const out=v97Install(index,announce);
+ if(V97.on&&announce){
+  const list=$('stageList');
+  if(list){
+   list.classList.remove('v97-turn');
+   void list.offsetWidth;
+   list.classList.add('v97-turn');
+  }
+ }
+ return out;
+};
+
+v97Skin();
+v97Populate();

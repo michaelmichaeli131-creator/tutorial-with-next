@@ -1,0 +1,94 @@
+/* V70 — the titan fight is the one place the new verb does not reach.
+
+   Everything since V63 has been about one idea: a tap has an area, so *where* you tap decides how
+   much of the arena goes. Formations pose that question, sealed hostiles force it, the weapon
+   changes the answer. And then a titan arrives and the game reverts. V64 is off during a boss by
+   design (`!game.boss`), so there are no formations; V59 sends a thin trickle of adds in so the room
+   is not empty; and the fight itself is exactly what it was two dozen versions ago -- tap the
+   orbiting weak points, then tap the body.
+
+   That is the wrong shape for a set-piece. The campaign builds toward the titan, and the titan is
+   the least interesting thing in the game to fight, because it is the only encounter that ignores
+   what the player has spent the whole run learning.
+
+   So a blast reaches the titan. Killing an add that happens to be beside a weak point cracks the
+   weak point, and once the weak points are down a blast chips the body. Nothing else changes: the
+   direct tap on a weak point does what it always did, and a player who ignores the adds entirely
+   fights the same fight they fought before, slightly slower.
+
+   What it buys is that V59's adds stop being texture and become **ammunition**. They fall past the
+   titan on their way down, and the moment one drifts across a weak point is a moment worth waiting
+   for -- which is the same "hold, then take the shot" decision V57's strike band asks for, in the
+   one encounter that had no version of it. It also gives a reason to care which add you take: the
+   one next to the weak point is worth several taps on the weak point itself.
+
+   The numbers are deliberately modest. A blast does what one tap does, never more, so this is a
+   second route to the same damage rather than a faster one. A titan should not fall to a lucky
+   cascade. */
+
+const V70={
+ /* Extra allowance on top of the blast radius when testing a weak point, because a weak point is a
+    small target drawn outside the hull rather than a body with a radius of its own. Matched to the
+    tap hitbox in `bossClick` so the blast is no more generous than the player's own thumb. */
+ weakPad:()=>isMobile?31:24,
+ /* Damage per blast. One, the same as a direct tap: a cascade is another way to reach a weak point,
+    not a better one. */
+ weakDamage:1,
+ /* Body damage per blast once every weak point is down, against 2 for a direct tap. Half, because
+    the body phase is the part of the fight where the player is meant to be committing taps rather
+    than farming adds. */
+ bodyDamage:1
+};
+
+function v70WeakPos(b,w){
+ return{
+  x:b.x+Math.cos(w.a+b.t*.6)*(b.r+36),
+  y:b.y+Math.sin(w.a+b.t*.6)*(b.r*.65+28)
+ };
+}
+
+v63BlastHit=function(o,R){
+ const b=game.boss;
+ if(!b||!game.running||game.paused)return;
+
+ const world=worlds[game.world%worlds.length];
+ let struck=false;
+
+ for(const w of b.weak){
+  if(!w.alive)continue;
+  const p=v70WeakPos(b,w);
+  if(Math.hypot(p.x-o.x,p.y-o.y)>R+V70.weakPad())continue;
+  w.hp-=V70.weakDamage;
+  struck=true;
+  ring(p.x,p.y,world.accent,26);
+  explode(p.x,p.y,world.accent,18,.7);
+  if(w.hp<=0){
+   w.alive=false;
+   score(3500,'perfect');
+   /* Same line the direct route gives, because it is the same achievement. */
+   toast('WEAK POINT SHATTERED');
+  }else score(1000,'hit');
+ }
+
+ if(struck){
+  audio.sfx('armor');
+  haptic(12);
+  return;
+ }
+
+ /* The body only once the weak points are gone -- the same gate `bossClick` uses, so a cascade can
+    never skip the phase the fight is built around. */
+ if(b.weak.some((w)=>w.alive))return;
+ if(Math.hypot(b.x-o.x,b.y-o.y)>R+b.r)return;
+ b.hp-=V70.bodyDamage;
+ score(420,'hit');
+ ring(b.x,b.y,'#ffb347',b.r*.6);
+ /* The phase thresholds are repeated from `bossClick` rather than shared, because bossClick reads
+    the tap coordinates and cannot be called with a blast. Repeating them is the lesser evil: without
+    it a titan brought below a third of its health entirely by cascades would never announce PHASE
+    III and would keep fighting in its opening pattern, which is a worse bug than a duplicated
+    threshold. */
+ if(b.hp/b.maxHp<.67&&b.phase===1){b.phase=2;cinematic('PHASE II • WEAPONS UNBOUND');}
+ if(b.hp/b.maxHp<.33&&b.phase===2){b.phase=3;cinematic('PHASE III • OMEGA RAGE');}
+ if(b.hp<=0&&typeof defeatBoss==='function')defeatBoss();
+};

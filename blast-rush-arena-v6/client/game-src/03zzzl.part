@@ -1,0 +1,267 @@
+/* V90 — the retry, and the reason to press it.
+
+   ---- What the measurement said, and what it did not ----
+
+   The plan for this phase was "death to the next run in under 400 milliseconds", on the assumption
+   that the loop was slow. It is not. Measured on a 390x844 phone, over three consecutive solo runs,
+   pressing the primary on the first frame the results screen exists:
+
+     finish() itself      6-12ms
+     -> screen on glass   20-29ms
+     press -> begin()     8-14ms
+     -> first frame       23-31ms
+     TOTAL                44-59ms
+
+   Forty-five milliseconds. The machine was never the problem, and building a fast path would have
+   been a week spent optimising something already twenty times inside its budget. That is the whole
+   value of measuring before building.
+
+   The same measurement found the real fault by accident. The primary button's rect across those
+   three runs, same mode, same phone, nothing else changed:
+
+     run 1   y = 484
+     run 2   y = 509
+     run 3   y = 484
+
+   **The button moves.** It sits in a flex row at the bottom of a panel whose height depends on how
+   many lines V37's verdict and read happen to wrap to, whether V45 has a board line, whether V58
+   has a challenge line, and whether NEXT STAGE or REMATCH is in the row beside it. So the thumb
+   cannot learn where it is. Twenty-five pixels is not much to look at and it is everything to a
+   thumb travelling blind: you arrive, the button is not there, and you have to read the screen
+   again. That is the cost of the retry loop in this game, and it is measured in the time it takes a
+   person to re-find a target, not in milliseconds of script.
+
+   ---- Part one: the button stops moving ----
+
+   One bar, pinned to the bottom of the viewport, the same rect on every results screen in every
+   mode. It is at the bottom because that is where the thumb already is: the reactor, the pilot,
+   V83's magazine and V76's wells all live in the bottom third of the arena, so the hand does not
+   travel at all between the last tap of one run and the first press of the next.
+
+   It does not replace the logic underneath it. The bar forwards its press to whichever real button
+   the existing layers decided should be primary — NEXT STAGE if V14 unhid it, REMATCH if V29 did,
+   PLAY AGAIN otherwise — so campaign progression, duel rematch and the daily's seed handling all
+   keep working through exactly the code that already handles them. The row's own copy of that
+   button is hidden, because two primaries is worse than a moving one.
+
+   ---- Part two: a field worth learning ----
+
+   A button that repeats is only worth pressing if the thing it repeats is worth repeating, and
+   until now solo has been a fresh random arena every time. That is why the results screen has to be
+   read: the run that just ended taught you nothing about the next one, so the only thing left to do
+   with it is look at the number.
+
+   So solo now runs on **one fixed field until you beat your own score on it.** The first run on a
+   field sets the mark. Every run after it is the same arrivals in the same places at the same
+   times, and beating the mark retires the field and deals a new one.
+
+   That turns a death into information. You know what is coming at wave four because you have seen
+   wave four; a mistake becomes something you can specifically not make again; and the target is a
+   number you have personally already proved is reachable, because you are the one who set it. It
+   also gives the bar something to say other than "again", which is the difference between a button
+   and a reason.
+
+   The machinery is V39's, unchanged and already verified deterministic: the same seed produced an
+   identical sequence of 19 spawns — type, position, speed, radius and elite modifier — while a
+   different seed diverged, so the check can fail. Nothing here re-implements any of it.
+
+   The one thing designed against is being stuck. A mark you cannot beat is a field that has stopped
+   teaching, so after enough attempts the results screen quietly offers a fresh one. It is a
+   secondary in the row rather than a second pinned button: the pinned position has one meaning. */
+
+const V90={
+ on:true,
+ /* Attempts on one field before the escape hatch appears. Six is roughly four minutes of play — long
+    enough that leaving early is quitting on it, short enough that a field you have genuinely stopped
+    improving on does not become the whole game. */
+ stale:6
+};
+
+/* ---- The field ---------------------------------------------------------------------------------
+
+   Kept on `save` so it rides the existing persist rather than owning a second storage key, and
+   normalised on every read because a save written by an older build has none of these. */
+
+function v90Field(){
+ if(!save.v90||typeof save.v90!=='object')save.v90={seed:0,best:0,tries:0};
+ const f=save.v90;
+ if(!Number.isFinite(f.seed)||f.seed<=0)f.seed=v90NewSeed();
+ if(!Number.isFinite(f.best))f.best=0;
+ if(!Number.isFinite(f.tries))f.tries=0;
+ return f;
+}
+
+function v90NewSeed(){
+ /* crypto rather than Math.random for the same reason `begin` uses it: this is the identity of a
+    field somebody may spend twenty minutes on, and two players landing on the same one by accident
+    would make the "your field" framing a lie. */
+ try{return crypto.getRandomValues(new Uint32Array(1))[0]||1;}
+ catch(e){return (Math.floor(Math.random()*4294967295)||1);}
+}
+
+function v90Deal(){
+ const f=v90Field();
+ f.seed=v90NewSeed();
+ f.best=0;
+ f.tries=0;
+ persist();
+ return f;
+}
+
+/* Solo only, and only when nobody upstream supplied a seed. The three callers that do supply one —
+   V39's daily, V58's challenge link, and the duel — are each playing somebody else's field on
+   purpose, and this must never overwrite that. Outermost, so `mode` is still the caller's word:
+   V39's own wrapper rewrites 'daily' to 'solo' further down, and by then the distinction is gone. */
+const v90Begin=begin;
+begin=function(mode='solo',seed){
+ const own=V90.on&&mode==='solo'&&seed===undefined;
+ const out=v90Begin(mode,own?v90Field().seed:seed);
+ game.v90Field=own;
+ /* Cleared per run, not per finish: it is the reason the last results screen was celebrating, and a
+    celebration that survives into the next run's results screen is a lie about that run. */
+ game.v90Beaten=0;
+ return out;
+};
+
+const v90Finish=finish;
+finish=function(victory=false,duelData=null){
+ const own=game.running&&game.v90Field;
+ const score=Math.floor(game.score);
+ const f=own?v90Field():null;
+ /* Read before the base runs, because the mark that matters is the one the player was playing
+    against — not the one their own run is about to become. */
+ const mark=f?f.best:0;
+ v90Finish(victory,duelData);
+ if(!f)return;
+
+ f.tries++;
+ /* A mark of zero is an unset mark, not a mark of zero. The run that sets it cannot also beat it —
+    otherwise a fresh field is retired by any score at all and solo is random again with extra
+    steps — and a run that scores nothing leaves the field still waiting for its first mark rather
+    than handing the next run a target it clears by existing. */
+ const beat=mark>0&&score>mark;
+ if(score>f.best)f.best=score;
+ if(beat){
+  v90Deal();
+  game.v90Beaten=mark;
+ }else{
+  persist();
+ }
+ v90Bar();
+};
+
+/* ---- The bar -----------------------------------------------------------------------------------
+
+   Built here rather than in index.html because it has to exist for every screen state without any
+   layer having to remember to show it: its visibility is one CSS rule keyed on the screen V13's
+   showScreen already stamps onto the body. Nothing has to call anything to make it appear. */
+
+let v90El=null;
+let v90Label=null;
+let v90Note=null;
+let v90Fresh=null;
+
+function v90Build(){
+ if(v90El||!V90.on)return;
+ v90El=document.createElement('div');
+ v90El.id='v90Bar';
+ v90El.innerHTML='<button id="v90Again" class="primary"><b></b><small></small></button>';
+ document.body.appendChild(v90El);
+ v90Label=v90El.querySelector('b');
+ v90Note=v90El.querySelector('small');
+ /* Forwarded rather than reimplemented. Every rule about what "again" means in this mode — the
+    campaign's next stage, the duel's rematch, the daily starting the same field rather than a
+    random one — already lives on the button being clicked. */
+ v90El.querySelector('button').addEventListener('click',()=>{
+  const t=v90Target();
+  if(t)t.click();
+ });
+
+ /* The label has to follow the buttons it mirrors, and one of them moves on its own clock: V29 holds
+    a duel's results screen open while the rival is still playing and only unhides REMATCH when the
+    server reports the final standings, minutes after any finish or screen change this part sees.
+
+    The forwarded action was never wrong — `v90Target` re-reads the classes at click time — but a bar
+    reading AGAIN that starts a rematch is worse than one that reads wrong and does nothing. */
+ const watch=new MutationObserver(()=>v90Bar());
+ for(const id of ['nextStageBtn','rematchBtn','againBtn']){
+  const el=$(id);
+  if(el)watch.observe(el,{attributes:true,attributeFilter:['class']});
+ }
+}
+
+/* Reads the `hidden` class rather than computed display, because the row's own primaries are hidden
+   by a stylesheet from here on and every other layer still toggles the class. */
+function v90Visible(id){
+ const el=$(id);
+ return el&&!el.classList.contains('hidden');
+}
+
+function v90Target(){
+ if(v90Visible('nextStageBtn'))return $('nextStageBtn');
+ if(v90Visible('rematchBtn'))return $('rematchBtn');
+ return $('againBtn');
+}
+
+function v90Bar(){
+ if(!V90.on)return;
+ v90Build();
+ if(!v90El)return;
+ const t=v90Target();
+ const id=t?t.id:'againBtn';
+ const f=v90Field();
+
+ if(id==='nextStageBtn'){
+  v90Label.textContent='NEXT STAGE';
+  v90Note.textContent='';
+ }else if(id==='rematchBtn'){
+  v90Label.textContent='REMATCH';
+  v90Note.textContent='BOTH OF YOU HAVE TO TAP IT';
+ }else{
+  v90Label.textContent='AGAIN';
+  v90Note.textContent=v90Caption(f);
+ }
+ v90El.classList.toggle('v90-beaten',Boolean(game.v90Beaten));
+ v90Stale(f);
+}
+
+function v90Caption(f){
+ /* The daily, a challenge link and the duel are somebody else's field, and the campaign has its own
+    ladder. Saying "same field" on any of them would be false. */
+ if(game.mode!=='solo')return '';
+ if(game.v90Beaten)return 'FIELD BEATEN — A NEW ONE IS DEALT';
+ if(f.tries<=1&&f.best>0)return `NEW FIELD — THE MARK IS ${format(f.best)}`;
+ if(f.best>0)return `SAME FIELD — BEAT ${format(f.best)}`;
+ return 'A NEW FIELD — SET THE MARK';
+}
+
+/* The escape hatch. A secondary in the row, appearing only once the field has stopped teaching, and
+   never in the pinned position — that position means one thing. */
+function v90Stale(f){
+ const row=$('resultScreen')&&$('resultScreen').querySelector('.button-row');
+ if(!row)return;
+ if(!v90Fresh){
+  v90Fresh=document.createElement('button');
+  v90Fresh.id='v90FreshBtn';
+  v90Fresh.className='secondary';
+  v90Fresh.textContent='DEAL A NEW FIELD';
+  v90Fresh.addEventListener('click',()=>{
+   v90Deal();
+   toast('NEW FIELD DEALT');
+   v90Bar();
+  });
+  row.insertBefore(v90Fresh,row.firstChild);
+ }
+ const show=V90.on&&game.mode==='solo'&&!game.v90Beaten&&f.tries>=V90.stale;
+ v90Fresh.classList.toggle('hidden',!show);
+}
+
+/* Repainted on every screen change rather than only on finish: V29 fills the duel's result in later,
+   when the server reports how the match actually ended, and V14 unhides NEXT STAGE inside its own
+   finish wrapper. Both land after the base finish this part wraps. */
+const v90ShowScreen=showScreen;
+showScreen=function(id){
+ const out=v90ShowScreen(id);
+ if(V90.on&&id==='resultScreen')v90Bar();
+ return out;
+};

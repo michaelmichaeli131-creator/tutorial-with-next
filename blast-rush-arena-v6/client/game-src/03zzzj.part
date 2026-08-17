@@ -1,0 +1,408 @@
+/* V88 — the map screen: fifteen stages become fifteen places, and the campaign becomes somewhere
+   you are standing rather than a list you are scrolling.
+
+   ---- Why a map at all ----
+
+   The stage list was correct and told the player nothing. Fifteen identical cards in a column give
+   every stage the same weight, so a titan reads exactly like a purge until you are already in the
+   loading screen, and "where am I" is a number you have to read rather than a position you can see.
+   This is the screen between every single run — it is looked at more often than any combat frame in
+   the game — and a correct list is not worth looking at twice.
+
+   A path fixes the two things a list cannot. **Position becomes spatial**: the frontier is a place
+   with cleared ground behind it and dark ground ahead of it, and you find it by looking, not by
+   reading. **Weight becomes visible**: a titan is physically larger and a different silhouette, so
+   it is legible three nodes before you reach it and the run before a boss feels like a run before a
+   boss. Neither of those is decoration; they are the two facts a player actually wants from this
+   screen.
+
+   ---- Why DOM plus one SVG, and not a canvas ----
+
+   A canvas would have to reimplement hit testing, focus, scroll anchoring, text layout and the
+   whole V17 chrome vocabulary in imperative code, and would then be invisible to accessibility.
+   The nodes are buttons because they are buttons. The only thing DOM is genuinely bad at is a
+   smooth curve through fifteen arbitrary points, so exactly that is an SVG underlay and nothing
+   else is.
+
+   The SVG uses `viewBox="0 0 1000 H"` with `preserveAspectRatio="none"`, so horizontal is a 0..1000
+   fraction and vertical is real pixels. That is load-bearing rather than clever: the campaign panel
+   is not laid out when `v14RenderStages` runs (V14 renders *before* `showScreen`), so its width is
+   unmeasurable at render time. Fractional-x means nothing ever needs measuring — the nodes sit at
+   `left:%`, the curve scales with them, and `vector-effect="non-scaling-stroke"` keeps the stroke
+   from being squashed with the geometry. A layout that needs `clientWidth` would have had to be
+   deferred a frame and would flash.
+
+   ---- Why the path shape is derived, not authored ----
+
+   V87 guarantees every map is exactly fifteen stages, so one hand-authored path would fit all of
+   them — and then every map would be the same place with different names on it. The winding is
+   instead a sine whose frequency, phase and lean come from a hash of `map.id`: stable forever for a
+   given map (this must not reshuffle between renders), different for every map, and free for a map
+   added later. Titan and gauntlet nodes are then pulled toward the centre line, because a landmark
+   belongs on the axis and because the big silhouettes need the horizontal room.
+
+   Note `Math.random()` is not used here either, and `rng()` certainly is not — `rng()` is the
+   seeded simulation stream and drawing from it outside the sim desynchronises the spawner.
+
+   ---- What was tried and rejected ----
+
+   * Labels under every node. Honest, but it forces the vertical gap to ~95px to clear a two-line
+     label, which made the map 1800px long and turned a map back into a list. Labels now sit in the
+     empty half of the track beside each node, which is the half the winding creates for free.
+   * A Catmull-Rom spline through the node centres. With horizontal travel around 3x vertical travel
+     after the aspect squash, it overshoots and loops at the turns. Each segment is now a vertical
+     S-curve (control points offset only in y), which cannot loop and reads like a road.
+   * Keeping `.v14-campaign-head`. Its CONTINUE button is the current node now, and the map header
+     carries the same counts, so it is hidden rather than duplicated. `#continueStageBtn` still gets
+     its text written every render so nothing that reads it breaks — it is just not on screen. */
+
+const V88={
+ gap:74,          /* centre-to-centre for two ordinary nodes */
+ gapBig:100,      /* when either neighbour is a titan or a gauntlet, which are ~82-92px across */
+ gapWorld:48,     /* extra room at a world change: a titan's under-label has to clear the divider */
+ padTop:30,
+ padBottom:34,
+ gateGap:166,     /* run-out to the next map's gateway — clears node fifteen's under-label */
+ spanX:300,       /* half-width of the winding, in the 0..1000 track space */
+ deadZone:110     /* no ordinary node this close to the centre line — see the layout loop */
+};
+
+/* FNV-1a. Any stable string->int would do; what matters is that it is deterministic, because a
+   path that reshuffled on every render would be worse than no path at all. */
+function v88Hash(text){
+ let h=0x811c9dc5;
+ const s=String(text||'');
+ for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,0x01000193)>>>0;}
+ return h>>>0;
+}
+
+function v88Big(kind){return kind==='boss'||kind==='gauntlet';}
+
+/* Where the player is standing. `v14Save.unlocked` is the frontier, and the frontier is the current
+   node — except at the very end, where clearing stage fifteen cannot advance `unlocked` past
+   fifteen, so a finished map would otherwise show its last node as forever "next". */
+function v88Current(){
+ const at=Math.max(1,Math.min(v14StageCount,v14Save.unlocked|0||1));
+ if(at>=v14StageCount&&v14Stars(v14StageCount)>0)return 0;
+ return at;
+}
+function v88Complete(){return v88Current()===0;}
+
+function v88State(index){
+ const current=v88Current();
+ if(index>v14Save.unlocked)return 'locked';
+ return index===current?'current':'cleared';
+}
+
+/* ---- Layout -------------------------------------------------------------------------------------
+
+   Pure geometry, no DOM. x is 0..1000 across the track, y is real pixels down it. */
+
+function v88Layout(){
+ const map=v87Map();
+ const h=v88Hash(map.id);
+ /* Eight steps and eight phases rather than four of each, and drawn from bits far apart in the
+    hash. The first version took `h&3` and `(h>>2)&3`, and both shipping map ids landed on the same
+    step — two maps that differed only in which side they opened on, which is not a different
+    place. The step range is narrow on purpose and was found by looking rather than by reasoning:
+    much below ~.5 rad per node the sine sweeps instead of winds and fifteen nodes come out as one
+    long diagonal, and much above ~1.1 the horizontal jump between neighbours is three times the
+    vertical one, which flattens the S-curves into a zigzag rather than a road. */
+ const step=.55+((h>>>5)&7)*.07;                  /* .55..1.04 rad per node: ~1.3 to 2.5 turns */
+ const phase=((h>>>13)&7)*(Math.PI/4);            /* which side it opens on */
+ const lean=((h>>>19)&1)?1:-1;
+ const nodes=[];
+ let y=V88.padTop;
+ for(let index=1;index<=v14StageCount;index++){
+  const stage=v14Stage(index);
+  const big=v88Big(stage.kind);
+  if(index>1){
+   const prev=nodes[index-2];
+   let gap=(big||prev.big)?V88.gapBig:V88.gap;
+   if(prev.stage.world!==stage.world)gap+=V88.gapWorld;
+   y+=gap;
+  }
+  /* The second sine is the only reason this does not read as graph paper: it varies the amplitude
+     so the turns are not all the same width. */
+  let x=500+lean*Math.sin(phase+(index-1)*step)*V88.spanX*(.84+.16*Math.sin((index-1)*1.7));
+  if(big)x=500+(x-500)*.42;
+  /* Ordinary nodes are pushed out of a dead zone around the centre line. Their labels hang in
+     whichever half of the track is empty, and a node sitting ON the centre has no empty half — the
+     current node's briefing card is 150px wide and went ten pixels off the left of a 390px screen
+     the one time a stage landed at x=500. Big nodes are exempt: theirs sits underneath. */
+  else if(Math.abs(x-500)<V88.deadZone)x=500+(x<500?-V88.deadZone:V88.deadZone);
+  nodes.push({index,stage,big,kind:stage.kind,half:big?(stage.kind==='gauntlet'?46:42):29,x:Math.max(200,Math.min(800,x)),y});
+ }
+ /* World dividers hang a fixed distance ABOVE the first node of the new world rather than at the
+    midpoint of the gap. The midpoint is where a titan's under-label lands — worlds nearly always
+    end on a titan — and the divider rule was drawn straight through the boss name. */
+ const dividers=[];
+ for(let i=1;i<nodes.length;i++){
+  if(nodes[i].stage.world===nodes[i-1].stage.world)continue;
+  dividers.push({y:nodes[i].y-nodes[i].half-26,name:(worlds[nodes[i].stage.world]||{}).name||''});
+ }
+ const gateIndex=v87State.map+1;
+ const gate=(gateIndex<V87_MAPS.length&&v87Unlocked(gateIndex))
+  ?{index:gateIndex,map:V87_MAPS[gateIndex],x:500,y:nodes[nodes.length-1].y+V88.gateGap}
+  :null;
+ const height=Math.round((gate?gate.y:nodes[nodes.length-1].y)+V88.padBottom+30);
+ return {map,nodes,dividers,gate,height};
+}
+
+/* ---- The path -----------------------------------------------------------------------------------
+
+   One <path> per segment rather than one long path with a dash offset: each segment has to be
+   independently classed walked/pending, and slicing a single path by measured length would mean
+   `getTotalLength()` on an element that has not been laid out yet. */
+
+function v88Segment(a,b){
+ const k=(b.y-a.y)*.55;
+ return `M${a.x.toFixed(1)} ${a.y} C${a.x.toFixed(1)} ${(a.y+k).toFixed(1)} ${b.x.toFixed(1)} ${(b.y-k).toFixed(1)} ${b.x.toFixed(1)} ${b.y}`;
+}
+
+function v88SvgPath(d,cls){
+ const p=document.createElementNS('http://www.w3.org/2000/svg','path');
+ p.setAttribute('d',d);
+ p.setAttribute('class',cls);
+ p.setAttribute('vector-effect','non-scaling-stroke');
+ return p;
+}
+
+/* ---- Small builders ------------------------------------------------------------------------------ */
+
+function v88El(tag,cls,text){
+ const el=document.createElement(tag);
+ if(cls)el.className=cls;
+ if(text!=null)el.textContent=text;
+ return el;
+}
+
+function v88Stars(count){
+ const el=v88El('span','v88-stars');
+ el.textContent=[0,1,2].map((i)=>i<count?'★':'☆').join('');
+ return el;
+}
+
+/* A padlock drawn from two boxes. A glyph would be at the mercy of whichever emoji font the device
+   has, and this one is 13px wide on every device there is. */
+function v88Lock(){return v88El('i','v88-lock');}
+
+function v88Short(map){return String(map.id||'').toUpperCase()||map.name;}
+
+/* ---- Counting a map's progress -------------------------------------------------------------------
+
+   `v14Save.stars` is a single table keyed by stage NUMBER, and V87 swaps `unlocked`/`lastStage` on a
+   map change but not the star table — so in map two, `v14Stars(3)` is still map one's stage three.
+   `v14Save.unlocked` is the only per-map figure there is, so the header counts from the frontier and
+   sums only stars at or behind it. In map one that is exactly right; in a later map it is right at
+   the moment you arrive and drifts as you clear stages whose numbers you have already starred
+   elsewhere. Fixing it properly means a per-map star table inside V87, which is not this file's to
+   change — this at least never claims a fresh map is already finished, which reading the raw table
+   would. */
+function v88Cleared(){return Math.max(0,Math.min(v14StageCount,(v14Save.unlocked|0)-1))+(v88Complete()?1:0);}
+function v88MapStars(){
+ let total=0;
+ const limit=v88Cleared();
+ for(let i=1;i<=limit;i++)total+=v14Stars(i);
+ return total;
+}
+
+/* ---- Header ------------------------------------------------------------------------------------- */
+
+function v88Head(){
+ const map=v87Map();
+ const head=v88El('header','v88-head');
+ const row=v88El('div','v88-head-row');
+ row.append(v88El('span','v88-head-eyebrow',`MAP ${v87State.map+1} OF ${V87_MAPS.length}`));
+ const stats=v88El('span','v88-head-stats');
+ stats.append(v88El('b',null,`${v88Cleared()}/${v14StageCount}`));
+ stats.append(v88El('i',null,`★ ${v88MapStars()}`));
+ row.append(stats);
+ head.append(row);
+ head.append(v88El('h3','v88-head-name',map.name));
+ head.append(v88El('p','v88-head-sub',map.subtitle||''));
+
+ /* The switcher only exists once there is somewhere to switch to. Most players will have one map
+    for a long time and a disabled tab strip on that screen is pure noise. */
+ const open=V87_MAPS.filter((m,i)=>v87Unlocked(i)).length;
+ if(open>1){
+  const strip=v88El('div','v88-switch');
+  V87_MAPS.forEach((m,i)=>{
+   const unlocked=v87Unlocked(i);
+   const chip=v88El('button','v88-chip'+(i===v87State.map?' is-on':'')+(unlocked?'':' is-locked'),v88Short(m));
+   chip.type='button';
+   if(!unlocked)chip.prepend(v88Lock());
+   chip.addEventListener('click',()=>{
+    if(!unlocked)return toast(`CLEAR ${V87_MAPS[i-1].name} FIRST`);
+    if(i===v87State.map)return;
+    haptic(12);
+    v87Go(i);          /* rewrites the stage table and calls v14RenderStages for us */
+   });
+   strip.append(chip);
+  });
+  head.append(strip);
+ }
+ return head;
+}
+
+/* ---- Nodes -------------------------------------------------------------------------------------- */
+
+function v88Node(node,state){
+ const stage=node.stage;
+ const btn=v88El('button','v88-node kind-'+node.kind+' is-'+state+(node.big?' is-big':''));
+ btn.type='button';
+ btn.style.left=(node.x/10)+'%';
+ btn.style.top=node.y+'px';
+ btn.setAttribute('aria-label',`Stage ${node.index}, ${stage.name}, ${v14StageKindLabels[stage.kind]}, ${state}`);
+ /* A locked node is deliberately NOT disabled and carries no aria-disabled. It has a job — it says
+    why it is locked — and a control that responds to a tap must not claim it cannot be tapped. */
+
+ const shape=v88El('span','v88-shape');
+ shape.append(v88El('span','v88-shape-in'));
+ const glyph=v88El('span','v88-glyph');
+ if(state==='locked')glyph.append(v88Lock());
+ else glyph.textContent=String(node.index).padStart(2,'0');
+ shape.append(glyph);
+ btn.append(shape);
+ if(state==='current')btn.append(v88El('span','v88-ping'));
+
+ /* Labels live in the empty half of the track. Big nodes get theirs underneath instead, because
+    they sit on the centre line and there is no empty half beside them. */
+ const label=v88El('span','v88-label'+(node.big?' below':(node.x<500?' right':' left')));
+ label.append(v88El('b',null,stage.name));
+ if(state==='cleared')label.append(v88Stars(v14Stars(node.index)));
+ if(node.big||state==='current')label.append(v88El('em',null,v14StageKindLabels[stage.kind]));
+ if(state==='current'){
+  const hazards=(stage.hazards||[]).map((k)=>v14HazardTypes[k].name).join(' • ');
+  if(hazards)label.append(v88El('span','v88-haz',hazards));
+  label.append(v88El('span','v88-go','TAP TO DEPLOY'));
+ }
+ btn.append(label);
+
+ btn.addEventListener('click',()=>{
+  if(state==='locked'){
+   haptic(6);
+   const ahead=node.index-v14Save.unlocked;
+   return toast(ahead<=1?`CLEAR STAGE ${String(v14Save.unlocked).padStart(2,'0')} FIRST`:`LOCKED — ${ahead} STAGES AHEAD`);
+  }
+  if(v14StartStage(node.index))haptic(12);
+ });
+ return btn;
+}
+
+/* The gateway. V87 already toasts "THE BLOOM UNLOCKED" the moment the last node falls, and a toast
+   is gone in 1.25s. This is where that promise is kept: the path physically runs on past stage
+   fifteen into a door with the next map's name on it, and the door is the thing you tap. */
+function v88Gate(gate,complete){
+ const btn=v88El('button','v88-gate'+(complete?' is-new':''));
+ btn.type='button';
+ btn.style.left=(gate.x/10)+'%';
+ btn.style.top=gate.y+'px';
+ btn.append(v88El('span','v88-gate-ring'));
+ const body=v88El('span','v88-gate-body');
+ body.append(v88El('small',null,complete?'NEW REGION OPEN':'REGION'));
+ body.append(v88El('b',null,gate.map.name));
+ body.append(v88El('span',null,gate.map.subtitle||''));
+ btn.append(body);
+ btn.addEventListener('click',()=>{haptic(18);v87Go(gate.index);});
+ return btn;
+}
+
+/* ---- Scroll anchoring ----------------------------------------------------------------------------
+
+   V14 renders the campaign screen while it is still `display:none`, so nothing has a scroll height
+   at render time and there is nothing to scroll. Rather than patch every caller, this waits for the
+   panel to actually have a box and gives up after half a second — a map opened somewhere that never
+   becomes visible must not leave a rAF loop running behind it. */
+let v88ScrollRaf=0;
+function v88Focus(track,targetTop){
+ cancelAnimationFrame(v88ScrollRaf);
+ let tries=0;
+ const tick=()=>{
+  const panel=track.closest('.panel');
+  if(!panel||!panel.clientHeight||!$('campaignScreen').classList.contains('active')){
+   if(++tries>32)return;
+   v88ScrollRaf=requestAnimationFrame(tick);
+   return;
+  }
+  const top=track.offsetTop+targetTop-panel.clientHeight*.5;
+  panel.scrollTop=Math.max(0,top);
+ };
+ v88ScrollRaf=requestAnimationFrame(tick);
+}
+
+/* ---- The replacement ------------------------------------------------------------------------------
+
+   Reassignment rather than redeclaration: `function v14RenderStages(){}` in 03i.part hoists, so a
+   second declaration here would be overwritten by it no matter what the file order is. V87 calls
+   this by name on every map install, so the map switcher costs nothing to wire up. */
+
+v14RenderStages=function(){
+ const list=$('stageList');
+ if(!list)return;
+
+ /* V14's own readouts are still written even though the head is hidden, so anything that reads
+    them keeps reading something true. */
+ const progress=$('campaignProgress'),stars=$('campaignStars'),cont=$('continueStageBtn');
+ if(progress)progress.textContent=`${Object.keys(v14Save.stars).length} / ${v14StageCount}`;
+ if(stars)stars.textContent=`★ ${v14TotalStars()} / ${v14StageCount*3}`;
+ if(cont)cont.textContent=`CONTINUE • STAGE ${v14Save.lastStage}`;
+
+ const plan=v88Layout();
+ const current=v88Current();
+ const complete=v88Complete();
+ list.className='v14-stage-list v88-map'+(complete?' is-complete':'');
+ list.innerHTML='';
+ list.append(v88Head());
+
+ const track=v88El('div','v88-track');
+ track.style.height=plan.height+'px';
+
+ const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+ svg.setAttribute('class','v88-path');
+ svg.setAttribute('viewBox',`0 0 1000 ${plan.height}`);
+ svg.setAttribute('preserveAspectRatio','none');
+ svg.setAttribute('aria-hidden','true');
+ for(let i=0;i<plan.nodes.length-1;i++){
+  const a=plan.nodes[i],b=plan.nodes[i+1];
+  /* Walked means "the player has stood at the far end of this segment". Everything past the
+     frontier is pending and drawn as a faint dashed run. */
+  const walked=complete||b.index<=current;
+  svg.append(v88SvgPath(v88Segment(a,b),'v88-seg '+(walked?'is-walked':'is-pending')));
+ }
+ if(plan.gate){
+  svg.append(v88SvgPath(v88Segment(plan.nodes[plan.nodes.length-1],plan.gate),'v88-seg '+(complete?'is-gate':'is-pending')));
+ }
+ track.append(svg);
+
+ /* A wide soft red field behind every titan. This is the "see a boss coming three nodes away"
+    requirement doing its actual work — the silhouette carries close up, the field carries far. */
+ for(const node of plan.nodes){
+  if(!node.big)continue;
+  const band=v88El('div','v88-band'+(node.kind==='gauntlet'?' gauntlet':''));
+  band.style.top=node.y+'px';
+  band.style.setProperty('--at',(node.x/10)+'%');
+  track.append(band);
+ }
+ for(const divider of plan.dividers){
+  const el=v88El('div','v88-world',divider.name);
+  el.style.top=divider.y+'px';
+  track.append(el);
+ }
+ let focusTop=plan.nodes[0].y;
+ for(const node of plan.nodes){
+  const state=v88State(node.index);
+  if(state==='current')focusTop=node.y;
+  track.append(v88Node(node,state));
+ }
+ if(plan.gate){
+  track.append(v88Gate(plan.gate,complete));
+  if(complete)focusTop=plan.gate.y-60;
+ }
+ list.append(track);
+ v88Focus(track,focusTop);
+};
+
+/* V87 installed a map and rendered the old list before this file existed. Render once now so the
+   map is what is sitting in the container from boot, not a list nobody will ever see. */
+v14RenderStages();

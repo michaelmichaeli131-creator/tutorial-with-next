@@ -1,0 +1,156 @@
+/* V43 — the kills were cheerful.
+
+   Two passes got this half right and half wrong. V34 made every kill a note in the soundtrack's
+   key, which fixed a real fault: before it, the combo raised the pitch continuously against a
+   fixed-key arrangement, so a good run drifted further out of tune the better it went. V36 then
+   made the music itself tense — a pedal bass that stops following the chord, a sus voicing that
+   never lands, the kit emptying out as things get worse.
+
+   What was left is a contradiction you can hear: a tense, hollow, unresolved arrangement with
+   bright consonant arcade plucks fired over the top of it. Every kill was a clean triangle-wave
+   pluck with a perfect fifth stacked on it. A fifth is the most *settled* interval in music. The
+   track was refusing to resolve and the kills were resolving on every shot.
+
+   So this keeps the pitch structure — the key, the combo climbing the scale, the per-species
+   registers, all of which earned their place — and changes the character:
+
+   - **The companion interval becomes a tritone.** It is the interval that will not settle, and
+     swapping it for the fifth is the single biggest change in how a kill reads.
+   - **Every kill bends down.** Things that die fall in pitch. The note was static before, which is
+     why it read as *played* rather than as something coming apart.
+   - **The timbre goes dark.** Filters open far lower, so the voice is a body rather than a chime.
+   - **The transient gets grit.** A short band of noise under the click, so a kill has debris in it.
+   - **The tap loses its bell.** It was a bright blip at eight times the root; it is a dry, low
+     click now, because the shot is not the event — the kill is.
+
+   The brief was tension with only a trace of fright, so none of this is a scream or a stinger. It
+   is the same music, played by something that is not enjoying itself. */
+
+const V43={
+ /* Six semitones. The tritone — musically in the scale's world, harmonically refusing to land. */
+ tritone:Math.pow(2,6/12),
+ /* How far a dying note falls over its decay. A whole tone reads as a body dropping; more than
+    that starts to sound comic. */
+ bend:Math.pow(2,-2/12),
+ /* Filters were 1,500–6,500. Everything moves down: the point is weight, not sparkle. */
+ dark:.52
+};
+
+/* A pluck that falls while it decays. V34's version held its pitch, which is what made a kill sound
+   like a note rather than like something failing. */
+audio.deadNote=function(freq,when=0,dur=.24,gain=.4,pan=0,shape='sawtooth',open=1800,close=380,detune=9){
+ if(!this.ctx)return;
+ const t=this.ctx.currentTime+when;
+ const filter=this.ctx.createBiquadFilter();
+ const g=this.ctx.createGain();
+ const p=this.ctx.createStereoPanner?this.ctx.createStereoPanner():null;
+ filter.type='lowpass';
+ filter.Q.value=7;
+ filter.frequency.setValueAtTime(Math.max(160,open),t);
+ filter.frequency.exponentialRampToValueAtTime(Math.max(120,close),t+dur*.65);
+ g.gain.setValueAtTime(.0001,t);
+ g.gain.exponentialRampToValueAtTime(Math.max(.0002,gain),t+.004);
+ g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+ for(const side of [-1,1]){
+  const osc=this.ctx.createOscillator();
+  osc.type=shape;
+  osc.frequency.setValueAtTime(freq,t);
+  /* The fall. Started a hair late so the pitch is heard before it starts going. */
+  osc.frequency.exponentialRampToValueAtTime(Math.max(20,freq*V43.bend),t+dur*.9);
+  osc.detune.value=side*detune;
+  osc.connect(filter);
+  osc.start(t);osc.stop(t+dur+.03);
+ }
+ filter.connect(g);
+ if(p){p.pan.value=Math.max(-1,Math.min(1,pan));g.connect(p);p.connect(this.sfxGain);}
+ else g.connect(this.sfxGain);
+};
+
+/* Grit under the transient: a narrow band of noise, not the wideband snap. It is the difference
+   between a click and something with debris in it. */
+audio.grit=function(when=0,gain=.2,centre=900,pan=0){
+ if(!this.ctx)return;
+ const t=this.ctx.currentTime+when;
+ const len=Math.max(1,Math.floor(this.ctx.sampleRate*.09));
+ const buf=this.ctx.createBuffer(1,len,this.ctx.sampleRate);
+ const data=buf.getChannelData(0);
+ for(let i=0;i<len;i++)data[i]=(Math.random()*2-1)*Math.pow(1-i/len,3.2);
+ const src=this.ctx.createBufferSource();
+ const band=this.ctx.createBiquadFilter();
+ const g=this.ctx.createGain();
+ const p=this.ctx.createStereoPanner?this.ctx.createStereoPanner():null;
+ src.buffer=buf;
+ band.type='bandpass';
+ band.frequency.setValueAtTime(centre,t);
+ band.frequency.exponentialRampToValueAtTime(Math.max(120,centre*.45),t+.09);
+ band.Q.value=1.6;
+ g.gain.setValueAtTime(Math.max(.0002,gain),t);
+ g.gain.exponentialRampToValueAtTime(.0001,t+.1);
+ src.connect(band);band.connect(g);
+ if(p){p.pan.value=Math.max(-1,Math.min(1,pan));g.connect(p);p.connect(this.sfxGain);}
+ else g.connect(this.sfxGain);
+ src.start(t);src.stop(t+.12);
+};
+
+const v43ImpactBase=audio.impact;
+audio.impact=function(type,power=1,combo=0,perfect=false){
+ if(!this.ctx)return;
+ /* The budget, the note choice and the per-species kit all live in V34 and are still right. What
+    changes is which voices get played, so the base is bypassed rather than wrapped — calling it
+    would fire the bright plucks this pass exists to remove. */
+ const now=this.ctx.currentTime;
+ if(now-v34LastAt<.045)v34InWindow++;
+ else v34InWindow=0;
+ v34LastAt=now;
+ if(v34InWindow>5)return;
+
+ const kit=V34_KITS[type]||V34_KITS.normal;
+ const level=Math.min(1.1,kit.gain*power)*(1-v34InWindow*.13);
+ const pan=Math.max(-.7,Math.min(.7,(Math.random()-.5)*1.1));
+ const note=v34Note(kit,combo);
+
+ this.snap(0,level*.26,kit.noise*.6,pan);
+ this.grit(0,level*.3,kit.noise*.32,pan);
+ this.deadNote(note,0,kit.dur*1.15,level,pan,kit.shape,kit.open*V43.dark,kit.close*.8,kit.detune+4);
+ /* The tritone in place of V34's fifth. Quiet, and the whole reason a kill now sounds like a
+    problem rather than an achievement. */
+ this.deadNote(note*V43.tritone,.008,kit.dur*.8,level*.17,-pan*.6,kit.shape,kit.open*V43.dark,kit.close,kit.detune+8);
+ this.tail(0,kit.tail*1.2,level*.2,kit.noise*.32,pan);
+
+ if(kit.metal)this.ring(.006,note*2,level*.13,pan);
+ if(kit.bell){
+  for(let i=0;i<3;i++)this.tone(note*(2+i*1.41),.18,'triangle',level*.07,this.sfxGain,.008+i*.016,.62,pan);
+ }
+ if(kit.twin)this.deadNote(note*Math.pow(2,3/12),.06,kit.dur*.85,level*.55,-pan,kit.shape,kit.open*V43.dark,kit.close,kit.detune);
+ if(kit.boom){
+  this.subNote(note/2,.012,.7,level*.55);
+  this.tail(.03,1.05,level*.2,300,0);
+ }
+ /* A perfect hit still has to be distinguishable, but it is a tight metallic ring now rather than
+    an octave of sparkle — the reward is precision, not celebration. */
+ if(perfect){
+  this.ring(.004,note*3,level*.2,pan*.5);
+  this.grit(.002,level*.16,4200,pan);
+ }
+ haptic(power>1.2?[14,10,18]:10);
+};
+
+/* The tap. It was a bright bell an octave above the register the kills live in, which made every
+   shot sound like an event and left the kill nothing to be. A shot is a dry mechanical click. */
+const v43SfxBase=audio.sfx.bind(audio);
+audio.sfx=function(name){
+ if(!this.ctx)return;
+ switch(name){
+  case 'hit':
+   this.snap(0,.1,2200,(Math.random()-.5)*.6);
+   this.grit(0,.07,520,(Math.random()-.5)*.5);
+   return;
+  case 'perfect':
+   this.snap(0,.12,3000,(Math.random()-.5)*.5);
+   this.grit(0,.09,900,(Math.random()-.5)*.4);
+   this.ring(.004,v34Root()*6,.07,0);
+   return;
+  default:
+   return v43SfxBase(name);
+ }
+};

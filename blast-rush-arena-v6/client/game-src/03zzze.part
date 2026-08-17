@@ -1,0 +1,218 @@
+/* V83 — taps are ammunition, and chains are the refill.
+
+   ---- Why the game is not hard ----
+
+   Not because the hostiles are weak. Because **a tap costs nothing.** One touch kills almost
+   anything, instantly, anywhere on the screen, as often as a thumb can move — so the only ceiling
+   on the player is how fast they can tap, and a ceiling made of dexterity is not difficulty, it is
+   an endurance test that gets easier the more you play and never gets more interesting.
+
+   Everything measured about this game follows from that one fact. V56 found a median of ZERO
+   hostiles on screen and the arena empty 79% of the time: a competent player removes arrivals as
+   fast as they arrive, so the field can never fill. V21's very first measurement found the dominant
+   strategy was to carpet the screen in taps and let the hit boxes do the work. V57 found a hostile
+   lives 0.2 seconds. None of those are enemy-strength problems and none of them can be fixed by
+   making enemies stronger — a stronger enemy just takes two free taps instead of one.
+
+   ---- What this does ----
+
+   Six shots. A tap spends one — hit, miss, or a well planted. They come back slowly on their own,
+   and **every hostile a cascade takes beyond the first gives one back immediately.**
+
+   So the arena stops being a list of things to remove and becomes a budget to spend well. Tapping
+   one hostile at a time is now a losing trade at exactly the rate the reload runs; taking three with
+   one tap is free. Every system built since V63 — the blast radius, the formations, the spacing, the
+   sealed hostile, the wells — was aimed at making the player set up a cascade, and every one of them
+   was optional, because a cascade and six separate taps cost the same thing: nothing.
+
+   This is the piece that makes them all matter. It is also, in the owner's words, harder without
+   being meaner: nothing new can kill you, and nothing arrives faster. What changed is that the
+   answer to a crowd is no longer "tap it six times".
+
+   ---- Merged, not added ----
+
+   V21's reactor heat exists to solve exactly this problem — it was built to stop a spam bot — and it
+   solves it invisibly, with a bar nobody watches and a lockout that has to apologise for eating an
+   input. Two limiters on the same thing is one too many, so its prices are zeroed here rather than
+   its code deleted: the ward windows, the divers and the arrival ramp all live in the same part and
+   are unrelated, and this way the switch is one line if the measurement disagrees.
+
+   ---- The failure mode to design against ----
+
+   Running dry mid-formation reads as the game dropping your input, and this codebase has already
+   paid for that lesson once — V21's overheat had to grow a "VENTING • HOLD FIRE" toast because
+   players could not tell a lockout from a bug. So the magazine is drawn large, on the player's own
+   reactor where the thumb already is, an empty tap answers with a sound and a shake rather than
+   with silence, and the reload is fast enough that dry is a beat and never a wait. */
+
+const V83={
+ on:true,
+ /* The magazine. Six is enough to answer a formation and not enough to answer it one member at a
+    time, which is the entire trade this part exists to create. */
+ mag:6,
+ /* Seconds per shot returned: 2.2 a second sustained.
+
+    Set from measurement, and the measurement had to be read carefully because survival time is far
+    too noisy to tune on -- the same baseline configuration died at 23 seconds in one run and
+    survived the full 70 in another. What IS stable across runs is behaviour rather than outcome:
+    the magazine reliably raises mean cascade size (3.19 to 3.85), and the arrival rate reliably
+    raises the count on screen (1/6 to 2/9) and cuts the empty fraction.
+
+    At 0.55 seconds the bot came back dry on 31% of its taps. One input in three doing nothing is
+    the exact failure this part was designed against, and it is the fault V21's overheat had to grow
+    an apologetic toast for. At 0.45 the same run came back at 0% dry with cascade size still up.
+    The rate is what creates the pressure; the magazine is only there to make the answer a cascade,
+    and it does that without needing to bite on every third tap. */
+ reload:.45,
+ /* Shots returned per hostile a cascade takes beyond the first. At 1 a three-link cascade pays for
+    itself twice over and a single kill is a net loss, which is the incentive stated as arithmetic. */
+ refund:1,
+ /* How long the empty state stays loud after a dry tap. */
+ dry:.42,
+ core:'#ffd469',
+ empty:'#ff6a7f'
+};
+
+/* V21's prices, zeroed. See the note above on merging rather than adding. */
+if(V83.on&&typeof V21_HEAT==='object'){
+ V21_HEAT.miss=0;
+ V21_HEAT.hit=0;
+ V21_HEAT.blocked=0;
+}
+
+function v83Live(){return V83.on&&game.running&&!game.paused;}
+
+const v83Begin=begin;
+begin=function(mode='solo',seed){
+ const out=v83Begin(mode,seed);
+ game.v83Ammo=V83.mag;
+ game.v83Fill=0;
+ game.v83Dry=0;
+ return out;
+};
+
+/* ---- Spending ----------------------------------------------------------------------------------
+
+   Outermost, so an empty magazine stops the tap before V76 can plant a well or V21 can bill it. A
+   dry tap has to be a no-op everywhere, not a no-op in the arena that still costs somewhere else. */
+
+const v83Tap=v12HandleTap;
+v12HandleTap=function(clientX,clientY,event){
+ if(!v83Live())return v83Tap(clientX,clientY,event);
+ if((game.v83Ammo||0)<1){
+  if(event&&event.cancelable)event.preventDefault();
+  game.v83Dry=V83.dry;
+  audio.sfx('warning');
+  haptic(6);
+  return;
+ }
+ game.v83Ammo--;
+ return v83Tap(clientX,clientY,event);
+};
+
+/* ---- Earning it back ---------------------------------------------------------------------------
+
+   Hooked on V63's reward because that is where a cascade reports how many it took, and it is the
+   one hook that covers every route into a cascade at once: a direct tap, a well firing, a reactor
+   blast, a bomb's own chain. Nothing needs to know about this part to pay into it. */
+
+const v83Reward=v63Reward;
+v63Reward=function(links){
+ const out=v83Reward(links);
+ if(v83Live()&&links>0){
+  game.v83Ammo=Math.min(V83.mag,(game.v83Ammo||0)+links*V83.refund);
+  audio.sfx('shield');
+ }
+ return out;
+};
+
+const v83Update=update;
+update=function(dt){
+ v83Update(dt);
+ if(!game.running||game.paused)return;
+ if(game.v83Dry>0)game.v83Dry-=dt;
+ if((game.v83Ammo||0)>=V83.mag){game.v83Fill=0;return;}
+ game.v83Fill=(game.v83Fill||0)+dt;
+ while(game.v83Fill>=V83.reload&&(game.v83Ammo||0)<V83.mag){
+  game.v83Fill-=V83.reload;
+  game.v83Ammo=(game.v83Ammo||0)+1;
+ }
+};
+
+/* ---- Showing it --------------------------------------------------------------------------------
+
+   On the reactor rather than in the HUD, which is the one place V75 would otherwise have sent it.
+   This is the player's own resource and the player's thumb is already down here — a magazine read
+   at the top of the screen is a magazine read a beat too late, and V73 made the bottom of the arena
+   somewhere the eye already goes because that is where the pilot walks.
+
+   Pips rather than a bar: six is a number you count without reading, and the difference between two
+   left and one left is the whole decision. A bar at 33% is a number you have to interpret. */
+
+const v83Draw=draw;
+draw=function(){
+ const out=v83Draw();
+ if(!v83Live())return out;
+
+ const n=Math.max(0,Math.min(V83.mag,game.v83Ammo||0));
+ const dry=Math.max(0,game.v83Dry||0)/V83.dry;
+ const x=reactorAnchorX();
+ const y=v73Line()+(isMobile?16:12);
+ const gap=isMobile?15:13;
+ const span=(V83.mag-1)*gap;
+ /* Shaken while dry, so an empty magazine is felt as well as seen. The same gesture a physical
+    thing makes when it will not fire. */
+ const shake=dry>0?Math.sin(game.elapsed*54)*4*dry:0;
+
+ ctx.save();
+ ctx.translate(shake,0);
+ for(let i=0;i<V83.mag;i++){
+  const px=x-span/2+i*gap;
+  const has=i<n;
+  /* The one being reloaded fills up rather than appearing, so the wait is legible as a wait and the
+     player can time a tap against it instead of guessing. */
+  const partial=!has&&i===n?Math.min(1,(game.v83Fill||0)/V83.reload):0;
+  ctx.beginPath();
+  ctx.arc(px,y,5.4,0,Math.PI*2);
+  ctx.fillStyle='rgba(4,9,20,.85)';
+  ctx.fill();
+  ctx.strokeStyle=n===0?V83.empty:'rgba(160,190,220,.5)';
+  ctx.lineWidth=1.4;
+  ctx.stroke();
+  if(has||partial>0){
+   ctx.beginPath();
+   ctx.arc(px,y,3.6*(has?1:partial),0,Math.PI*2);
+   ctx.fillStyle=has?V83.core:'rgba(255,212,105,.55)';
+   ctx.fill();
+  }
+ }
+ if(dry>0){
+  ctx.globalAlpha=dry;
+  ctx.textAlign='center';
+  ctx.textBaseline='middle';
+  ctx.font=`900 ${isMobile?11:12}px system-ui,sans-serif`;
+  ctx.lineWidth=3.5;
+  ctx.strokeStyle='rgba(4,9,20,.9)';
+  ctx.strokeText('DRY — BREAK A GROUP',x,y-16);
+  ctx.fillStyle=V83.empty;
+  ctx.fillText('DRY — BREAK A GROUP',x,y-16);
+ }
+ ctx.restore();
+ ctx.globalAlpha=1;
+ return out;
+};
+
+/* Said once, the first time a player runs dry. The rule is invisible until it stops you, and a rule
+   that first announces itself by refusing an input is the one case where a line of text is cheaper
+   than letting the player guess. */
+const v83DryTaught=v12HandleTap;
+v12HandleTap=function(clientX,clientY,event){
+ const wasDry=v83Live()&&(game.v83Ammo||0)<1;
+ const out=v83DryTaught(clientX,clientY,event);
+ if(wasDry&&!save.v83Taught){
+  save.v83Taught=1;
+  persist();
+  toast('OUT OF SHOTS — CHAINS GIVE THEM BACK');
+ }
+ return out;
+};

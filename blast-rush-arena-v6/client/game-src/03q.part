@@ -1,0 +1,203 @@
+/* V16 LAUNCH SCENE — a staged hero shot rather than a wallpaper.
+   Top-grossing menus read as a diorama: a clearly separated background, midground and foreground,
+   the hero large and lit from behind, and framing that pushes the eye to the centre. The previous
+   scene had one flat depth plane, which is a large part of why it read as generic. */
+const v16Ember=Array.from({length:26},(_,i)=>({
+ seed:i,
+ x:((i*137)%100)/100,
+ speed:.1+((i*53)%7)/22,
+ size:1+((i*31)%3)*.7,
+ sway:.4+((i*17)%5)*.24
+}));
+
+function v16Shaft(c,x,w,h,top,color,alpha){
+ const g=c.createLinearGradient(x,top,x+w*.3,h);
+ g.addColorStop(0,color+Math.round(alpha*255).toString(16).padStart(2,'0'));
+ g.addColorStop(1,'transparent');
+ c.fillStyle=g;
+ v14Art.poly(c,[[x,top],[x+w,top],[x+w*1.9,h],[x-w*.6,h]]);
+ c.fill();
+}
+
+function v14DrawLaunchSceneV16(c,w,h,t){
+ const ch=v14Character();
+ const horizon=h*.72;
+
+ /* --- Background: deep sky with a warm band at the horizon for separation --- */
+ const sky=c.createLinearGradient(0,0,0,h);
+ sky.addColorStop(0,'#02030b');
+ sky.addColorStop(.28,'#081235');
+ sky.addColorStop(.55,'#141a4e');
+ sky.addColorStop(.74,'#2a1c52');
+ sky.addColorStop(1,'#060512');
+ c.fillStyle=sky;
+ c.fillRect(0,0,w,h);
+
+ c.save();
+ c.globalCompositeOperation='lighter';
+ for(let i=0;i<4;i++){
+  const cx=w*(.16+i*.24)+Math.sin(t*.1+i)*w*.05;
+  const cy=h*(.2+((i*37)%4)*.09);
+  const r=Math.max(w,h)*(.3+((i*29)%3)*.09);
+  const g=c.createRadialGradient(cx,cy,0,cx,cy,r);
+  g.addColorStop(0,(i%2?ch.c1:ch.c2)+'20');
+  g.addColorStop(1,'transparent');
+  c.fillStyle=g;
+  c.beginPath();c.arc(cx,cy,r,0,Math.PI*2);c.fill();
+ }
+ for(let layer=0;layer<3;layer++){
+  const count=[40,26,14][layer];
+  for(let i=0;i<count;i++){
+   const seed=i*151+layer*613;
+   const x=((seed*37)%1000)/1000*w;
+   const y=((((seed*53)%1000)/1000*horizon)+t*(2+layer*5))%horizon;
+   c.globalAlpha=(.16+layer*.16)*(.5+.5*Math.sin(t*.8+i));
+   c.fillStyle=i%12===0?ch.c1:'#ffffff';
+   c.fillRect(x,y,.6+layer*.6,.6+layer*.6);
+  }
+ }
+ c.restore();
+
+ /* Backlit moon low on the horizon puts a rim on everything in front of it. */
+ const moonX=w*.5,moonY=horizon-h*.055,moonR=Math.min(w*.42,h*.2);
+ c.save();
+ const moon=c.createRadialGradient(moonX,moonY,moonR*.1,moonX,moonY,moonR);
+ moon.addColorStop(0,'#fff6e2');
+ moon.addColorStop(.32,ch.c1+'aa');
+ moon.addColorStop(.72,ch.c2+'3a');
+ moon.addColorStop(1,'transparent');
+ c.fillStyle=moon;
+ c.beginPath();c.arc(moonX,moonY,moonR,0,Math.PI*2);c.fill();
+ c.restore();
+
+ /* --- Midground: two skyline bands at different contrast fake depth of field --- */
+ for(const band of [{scale:.55,alpha:.5,tint:'#0b1330',off:0},{scale:1,alpha:.92,tint:'#050a1c',off:.5}]){
+  c.save();
+  c.globalAlpha=band.alpha;
+  c.fillStyle=band.tint;
+  c.beginPath();
+  c.moveTo(0,h);
+  for(let i=0;i<=14;i++){
+   const x=(i/14)*w;
+   const peak=(((i*67)%9)/9)*h*.1*band.scale+h*.035*band.scale;
+   c.lineTo(x-w*.02,horizon-peak);
+   c.lineTo(x+w*.03,horizon-peak*.6);
+  }
+  c.lineTo(w,h);
+  c.closePath();
+  c.fill();
+  c.restore();
+ }
+
+ /* God rays from above give the hero a stage to stand on. */
+ c.save();
+ c.globalCompositeOperation='lighter';
+ for(let i=0;i<4;i++){
+  v16Shaft(c,w*(.2+i*.2)+Math.sin(t*.25+i)*10,w*.06,horizon,0,ch.c1,.05+.03*Math.sin(t*.6+i));
+ }
+ c.restore();
+
+ /* --- Hero dais: a lit platform, its glow, and a soft reflection --- */
+ const heroY=h*.5;
+ const heroScale=Math.min(w/300,h/580)*(w<520?2:2.3);
+ const feet=heroY+52*heroScale;
+ c.save();
+ c.globalCompositeOperation='lighter';
+ const pool=c.createRadialGradient(w*.5,feet,2,w*.5,feet,w*.5);
+ pool.addColorStop(0,ch.c1+'88');
+ pool.addColorStop(.45,ch.c2+'2e');
+ pool.addColorStop(1,'transparent');
+ c.fillStyle=pool;
+ c.beginPath();c.ellipse(w*.5,feet,w*.5,h*.06,0,0,Math.PI*2);c.fill();
+ c.restore();
+
+ c.save();
+ c.fillStyle='#070c1e';
+ c.beginPath();c.ellipse(w*.5,feet+6,w*.3,h*.026,0,0,Math.PI*2);c.fill();
+ c.strokeStyle=ch.c1+'99';
+ c.lineWidth=2.5;
+ c.beginPath();c.ellipse(w*.5,feet+6,w*.3,h*.026,0,0,Math.PI*2);c.stroke();
+ c.globalAlpha=.5;
+ c.strokeStyle=ch.c1+'55';
+ c.beginPath();c.ellipse(w*.5,feet+6,w*.38,h*.033,0,0,Math.PI*2);c.stroke();
+ c.restore();
+
+ v14DrawCharacter(c,v14Save.character,t,{
+  x:w*.5,
+  y:heroY+Math.sin(t*1.3)*3,
+  scale:heroScale,
+  auraRadius:104,
+  auraAlpha:.6,
+  glow:26
+ });
+
+ /* --- Foreground: dark framing wedges and drifting embers --- */
+ c.save();
+ c.fillStyle='#02030a';
+ v14Art.poly(c,[[0,h],[0,h*.62],[w*.16,h*.78],[w*.1,h]]);
+ c.fill();
+ v14Art.poly(c,[[w,h],[w,h*.6],[w*.84,h*.79],[w*.9,h]]);
+ c.fill();
+ c.restore();
+
+ c.save();
+ c.globalCompositeOperation='lighter';
+ for(const e of v16Ember){
+  const y=h-((t*e.speed*h*.24+e.seed*97)%(h*1.1));
+  const x=e.x*w+Math.sin(t*e.sway+e.seed)*w*.05;
+  c.globalAlpha=.12+.4*Math.abs(Math.sin(t*.9+e.seed));
+  c.fillStyle=e.seed%4===0?'#ffd88a':ch.c1;
+  c.beginPath();c.arc(x,y,e.size,0,Math.PI*2);c.fill();
+ }
+ c.restore();
+ c.globalAlpha=1;
+}
+
+/* Take over the scene loop: the launch section is `.v16-launch` now, and the old check could no
+   longer tell whether the launch screen was still on screen. */
+cancelAnimationFrame(v14SceneRaf);
+function v16SceneFrame(ts){
+ const t=ts/1000;
+ const launch=$('launchScreen');
+ if(v14LaunchCtx&&launch&&!launch.classList.contains('hidden')){
+  const size=v14FitCanvas(v14LaunchCanvas,v14LaunchCtx);
+  if(size)v14DrawLaunchSceneV16(v14LaunchCtx,size.w,size.h,t);
+ }
+ if(v14MenuCtx&&!document.hidden&&$('menuScreen').classList.contains('active')){
+  const size=v14FitCanvas(v14MenuCanvas,v14MenuCtx);
+  if(size){
+   v14MenuCtx.clearRect(0,0,size.w,size.h);
+   v14DrawCharacter(v14MenuCtx,v14Save.character,t,{
+    x:size.w*.5,y:size.h*.56,
+    scale:Math.min(size.w/180,size.h/220),
+    auraRadius:92,auraAlpha:.6
+   });
+  }
+ }
+ v14SceneRaf=requestAnimationFrame(v16SceneFrame);
+}
+v14SceneRaf=requestAnimationFrame(v16SceneFrame);
+
+/* Own the boot sequence outright. The V13 loop rewrote the CTA label every frame and reported a
+   percentage derived from sprite sheets that no longer exist, so it could sit at 8% indefinitely. */
+const v16BootStarted=performance.now();
+v13UpdateBoot=function(){
+ const launch=$('launchScreen');
+ if(!launch||launch.classList.contains('hidden'))return;
+ const elapsed=performance.now()-v16BootStarted;
+ const assets=v13AssetProgress();
+ const percent=Math.max(assets.percent,Math.min(100,Math.round(elapsed/1200*100)));
+ if(v13Progress)v13Progress.style.width=percent+'%';
+ if(v13Status)v13Status.textContent=percent>=100?'COMBAT SYSTEMS ONLINE':`CALIBRATING WEAPONS • ${percent}%`;
+ /* The boot sequence is theatre — the progress bar is driven by a timer, not by anything actually
+    loading — so gating the button behind it was 650ms of dead time imposed on every single launch.
+    Real asset progress still opens it early when there is any; the floor is now short enough to
+    read as a transition rather than as a wait. */
+ if(v13Enter&&(assets.percent>=100||elapsed>220)){
+  v13Enter.disabled=false;
+  const detail=v13Enter.querySelector('small');
+  if(detail)detail.textContent='TAP TO DEPLOY • SOUND ON';
+ }
+ if(percent<100||elapsed<2200)requestAnimationFrame(v13UpdateBoot);
+};
+requestAnimationFrame(v13UpdateBoot);

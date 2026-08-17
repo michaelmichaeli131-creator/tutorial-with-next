@@ -1,0 +1,410 @@
+/* V14 COMBAT — campaign stages, difficulty curve, weapon behaviour, hazards and rewards. */
+let v14PendingStage=null;
+
+const v14ObjectiveLabels={purge:'PURGE',elite:'BREAK ARMOUR',perfect:'PERFECT HUNT',survive:'SURVIVE',boss:'TITAN',gauntlet:'GAUNTLET'};
+
+function v14Campaign(){return game.mode==='campaign'?game.v14:null;}
+function v14EmpActive(){const v=v14Campaign();return Boolean(v&&v.empUntil>game.elapsed);}
+function v14StageTarget(stage){
+ if(stage.kind==='survive')return stage.duration;
+ if(stage.kind==='boss')return 1;
+ if(stage.kind==='gauntlet')return stage.target||2;
+ return stage.target;
+}
+
+function v14StartStage(index){
+ const stage=v14Stage(index);
+ if(!stage)return false;
+ if(!v14StageUnlocked(index)){toast('STAGE STILL LOCKED');return false;}
+ v14PendingStage=stage;
+ v14Save.lastStage=index;
+ v14Persist();
+ begin('campaign');
+ return true;
+}
+
+const v14BeginBase=begin;
+begin=function(mode='solo',seed){
+ v14BeginBase(mode,seed);
+ game.hazard=null;
+ game.v14=null;
+ game.v14Credits=0;
+ game.v14DamagePool=0;
+ game.v14CooldownUntil=0;
+ const mods=v14Mods(mode==='duel');
+ game.v14Mods=mods;
+ game.v14Combat=Object.assign({},v14WeaponStats());
+ game.perfectWindow*=mods.perfect;
+ game.scoreMult*=mods.score;
+ game.blastGain*=mods.blast;
+ game.shields+=mods.shields;
+ if(mode!=='campaign'||!v14PendingStage)return;
+ const stage=v14PendingStage;
+ game.world=stage.world;
+ game.wave=stage.index;
+ game.waveTarget=v14StageTarget(stage);
+ game.objective=v14ObjectiveLabels[stage.kind]||'PURGE';
+ game.spawnTimer=.4;
+ game.v14={
+  stage,
+  kind:stage.kind,
+  target:v14StageTarget(stage),
+  progress:0,
+  eliteKills:0,
+  bossesDown:0,
+  timeLeft:stage.duration||0,
+  hazards:stage.hazards||[],
+  empUntil:0,
+  nextEmp:10,
+  nextSwarm:8,
+  meteors:[],
+  meteorTimer:1.6,
+  done:false,
+  awarded:null
+ };
+ if(game.v14.hazards.includes('gravity'))game.hazard={kind:'gravity',until:Infinity};
+ if(stage.kind==='boss'||stage.kind==='gauntlet')spawnBoss(stage.kind==='gauntlet');
+ if(game.v14.hazards.length)toast(v14HazardTypes[game.v14.hazards[0]].name+' DETECTED');
+ updateHud();
+};
+
+/* Stage difficulty is layered onto the shared spawner rather than duplicating it. */
+const v14SpawnOrbBase=spawnOrb;
+spawnOrb=function(type){
+ const v=v14Campaign();
+ if(v&&!type){
+  const pool=v.stage.pool;
+  type=pool[Math.floor(rng()*pool.length)];
+ }
+ v14SpawnOrbBase(type);
+ if(!v)return;
+ const o=game.orbs.at(-1);
+ if(!o)return;
+ const curve=v.stage.curve;
+ o.speed*=curve.speed;
+ const bonus=curve.hp-1;
+ if(bonus>0){
+  const extra=o.type==='armored'?bonus:bonus>=2?1:0;
+  o.hp+=extra;
+  o.maxHp+=extra;
+ }
+};
+
+/* Weapon behaviour. Base damage always lands on tap; the special effects are the part that is
+   rate limited, so an expensive weapon never becomes a raw fire-rate upgrade. */
+function v14SplashTargets(x,y,radius,limit,exclude){
+ return game.orbs
+  .filter((orb)=>orb!==exclude&&Math.hypot(orb.x-x,orb.y-y)<=radius)
+  .sort((a,b)=>Math.hypot(a.x-x,a.y-y)-Math.hypot(b.x-x,b.y-y))
+  .slice(0,limit);
+}
+
+const v14HitOrbBase=hitOrb;
+hitOrb=function(o,x,y,chain=false){
+ const combat=game.v14Combat;
+ if(!combat){v14HitOrbBase(o,x,y,chain);return;}
+ const mods=game.v14Mods||v14Mods(false);
+ if(!chain){
+  game.v14DamagePool=(game.v14DamagePool||0)+combat.damage*mods.damage;
+  const applied=Math.max(1,Math.floor(game.v14DamagePool));
+  game.v14DamagePool-=applied;
+  if(applied>1&&o.hp>1)o.hp-=Math.min(o.hp-1,applied-1);
+ }
+ const overdriveBefore=game.overdrive;
+ const killsBefore=game.kills;
+ const wasArmored=o.type==='armored';
+ v14HitOrbBase(o,x,y,chain);
+ const gained=game.overdrive-overdriveBefore;
+ if(gained>0)game.overdrive=Math.min(100,overdriveBefore+gained*mods.overdrive);
+ const killed=game.kills-killsBefore;
+ if(killed>0){
+  game.v14Credits=(game.v14Credits||0)+killed*2*combat.credits;
+  const v=v14Campaign();
+  if(v&&wasArmored)v.eliteKills+=killed;
+ }
+ if(chain)return;
+ const now=performance.now();
+ if(combat.cooldown>0&&now<(game.v14CooldownUntil||0))return;
+ let usedSpecial=false;
+ if(combat.splashHits>0){
+  for(const target of v14SplashTargets(x,y,combat.splash,combat.splashHits,o)){
+   hitOrb(target,target.x,target.y,true);
+   usedSpecial=true;
+  }
+ }
+ if(combat.chain>0){
+  let originX=x,originY=y;
+  for(let i=0;i<combat.chain;i++){
+   const next=v14SplashTargets(originX,originY,170,1,o)[0];
+   if(!next)break;
+   ring(originX,originY,'#9be9ff',22);
+   originX=next.x;originY=next.y;
+   hitOrb(next,next.x,next.y,true);
+   usedSpecial=true;
+  }
+ }
+ if(combat.aoe>0){
+  explode(x,y,'#7ef0ff',16,.7);
+  /* A short, fixed-radius ring reads the actual blast area; ring() grows too far to be useful here. */
+  game.rings.push({x,y,r:combat.aoe*.55,life:.26,max:.26,color:'#7ef0ff'});
+  for(const target of v14SplashTargets(x,y,combat.aoe,12,o))hitOrb(target,target.x,target.y,true);
+  usedSpecial=true;
+ }
+ if(usedSpecial&&combat.cooldown>0)game.v14CooldownUntil=now+combat.cooldown*1000;
+};
+
+const v14BossClickBase=bossClick;
+bossClick=function(x,y){
+ const boss=game.boss;
+ if(!boss||!game.v14Combat)return v14BossClickBase(x,y);
+ const before=boss.hp;
+ const handled=v14BossClickBase(x,y);
+ if(handled&&boss.hp<before&&game.boss===boss){
+  const mods=game.v14Mods||v14Mods(false);
+  const bonus=(before-boss.hp)*(game.v14Combat.bossMult*mods.damage-1);
+  if(bonus>0)boss.hp-=bonus;
+  if(boss.hp<=0)defeatBoss();
+ }
+ return handled;
+};
+
+/* The endless wave ladder stays for Solo and Gauntlet; campaign stages own their own pacing. */
+const v14CheckWaveBase=checkWave;
+checkWave=function(){if(game.mode==='campaign')return;v14CheckWaveBase();};
+const v14NextWaveBase=nextWave;
+nextWave=function(){if(game.mode==='campaign')return;v14NextWaveBase();};
+
+const v14DefeatBossBase=defeatBoss;
+defeatBoss=function(){
+ const defeated=game.boss;
+ v14DefeatBossBase();
+ const v=v14Campaign();
+ if(!v||!defeated||v.done)return;
+ v.bossesDown++;
+ if(v.bossesDown>=v.target)v14CompleteStage();
+ else setTimeout(()=>{if(game.running&&!v.done)spawnBoss(true);},1600);
+};
+
+function v14StarsEarned(){
+ if(game.lives>=3)return 3;
+ if(game.lives>=2)return 2;
+ return 1;
+}
+
+function v14CompleteStage(){
+ const v=v14Campaign();
+ if(!v||v.done)return;
+ v.done=true;
+ const stage=v.stage;
+ const stars=v14StarsEarned();
+ const mods=game.v14Mods||v14Mods(false);
+ const base=stage.reward+Math.round(game.score/900)+Math.round(game.v14Credits||0);
+ const credits=v14AddCredits(base*mods.credits*(1+(stars-1)*.15));
+ save.shards+=stage.shards;
+ persist();
+ v14RecordStage(stage.index,stars,game.score);
+ v.awarded={credits,stars,shards:stage.shards};
+ cinematic('STAGE CLEAR');
+ audio.sfx('bossDown');
+ setTimeout(()=>{if(game.running)finish(true);},1200);
+}
+
+/* Hazards. Each one changes something the player can actually read on screen. */
+function v14SpawnMeteor(){
+ const v=v14Campaign();
+ if(!v)return;
+ v.meteors.push({
+  x:40+rng()*Math.max(1,W-80),
+  y:-50,
+  vy:150+rng()*90+v.stage.index*4,
+  r:(isMobile?20:17),
+  spin:rng()*6.28
+ });
+}
+
+function v14UpdateHazards(dt){
+ const v=v14Campaign();
+ if(!v||v.done)return;
+ if(v.kind==='survive'){
+  v.timeLeft=Math.max(0,v.timeLeft-dt);
+  if(v.timeLeft<=0){v14CompleteStage();return;}
+ }
+ if(v.hazards.includes('emp')){
+  v.nextEmp-=dt;
+  if(v.nextEmp<=0){
+   v.nextEmp=12;
+   v.empUntil=game.elapsed+4;
+   toast('EMP FIELD • POWERS OFFLINE');
+   audio.sfx('warning');
+  }
+ }
+ if(v.hazards.includes('swarm')){
+  v.nextSwarm-=dt;
+  if(v.nextSwarm<=0){
+   v.nextSwarm=9;
+   toast('SWARM SURGE INBOUND');
+   for(let i=0;i<4;i++)setTimeout(()=>{if(game.running)spawnOrb();},i*160);
+  }
+ }
+ if(v.hazards.includes('meteor')){
+  v.meteorTimer-=dt;
+  if(v.meteorTimer<=0){
+   v.meteorTimer=Math.max(.7,2.1-v.stage.index*.05);
+   v14SpawnMeteor();
+  }
+ }
+ const floor=H-(isMobile?95:65);
+ for(let i=v.meteors.length-1;i>=0;i--){
+  const m=v.meteors[i];
+  m.y+=m.vy*dt;
+  m.spin+=dt*5;
+  if(m.y>=floor){
+   v.meteors.splice(i,1);
+   explode(m.x,floor,'#ff8a3d',36,1.2);
+   damage();
+  }
+ }
+}
+
+function v14SyncObjective(){
+ const v=v14Campaign();
+ if(!v||v.done)return;
+ if(v.kind==='purge')v.progress=game.waveKills;
+ else if(v.kind==='elite')v.progress=v.eliteKills;
+ else if(v.kind==='perfect')v.progress=game.perfects;
+ else if(v.kind==='survive')v.progress=Math.min(v.target,Math.ceil(v.target-v.timeLeft));
+ else v.progress=v.bossesDown;
+ if(v.kind==='purge'||v.kind==='elite'||v.kind==='perfect'){
+  if(v.progress>=v.target)v14CompleteStage();
+ }
+}
+
+const v14UpdateBase=update;
+update=function(dt){
+ v14UpdateBase(dt);
+ if(!game.running||game.paused)return;
+ v14UpdateHazards(dt);
+ v14SyncObjective();
+};
+
+const v14DrawBase=draw;
+draw=function(){
+ v14DrawBase();
+ const v=v14Campaign();
+ if(!v)return;
+ for(const m of v.meteors){
+  ctx.save();
+  ctx.translate(m.x,m.y);
+  ctx.globalCompositeOperation='lighter';
+  const trail=ctx.createLinearGradient(0,-m.r*4.5,0,m.r);
+  trail.addColorStop(0,'transparent');
+  trail.addColorStop(.55,'#ff6a2a88');
+  trail.addColorStop(1,'#fff2c0');
+  ctx.fillStyle=trail;
+  v14Art.poly(ctx,[[0,-m.r*4.5],[-m.r*.8,m.r*.4],[0,m.r],[m.r*.8,m.r*.4]]);
+  ctx.fill();
+  ctx.rotate(m.spin);
+  ctx.shadowBlur=26;ctx.shadowColor='#ff8a3d';
+  ctx.fillStyle='#ffd08a';
+  v14Art.poly(ctx,[[0,-m.r],[m.r*.85,-m.r*.2],[m.r*.55,m.r*.8],[-m.r*.55,m.r*.8],[-m.r*.85,-m.r*.2]]);
+  ctx.fill();
+  ctx.restore();
+ }
+ if(v.hazards.includes('fog')){
+  ctx.save();
+  const fog=ctx.createRadialGradient(W/2,H*.62,Math.min(W,H)*.16,W/2,H*.62,Math.max(W,H)*.72);
+  fog.addColorStop(0,'transparent');
+  fog.addColorStop(.55,'rgba(10,26,46,.42)');
+  fog.addColorStop(1,'rgba(3,8,18,.9)');
+  ctx.fillStyle=fog;
+  ctx.fillRect(0,0,W,H);
+  ctx.restore();
+ }
+ if(v14EmpActive()){
+  ctx.save();
+  ctx.globalCompositeOperation='lighter';
+  ctx.globalAlpha=.16+Math.sin(game.elapsed*14)*.06;
+  ctx.fillStyle='#4bd8ff';
+  ctx.fillRect(0,0,W,H);
+  ctx.restore();
+ }
+};
+
+const v14TapBase=v12HandleTap;
+v12HandleTap=function(clientX,clientY,event){
+ const v=v14Campaign();
+ if(v&&v.meteors.length&&game.running&&!game.paused){
+  const rect=canvas.getBoundingClientRect();
+  const x=(clientX-rect.left)/rect.width*W,y=(clientY-rect.top)/rect.height*H;
+  for(const m of [...v.meteors]){
+   if(Math.hypot(x-m.x,y-m.y)<m.r+(isMobile?32:18)){
+    v.meteors.splice(v.meteors.indexOf(m),1);
+    explode(m.x,m.y,'#ffc46a',30,1.1);
+    score(600,'hit');
+    audio.sfx('defuse');
+    haptic(9);
+    if(event&&event.cancelable)event.preventDefault();
+    return;
+   }
+  }
+ }
+ v14TapBase(clientX,clientY,event);
+};
+
+const v14OverdriveBase=activateOverdrive;
+activateOverdrive=function(){
+ if(v14EmpActive()){toast('EMP FIELD • OVERDRIVE OFFLINE');return;}
+ v14OverdriveBase();
+};
+const v14BlastBase=activateBlast;
+activateBlast=function(){
+ if(v14EmpActive()){toast('EMP FIELD • BLAST OFFLINE');return;}
+ v14BlastBase();
+};
+
+const v14UpdateHudBase=updateHud;
+updateHud=function(){
+ v14UpdateHudBase();
+ const v=v14Campaign();
+ if(!v)return;
+ setText('worldName',v.stage.name);
+ setText('waveLabel',v.stage.index);
+ const label=v14ObjectiveLabels[v.kind]||'PURGE';
+ setText('directiveLabel',v.kind==='survive'
+  ? `${label} • ${Math.ceil(v.timeLeft)}s`
+  : `${label} • ${Math.min(v.progress,v.target)}/${v.target}`);
+ $('powersHud').classList.toggle('emp-offline',v14EmpActive());
+};
+
+/* Offline modes feed the same wallet the campaign does, so Solo and Gauntlet stay worth playing. */
+const v14FinishBase=finish;
+finish=function(victory=false,duelData=null){
+ if(!game.running)return v14FinishBase(victory,duelData);
+ const v=v14Campaign();
+ const stageResult=$('stageResult');
+ if(v){
+  if(!v.done){
+   const consolation=v14AddCredits((game.v14Credits||0)*.35+game.score/2200);
+   v14Persist();
+   v.awarded={credits:consolation,stars:0,shards:0,failed:true};
+  }
+  const award=v.awarded||{credits:0,stars:0,shards:0};
+  const stars=[0,1,2].map((i)=>i<award.stars?'★':'☆').join('');
+  stageResult.classList.remove('hidden');
+  stageResult.innerHTML=award.failed
+   ? `<b>STAGE ${v.stage.index} • ${escapeHtml(v.stage.name)}</b><span>REACTOR LOST — salvaged <em>${format(award.credits)}</em> credits</span>`
+   : `<b>STAGE ${v.stage.index} • ${escapeHtml(v.stage.name)}</b><span class="v14-star-row">${stars}</span><span>+<em>${format(award.credits)}</em> credits • +<em>${award.shards}</em> shards</span>`;
+  $('nextStageBtn').classList.toggle('hidden',award.failed||v.stage.index>=v14StageCount);
+ }else{
+  stageResult.classList.add('hidden');
+  $('nextStageBtn').classList.add('hidden');
+  if(game.mode!=='duel'){
+   const mods=game.v14Mods||v14Mods(false);
+   v14AddCredits(((game.v14Credits||0)+game.score/1400)*mods.credits);
+   v14Persist();
+  }
+ }
+ const result=v14FinishBase(victory,duelData);
+ if(v)$('resultTitle').textContent=v.awarded&&!v.awarded.failed?'STAGE CLEAR':'STAGE FAILED';
+ return result;
+};

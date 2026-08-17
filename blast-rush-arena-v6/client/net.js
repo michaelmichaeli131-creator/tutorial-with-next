@@ -18,6 +18,8 @@
       this.reconnectTimer = null;
       this.intentionalClose = false;
       this.pendingAction = null;
+      this.lastVitals = '';
+      this.lastVitalsAt = 0;
     }
 
     setName(name) {
@@ -131,9 +133,38 @@
       return this.send({ type: 'score', seq: ++this.seq, delta: Math.floor(delta), event, combo, wave });
     }
 
+    /**
+     * Mirror how the run is actually going, so the rival panel can show a person rather than a
+     * number. Lives are the part only this client knows — score, combo and wave already travel
+     * with `score`, so this only has to keep them honest between scoring events.
+     *
+     * Deliberately not sequenced like `score` and the sends. Those are commands, and a replayed one
+     * would grant something, so the server drops anything out of order. This grants nothing, so
+     * paying the same ordering cost would only mean a burst of scoring could swallow the update
+     * that says the player is down to their last reactor.
+     *
+     * Called from the HUD tick, so the gating matters: losing a reactor goes out at once, and
+     * everything else settles on a one-second heartbeat rather than a message per frame.
+     */
+    vitals(lives, combo, wave) {
+      if (!this.ready) return false;
+      const now = Date.now();
+      const urgent = String(lives) !== this.lastVitals;
+      if (!urgent && now - this.lastVitalsAt < 1000) return false;
+      if (urgent && now - this.lastVitalsAt < 220) return false;
+      this.lastVitals = String(lives);
+      this.lastVitalsAt = now;
+      return this.send({ type: 'vitals', lives, combo, wave });
+    }
+
     pressure() {
       if (!this.ready) return false;
       return this.send({ type: 'pressure', seq: ++this.seq });
+    }
+
+    sendAttack(kind) {
+      if (!this.ready) return false;
+      return this.send({ type: 'send_attack', seq: ++this.seq, kind });
     }
 
     launchCore() {
@@ -177,6 +208,18 @@
 
     async submitChallenge(code, result) {
       return this.post(`/api/challenges/${encodeURIComponent(code)}/attempt`, { name: this.playerName, score: result.score, wave: result.wave, perfects: result.perfects, maxCombo: result.maxCombo });
+    }
+
+    /* The daily board. Both calls are allowed to fail quietly at the call site: a run that cannot
+       reach the network is still a run, and the daily has to stay playable offline. */
+    async submitDaily(day, score, wave) {
+      return this.post('/api/daily', { day, name: this.playerName, score, wave });
+    }
+
+    async dailyBoard(day) {
+      const response = await fetch(`/api/daily?day=${encodeURIComponent(day)}`);
+      if (!response.ok) throw new Error('Daily board unavailable');
+      return response.json();
     }
 
     async leaderboard() {

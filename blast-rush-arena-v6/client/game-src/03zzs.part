@@ -1,0 +1,199 @@
+/* V71 — the one thing in the arena you must not touch.
+
+   V65 made a hostile that a tap cannot solve. This is its opposite and the pair is the point: with a
+   sealed hostile the player has to find the right thing to tap, and with a mine they have to notice
+   the wrong one. Between them a tap stops being safe by default, which is the last thing standing
+   between this game and "you just press the monsters" -- because until now every pixel in the arena
+   was either a target or empty, and there has never been a reason to look before pressing.
+
+   A mine takes one slot in a formation. It falls with the shape, it is drawn as obvious hardware
+   rather than as a creature, and V67 announces it in its own colour before it arrives. Tapping it
+   does no damage and costs a hot reactor and the combo. A blast destroys it safely and pays for it.
+
+   Three deliberate limits, because a punishment mechanic on a touchscreen goes wrong easily:
+
+   1. **It never threatens the reactor.** A mine that reaches the line is removed with a puff and no
+      cost. Anything the player is forbidden to tap must not also be able to hurt them by being
+      ignored -- that would be a hostile they have no answer to.
+   2. **The penalty is heat and combo, never a life.** Both are recoverable within seconds by playing
+      well, so a mis-tap on a phone with a thumb in the way is a setback and not a run ending.
+   3. **One twist per formation.** A formation never carries both a mine and a sealed hostile. Two
+      exceptions to the ordinary rule in one shape is not a harder puzzle, it is an unreadable one.
+
+   And, as with V65, the chain is the good answer: the tap that breaks the formation correctly takes
+   the mine with it and is *paid* for doing so. Every mechanic added since V63 points the same way. */
+
+const V71={
+ /* Chance a formation carries a mine, ramping gently. Lower than V65's sealed rate on purpose: a
+    sealed hostile asks the player to do something, a mine asks them not to, and a screen with too
+    many things not to touch stops being an arena and becomes a minefield. */
+ chance:(wave)=>Math.min(.55,.38+wave*.04),
+ /* Set at .16 first and measured over a played run: not one mine appeared. The arithmetic is worth
+    writing down because it is the same trap V65 fell into. This roll only happens on formations,
+    formations only arrive into a nearly clear field, almost all of them are wave one, and roughly
+    half are already carrying a sealed hostile and are skipped -- so a "one in six" chance was really
+    one in twelve arrivals of a kind that itself is not common. The number a player meets is the
+    product of every gate above it, not the number written here. */
+ /* Formations smaller than this keep all their slots. Turning one of three members into a hazard
+    leaves too little formation to break. */
+ minPack:3,
+ /* Heat charged for tapping one, on top of the ordinary landed-tap cost. A miss costs 17 and the
+    ceiling is 100, so this is roughly two mis-taps' worth: expensive, survivable, and it makes the
+    next few seconds of firing slower rather than taking anything away. */
+ heat:27,
+ /* Paid when a blast removes one. Modest -- clearing a mine is its own reward, and paying too well
+    for it would make players want mines, which is the wrong relationship. */
+ bonus:450,
+ core:'#ff4d5e',
+ shell:'#0d1424'
+};
+
+function v71IsMine(o){return !!(o&&o.v71Mine);}
+
+/* ---- Placing one ----
+
+   Hooked above V65 so the sealed member, if any, has already been chosen and this can stand down.
+   Reading the field slice rather than a tag, for the same reason V65 does: the members of this
+   arrival are exactly the orbs appended during the call, and a tag could match a leftover. */
+
+const v71SpawnBase=spawnOrb;
+spawnOrb=function(type){
+ const before=game.orbs.length;
+ v71SpawnBase(type);
+ if(game.mode==='duel')return;
+ const born=game.orbs.slice(before);
+ if(born.length<V71.minPack)return;
+ /* One twist per formation -- see the note at the top. */
+ if(born.some((o)=>o.v65Plates>0))return;
+ if(rng()>=V71.chance(game.wave))return;
+
+ /* Never the lowest member. A mine at the front of a descending shape is the first thing under the
+    thumb and turns the formation into a trap rather than a question. */
+ const pool=born.slice().sort((a,b)=>a.y-b.y).slice(0,Math.max(1,born.length-1));
+ const pick=pool[Math.floor(rng()*pool.length)];
+ if(!pick||pick.type==='rival')return;
+ pick.v71Mine=true;
+ pick.hp=1;
+ pick.maxHp=1;
+ /* Wards and dives are hostile behaviour and read as "this one is dangerous in a way you can answer".
+    A mine is not answerable, so it carries none of it. */
+ pick.v21Warded=false;
+ pick.v21Dive=false;
+};
+
+/* ---- Touching one ---- */
+
+const v71HitOrb=hitOrb;
+hitOrb=function(o,x,y,chain=false){
+ if(!v71IsMine(o))return v71HitOrb(o,x,y,chain);
+
+ if(chain){
+  /* A blast takes it, safely and for a small payment. This is the answer the whole design points
+     at, so it has to feel like a reward rather than like cleanup. */
+  const at=game.orbs.indexOf(o);
+  if(at>=0)game.orbs.splice(at,1);
+  explode(o.x,o.y,V71.core,30,1.1);
+  ring(o.x,o.y,V71.core,o.r+20);
+  score(V71.bonus,'chain');
+  audio.sfx('defuse');
+  return;
+ }
+
+ /* A direct tap. Nothing dies, the reactor runs hot, and the combo is gone. Marked as a landed tap
+    first, because V21 bills an unset flag as a complete miss and this wrapper returns before V21's
+    own ever runs -- the player did hit something, it was simply the wrong thing. */
+ game.v21Landed=true;
+ if(typeof v21AddHeat==='function')v21AddHeat(V71.heat);
+ game.combo=0;
+ game.shake=Math.min(save.comfort?4:22,(game.shake||0)+9);
+ ring(o.x,o.y,V71.core,o.r+14);
+ floating(o.x,o.y-o.r-18,'MINE',V71.core);
+ audio.sfx('warning');
+ haptic([22,26,22]);
+};
+
+/* ---- Saying so once ----
+
+   The same one-time toast V65 uses, for the same reason: V62's in-arena prompts only exist on a
+   player's very first run, and a mechanic that punishes a tap has to be named before it charges
+   anybody. Named when one is actually on screen rather than in a briefing, and never again -- the
+   flag lives in the save because the lesson is per player, not per run. */
+
+const v71Update=update;
+update=function(dt){
+ v71Update(dt);
+ if(!game.running||game.paused||save.v71Taught)return;
+ for(const o of game.orbs){
+  if(!o.v71Mine||o.y<=0)continue;
+  save.v71Taught=1;
+  persist();
+  toast('MINE — CLEAR IT WITH A BLAST');
+  return;
+ }
+};
+
+/* ---- Reaching the line ----
+
+   A mine that gets past the player leaves. It is the only thing in the arena that costs nothing on
+   arrival, and that is deliberate: see limit 1 at the top. */
+
+const v71Landed=v22Landed;
+v22Landed=function(o){
+ if(!v71IsMine(o)){v71Landed(o);return;}
+ explode(o.x,v22Line()-10,V71.shell,16,.5);
+ audio.sfx('armor');
+};
+
+/* ---- Drawing one ----
+
+   Not a creature and not drawn like one: no eyes, no limbs, no bob. A dark hexagonal casing with
+   hazard stripes and a core that pulses, which is the visual language every game uses for "do not
+   touch" and which nothing else in this arena uses. The base art is skipped entirely rather than
+   decorated, because a mine that looks even slightly like a hostile is a mine the player will
+   eventually tap by reflex. */
+
+const v71DrawOrb=drawOrb;
+drawOrb=function(o,w){
+ if(!v71IsMine(o))return v71DrawOrb(o,w);
+ const pulse=.55+Math.abs(Math.sin(game.elapsed*3.1+(o.phase||0)))*.45;
+ ctx.save();
+ ctx.translate(o.x,o.y);
+ ctx.rotate(Math.sin(game.elapsed*.5+(o.phase||0))*.12);
+
+ ctx.beginPath();
+ for(let i=0;i<6;i++){
+  const a=i/6*Math.PI*2-Math.PI/2;
+  const px=Math.cos(a)*o.r,py=Math.sin(a)*o.r;
+  if(i)ctx.lineTo(px,py);else ctx.moveTo(px,py);
+ }
+ ctx.closePath();
+ ctx.fillStyle=V71.shell;
+ ctx.fill();
+ ctx.lineWidth=3;
+ ctx.strokeStyle=V71.core;
+ ctx.globalAlpha=.55+pulse*.45;
+ ctx.stroke();
+
+ /* Hazard stripes across the casing, clipped to it. Diagonal bars are the one pattern that reads as
+    a warning at a glance and cannot be mistaken for anatomy. */
+ ctx.save();
+ ctx.clip();
+ ctx.globalAlpha=.28;
+ ctx.strokeStyle=V71.core;
+ ctx.lineWidth=5;
+ for(let i=-2;i<=2;i++){
+  ctx.beginPath();
+  ctx.moveTo(-o.r+i*13,o.r);
+  ctx.lineTo(o.r+i*13,-o.r);
+  ctx.stroke();
+ }
+ ctx.restore();
+
+ ctx.globalAlpha=pulse;
+ ctx.fillStyle=V71.core;
+ ctx.beginPath();
+ ctx.arc(0,0,o.r*.26,0,Math.PI*2);
+ ctx.fill();
+ ctx.restore();
+ ctx.globalAlpha=1;
+};

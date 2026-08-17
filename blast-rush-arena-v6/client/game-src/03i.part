@@ -1,0 +1,408 @@
+/* V14 INTERFACE — original launch artwork, stage select and the armory. */
+const v14LaunchCanvas=$('launchArt');
+const v14LaunchCtx=v14LaunchCanvas?v14LaunchCanvas.getContext('2d'):null;
+const v14MenuCanvas=$('menuArt');
+const v14MenuCtx=v14MenuCanvas?v14MenuCanvas.getContext('2d'):null;
+const v14StageKindLabels={purge:'PURGE',elite:'ELITE',perfect:'PRECISION',survive:'SURVIVAL',boss:'TITAN',gauntlet:'GAUNTLET'};
+
+function v14FitCanvas(canvasEl,context){
+ if(!canvasEl||!context)return null;
+ const rect=canvasEl.getBoundingClientRect();
+ if(rect.width<2||rect.height<2)return null;
+ const dpr=Math.min(devicePixelRatio||1,2);
+ const width=Math.round(rect.width*dpr),height=Math.round(rect.height*dpr);
+ if(canvasEl.width!==width||canvasEl.height!==height){canvasEl.width=width;canvasEl.height=height;}
+ context.setTransform(dpr,0,0,dpr,0,0);
+ return{w:rect.width,h:rect.height};
+}
+
+/* The launch scene is drawn from scratch every frame: sky, parallax stars, a rim-lit planet,
+   spire silhouettes, three approaching hostiles and the player's own pilot in the foreground. */
+function v14DrawLaunchScene(c,w,h,t){
+ const ch=v14Character();
+ const sky=c.createLinearGradient(0,0,0,h);
+ sky.addColorStop(0,'#04070f');
+ sky.addColorStop(.38,'#0b1836');
+ sky.addColorStop(.72,'#18143f');
+ sky.addColorStop(1,'#050411');
+ c.fillStyle=sky;
+ c.fillRect(0,0,w,h);
+
+ c.save();
+ c.globalCompositeOperation='lighter';
+ const bloom=c.createRadialGradient(w*.5,h*.52,0,w*.5,h*.52,Math.max(w,h)*.62);
+ bloom.addColorStop(0,ch.c1+'3a');
+ bloom.addColorStop(.5,ch.c2+'18');
+ bloom.addColorStop(1,'transparent');
+ c.fillStyle=bloom;
+ c.fillRect(0,0,w,h);
+ for(let layer=0;layer<3;layer++){
+  const count=layer===0?54:layer===1?34:18;
+  for(let i=0;i<count;i++){
+   const seed=i*97+layer*311;
+   const x=((seed*37)%1000)/1000*w;
+   const y=(((seed*53)%1000)/1000*h*.72+t*(2+layer*4))%(h*.78);
+   const size=.6+layer*.5;
+   c.globalAlpha=.2+.55*Math.abs(Math.sin(t*(.6+layer*.3)+i));
+   c.fillStyle=i%11===0?ch.c1:'#ffffff';
+   c.fillRect(x,y,size,size);
+  }
+ }
+ c.restore();
+
+ c.save();
+ const planetY=h*1.16,planetR=Math.max(w*.86,h*.5);
+ const planet=c.createRadialGradient(w*.32,planetY-planetR*.36,planetR*.05,w*.5,planetY,planetR);
+ planet.addColorStop(0,ch.c2+'cc');
+ planet.addColorStop(.42,'#141c3f');
+ planet.addColorStop(1,'#05060f');
+ c.fillStyle=planet;
+ c.beginPath();c.arc(w*.5,planetY,planetR,0,Math.PI*2);c.fill();
+ c.globalCompositeOperation='lighter';
+ c.strokeStyle=ch.c1+'88';
+ c.lineWidth=2.5;
+ c.beginPath();c.arc(w*.5,planetY,planetR,Math.PI*1.08,Math.PI*1.92);c.stroke();
+ c.restore();
+
+ c.save();
+ c.globalAlpha=.5;
+ c.fillStyle='#060a18';
+ const baseline=h*.70;
+ for(let i=0;i<9;i++){
+  const x=i*(w/8)-w/16;
+  const spire=44+((i*67)%5)*26;
+  v14Art.poly(c,[[x-16,baseline+90],[x-11,baseline-spire],[x,baseline-spire-22],[x+11,baseline-spire],[x+16,baseline+90]]);
+  c.fill();
+ }
+ c.globalAlpha=.85;
+ c.strokeStyle=ch.c1+'44';
+ c.lineWidth=1.4;
+ for(let i=0;i<9;i++){
+  const x=i*(w/8)-w/16;
+  const spire=44+((i*67)%5)*26;
+  c.beginPath();c.moveTo(x-11,baseline-spire);c.lineTo(x+11,baseline-spire);c.stroke();
+ }
+ c.restore();
+
+ c.save();
+ c.globalAlpha=.62;
+ for(let i=0;i<3;i++){
+  const drift=Math.sin(t*.9+i*2.1);
+  const x=w*(.2+i*.3)+drift*14;
+  const y=h*.365+Math.cos(t*1.2+i)*10;
+  const scale=(w<520?.5:.62)-i*.06;
+  c.save();
+  c.translate(x,y);
+  c.scale(scale,scale);
+  c.fillStyle='#050912';
+  v14Art.poly(c,[[0,-34],[26,-14],[21,20],[0,38],[-21,20],[-26,-14]]);
+  c.fill();
+  c.strokeStyle=ch.c1+'55';c.lineWidth=2;c.stroke();
+  c.globalCompositeOperation='lighter';
+  c.shadowBlur=18;c.shadowColor='#ff5f7d';
+  c.fillStyle='#ff8199';
+  for(const side of [-1,1]){
+   v14Art.poly(c,[[side*5,-9],[side*15,-5],[side*14,2],[side*5,0]]);
+   c.fill();
+  }
+  c.restore();
+ }
+ c.restore();
+
+ const heroScale=Math.min(w/320,h/560)*(w<520?1.62:1.85);
+ const heroY=h*.545;
+ c.save();
+ c.globalCompositeOperation='lighter';
+ const podiumY=heroY+52*heroScale;
+ const podium=c.createRadialGradient(w*.5,podiumY,4,w*.5,podiumY,w*.44);
+ podium.addColorStop(0,ch.c1+'66');
+ podium.addColorStop(1,'transparent');
+ c.fillStyle=podium;
+ c.beginPath();c.ellipse(w*.5,podiumY,w*.44,h*.045,0,0,Math.PI*2);c.fill();
+ c.restore();
+ v14DrawCharacter(c,v14Save.character,t,{
+  x:w*.5,
+  y:heroY+Math.sin(t*1.5)*4,
+  scale:heroScale,
+  auraRadius:96,
+  auraAlpha:.7,
+  glow:26
+ });
+
+ c.save();
+ c.globalCompositeOperation='lighter';
+ for(let i=0;i<16;i++){
+  const seed=i*53;
+  const x=w*.5+Math.sin(t*.6+i)*w*.32;
+  const y=h*.82-((t*38+seed*7)%(h*.42));
+  c.globalAlpha=.06+.2*Math.abs(Math.sin(t+i));
+  c.fillStyle=ch.c1;
+  c.fillRect(x,y,2,7);
+ }
+ c.restore();
+}
+
+let v14SceneRaf=0;
+function v14SceneFrame(ts){
+ const t=ts/1000;
+ const launchVisible=v14LaunchCanvas&&!v14LaunchCanvas.closest('.v14-launch')?.classList.contains('hidden');
+ if(launchVisible&&v14LaunchCtx){
+  const size=v14FitCanvas(v14LaunchCanvas,v14LaunchCtx);
+  if(size)v14DrawLaunchScene(v14LaunchCtx,size.w,size.h,t);
+ }
+ const menuActive=$('menuScreen').classList.contains('active');
+ if(menuActive&&v14MenuCtx&&!document.hidden){
+  const size=v14FitCanvas(v14MenuCanvas,v14MenuCtx);
+  if(size){
+   v14MenuCtx.clearRect(0,0,size.w,size.h);
+   v14DrawCharacter(v14MenuCtx,v14Save.character,t,{
+    x:size.w*.5,
+    y:size.h*.58,
+    scale:Math.min(size.w/190,size.h/230),
+    auraRadius:88,
+    auraAlpha:.6
+   });
+  }
+ }
+ v14SceneRaf=requestAnimationFrame(v14SceneFrame);
+}
+v14SceneRaf=requestAnimationFrame(v14SceneFrame);
+
+function v14RenderPreview(canvasEl,characterId){
+ const context=canvasEl.getContext('2d');
+ const size=v14FitCanvas(canvasEl,context);
+ if(!size)return false;
+ context.clearRect(0,0,size.w,size.h);
+ v14DrawCharacter(context,characterId,.7,{
+  x:size.w*.5,
+  y:size.h*.56,
+  scale:Math.min(size.w/150,size.h/175),
+  auraRadius:78,
+  auraAlpha:.55
+ });
+ return true;
+}
+
+/* ---------- Stage select ---------- */
+function v14RenderStages(){
+ const list=$('stageList');
+ list.innerHTML='';
+ $('campaignProgress').textContent=`${Object.keys(v14Save.stars).length} / ${v14StageCount}`;
+ $('campaignStars').textContent=`★ ${v14TotalStars()} / ${v14StageCount*3}`;
+ $('continueStageBtn').textContent=`CONTINUE • STAGE ${v14Save.lastStage}`;
+ let currentWorld=-1;
+ for(let index=1;index<=v14StageCount;index++){
+  const stage=v14Stage(index);
+  if(stage.world!==currentWorld){
+   currentWorld=stage.world;
+   const heading=document.createElement('h3');
+   heading.className='v14-world-heading';
+   heading.textContent=worlds[stage.world].name;
+   list.append(heading);
+  }
+  const unlocked=v14StageUnlocked(index);
+  const stars=v14Stars(index);
+  const card=document.createElement('button');
+  card.className='v14-stage-card'+(unlocked?'':' locked')+(index===v14Save.lastStage?' current':'');
+  card.disabled=!unlocked;
+  const hazards=(stage.hazards||[]).map((key)=>v14HazardTypes[key].name).join(' • ');
+  card.innerHTML=`
+   <span class="v14-stage-index">${unlocked?String(index).padStart(2,'0'):'🔒'}</span>
+   <span class="v14-stage-body">
+    <b>${escapeHtml(stage.name)}</b>
+    <span class="v14-stage-brief">${escapeHtml(unlocked?stage.brief:'Clear the previous stage to unlock this contract.')}</span>
+    ${hazards?`<span class="v14-stage-hazard">${escapeHtml(hazards)}</span>`:''}
+   </span>
+   <span class="v14-stage-meta">
+    <span class="v14-kind">${v14StageKindLabels[stage.kind]}</span>
+    <span class="v14-star-row">${[0,1,2].map((i)=>i<stars?'★':'☆').join('')}</span>
+    ${v14Save.best[index]?`<small>${format(v14Save.best[index])}</small>`:''}
+   </span>`;
+  card.addEventListener('click',()=>{if(v14StartStage(index))haptic(12);});
+  list.append(card);
+ }
+}
+
+function v14OpenCampaign(){
+ audio.start();
+ v14RenderStages();
+ showScreen('campaignScreen');
+}
+
+/* ---------- Armory ---------- */
+function v14WeaponCard(weapon){
+ const owned=v14Owned('weapons',weapon.id);
+ const level=v14WeaponLevel(weapon.id);
+ const equipped=v14Save.weapon===weapon.id;
+ const maxed=level>=weapon.max;
+ const upgradeCost=v14UpgradeCost(weapon.id);
+ const card=document.createElement('article');
+ card.className='v14-item-card'+(equipped?' equipped':'')+(owned?'':' locked');
+ const pips=Array.from({length:weapon.max},(_,i)=>`<i class="${i<level?'on':''}"></i>`).join('');
+ card.innerHTML=`
+  <header><b>${escapeHtml(weapon.name)}</b><span class="v14-tag">${escapeHtml(weapon.tag)}</span></header>
+  <p>${escapeHtml(weapon.desc)}</p>
+  <div class="v14-pips" aria-label="Weapon level ${level} of ${weapon.max}">${pips}</div>
+  <div class="v14-card-actions"></div>`;
+ const actions=card.querySelector('.v14-card-actions');
+ if(!owned){
+  const buy=document.createElement('button');
+  buy.className='primary compact';
+  buy.textContent=`UNLOCK • ${format(weapon.cost)}`;
+  buy.addEventListener('click',()=>{
+   if(!v14Spend(weapon.cost))return toast('NOT ENOUGH CREDITS');
+   v14Save.weapons[weapon.id]={owned:true,level:1};
+   v14Save.weapon=weapon.id;
+   v14Persist();
+   audio.sfx('perfect');
+   v14RenderArmory();
+   updateMenu();
+  });
+  actions.append(buy);
+ }else{
+  const equip=document.createElement('button');
+  equip.className='secondary compact';
+  equip.textContent=equipped?'EQUIPPED':'EQUIP';
+  equip.disabled=equipped;
+  equip.addEventListener('click',()=>{
+   v14Save.weapon=weapon.id;
+   v14Persist();
+   audio.sfx('defuse');
+   v14RenderArmory();
+   updateMenu();
+  });
+  actions.append(equip);
+  const upgrade=document.createElement('button');
+  upgrade.className='primary compact';
+  upgrade.textContent=maxed?'MAX LEVEL':`UPGRADE • ${format(upgradeCost)}`;
+  upgrade.disabled=maxed;
+  upgrade.addEventListener('click',()=>{
+   if(!v14Spend(upgradeCost))return toast('NOT ENOUGH CREDITS');
+   v14Save.weapons[weapon.id].level=level+1;
+   v14Persist();
+   audio.sfx('perfect');
+   toast(`${weapon.name} • LEVEL ${level+1}`);
+   v14RenderArmory();
+   updateMenu();
+  });
+  actions.append(upgrade);
+ }
+ return card;
+}
+
+function v14PilotCard(character){
+ const owned=v14Owned('characters',character.id);
+ const equipped=v14Save.character===character.id;
+ const card=document.createElement('article');
+ card.className='v14-item-card v14-pilot-card'+(equipped?' equipped':'')+(owned?'':' locked');
+ card.dataset.pilot=character.id;
+ card.innerHTML=`
+  <canvas class="v14-pilot-preview" aria-hidden="true"></canvas>
+  <header><b>${escapeHtml(character.name)}</b><span class="v14-tag">${escapeHtml(character.role)}</span></header>
+  <p>${escapeHtml(character.perk)}</p>
+  <div class="v14-card-actions"></div>`;
+ const actions=card.querySelector('.v14-card-actions');
+ if(!owned){
+  const buy=document.createElement('button');
+  buy.className='primary compact';
+  buy.textContent=`RECRUIT • ${format(character.cost)}`;
+  buy.addEventListener('click',()=>{
+   if(!v14Spend(character.cost))return toast('NOT ENOUGH CREDITS');
+   v14Save.characters[character.id]={owned:true};
+   v14Save.character=character.id;
+   v14Persist();
+   audio.sfx('perfect');
+   v14RenderArmory();
+   updateMenu();
+  });
+  actions.append(buy);
+ }else{
+  const equip=document.createElement('button');
+  equip.className='secondary compact';
+  equip.textContent=equipped?'DEPLOYED':'DEPLOY';
+  equip.disabled=equipped;
+  equip.addEventListener('click',()=>{
+   v14Save.character=character.id;
+   v14Persist();
+   audio.sfx('defuse');
+   v14RenderArmory();
+   updateMenu();
+  });
+  actions.append(equip);
+ }
+ requestAnimationFrame(()=>v14RenderPreview(card.querySelector('.v14-pilot-preview'),character.id));
+ return card;
+}
+
+function v14RenderArmory(){
+ $('armoryCredits').textContent=format(v14Save.credits);
+ $('armoryShards').textContent=format(save.shards);
+ const weaponList=$('weaponList'),pilotList=$('pilotList');
+ weaponList.innerHTML='';
+ pilotList.innerHTML='';
+ for(const weapon of v14Weapons)weaponList.append(v14WeaponCard(weapon));
+ for(const character of v14Characters)pilotList.append(v14PilotCard(character));
+}
+
+function v14ShowArmoryTab(tab){
+ const weapons=tab==='weapons';
+ $('tabWeapons').classList.toggle('active',weapons);
+ $('tabPilots').classList.toggle('active',!weapons);
+ $('weaponList').classList.toggle('hidden',!weapons);
+ $('pilotList').classList.toggle('hidden',weapons);
+ if(!weapons)requestAnimationFrame(()=>{
+  for(const card of document.querySelectorAll('#pilotList .v14-pilot-card')){
+   v14RenderPreview(card.querySelector('.v14-pilot-preview'),card.dataset.pilot);
+  }
+ });
+}
+
+function v14OpenArmory(){
+ audio.start();
+ v14RenderArmory();
+ v14ShowArmoryTab('weapons');
+ showScreen('armoryScreen');
+}
+
+/* ---------- Menu integration ---------- */
+const v14UpdateMenuBase=updateMenu;
+updateMenu=function(){
+ v14UpdateMenuBase();
+ const character=v14Character();
+ const weapon=v14WeaponDef();
+ $('creditsLabel').textContent=format(v14Save.credits);
+ $('armoryHint').textContent=weapon.name.split(' ')[0];
+ $('campaignBtnHint').textContent=v14Save.unlocked>1
+  ? `STAGE ${v14Save.lastStage} • ${v14Stage(v14Save.lastStage).name}`
+  : '15 stages • start the campaign';
+ $('launchPilot').textContent=character.name;
+ $('launchProgress').textContent=`STAGE ${v14Save.lastStage}`;
+ $('launchCredits').textContent=format(v14Save.credits);
+};
+
+bind('campaignBtn',v14OpenCampaign);
+bind('armoryBtn',v14OpenArmory);
+bind('continueStageBtn',()=>v14StartStage(v14Save.lastStage));
+bind('tabWeapons',()=>v14ShowArmoryTab('weapons'));
+bind('tabPilots',()=>v14ShowArmoryTab('pilots'));
+bind('nextStageBtn',()=>{
+ const next=Math.min(v14StageCount,v14Save.lastStage+1);
+ if(!v14StartStage(next))v14OpenCampaign();
+});
+
+/* The equipped pilot is the profile identity now, so the orb mirrors their colours. */
+const v14PaintSkinBase=paintSkinElement;
+paintSkinElement=function(el,id){
+ if(el&&el.id==='skinOrb'){
+  const character=v14Character();
+  el.style.background=`radial-gradient(circle at 34% 28%,#fff 0 8%,${character.c1} 20%,${character.c2} 56%,#02040d 78%)`;
+  el.style.boxShadow=`0 0 24px ${character.c1}`;
+  return;
+ }
+ v14PaintSkinBase(el,id);
+};
+
+addEventListener('resize',()=>{
+ if(v14LaunchCanvas)v14LaunchCanvas.width=0;
+ if(v14MenuCanvas)v14MenuCanvas.width=0;
+},{passive:true});

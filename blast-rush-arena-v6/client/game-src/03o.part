@@ -1,0 +1,196 @@
+/* V16 AUDIO — impacts rebuilt as layered sounds.
+   A punchy impact is three layers whose onsets land on the same instant: the transient (the snap
+   that makes it read as sharp), the body (the low weight), and the tail (debris and space). The
+   old single-oscillator blips had a body and no transient, which is exactly why they felt thin.
+   The snap is mixed slightly hotter than the body, which is what reads as "crisp". */
+audio.snap=function(when=0,gain=.5,cut=2600,pan=0){
+ if(!this.ctx)return;
+ const t=this.ctx.currentTime+when;
+ const len=Math.max(1,Math.floor(this.ctx.sampleRate*.05));
+ const buf=this.ctx.createBuffer(1,len,this.ctx.sampleRate);
+ const data=buf.getChannelData(0);
+ for(let i=0;i<len;i++)data[i]=(Math.random()*2-1)*Math.pow(1-i/len,4.5);
+ const src=this.ctx.createBufferSource();
+ const hp=this.ctx.createBiquadFilter();
+ const g=this.ctx.createGain();
+ const p=this.ctx.createStereoPanner?this.ctx.createStereoPanner():null;
+ src.buffer=buf;
+ hp.type='highpass';
+ hp.frequency.setValueAtTime(cut,t);
+ hp.Q.value=.7;
+ /* ~1ms attack: the whole point of the transient is that it arrives instantly. */
+ g.gain.setValueAtTime(.0001,t);
+ g.gain.exponentialRampToValueAtTime(Math.max(.0002,gain),t+.001);
+ g.gain.exponentialRampToValueAtTime(.0001,t+.045);
+ src.connect(hp);hp.connect(g);
+ if(p){p.pan.value=Math.max(-1,Math.min(1,pan));g.connect(p);p.connect(this.sfxGain);}
+ else g.connect(this.sfxGain);
+ src.start(t);src.stop(t+.06);
+};
+
+audio.body=function(when=0,from=190,to=44,dur=.24,gain=.5,pan=0,shape='sine'){
+ if(!this.ctx)return;
+ const t=this.ctx.currentTime+when;
+ const osc=this.ctx.createOscillator();
+ const g=this.ctx.createGain();
+ const p=this.ctx.createStereoPanner?this.ctx.createStereoPanner():null;
+ osc.type=shape;
+ osc.frequency.setValueAtTime(from,t);
+ osc.frequency.exponentialRampToValueAtTime(Math.max(18,to),t+dur*.85);
+ g.gain.setValueAtTime(.0001,t);
+ g.gain.exponentialRampToValueAtTime(Math.max(.0002,gain),t+.006);
+ g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+ osc.connect(g);
+ if(p){p.pan.value=Math.max(-1,Math.min(1,pan));g.connect(p);p.connect(this.sfxGain);}
+ else g.connect(this.sfxGain);
+ osc.start(t);osc.stop(t+dur+.04);
+};
+
+audio.tail=function(when=0,dur=.5,gain=.28,cut=1100,pan=0){
+ if(!this.ctx)return;
+ const t=this.ctx.currentTime+when;
+ const len=Math.max(1,Math.floor(this.ctx.sampleRate*dur));
+ const buf=this.ctx.createBuffer(1,len,this.ctx.sampleRate);
+ const data=buf.getChannelData(0);
+ for(let i=0;i<len;i++)data[i]=(Math.random()*2-1)*Math.pow(1-i/len,2.6);
+ const src=this.ctx.createBufferSource();
+ const lp=this.ctx.createBiquadFilter();
+ const g=this.ctx.createGain();
+ const p=this.ctx.createStereoPanner?this.ctx.createStereoPanner():null;
+ src.buffer=buf;
+ lp.type='lowpass';
+ lp.frequency.setValueAtTime(cut*2.2,t);
+ lp.frequency.exponentialRampToValueAtTime(Math.max(160,cut*.5),t+dur);
+ g.gain.setValueAtTime(Math.max(.0002,gain),t);
+ g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+ src.connect(lp);lp.connect(g);
+ if(p){p.pan.value=Math.max(-1,Math.min(1,pan));g.connect(p);p.connect(this.sfxGain);}
+ else g.connect(this.sfxGain);
+ src.start(t);src.stop(t+dur+.05);
+};
+
+/* A metallic ring for armoured targets: a few inharmonic partials decaying together. */
+audio.ring=function(when=0,base=520,gain=.16,pan=0){
+ if(!this.ctx)return;
+ for(const ratio of [1,2.41,3.83]){
+  this.tone(base*ratio,.34,'triangle',gain/ratio,this.sfxGain,when,.96,pan);
+ }
+};
+
+/* Per-species destruction kits. Combo raises pitch, which is the classic escalating-reward curve. */
+const V16_KITS={
+ normal:{from:180,to:46,dur:.24,cut:2600,tailCut:1000,tailDur:.42,gain:.5},
+ armored:{from:150,to:38,dur:.32,cut:1900,tailCut:750,tailDur:.6,gain:.62,metal:true},
+ bomb:{from:120,to:28,dur:.46,cut:1500,tailCut:520,tailDur:.85,gain:.78,boom:true},
+ shard:{from:300,to:96,dur:.2,cut:4200,tailCut:2600,tailDur:.44,gain:.46,glass:true},
+ splitter:{from:200,to:52,dur:.26,cut:2400,tailCut:1100,tailDur:.5,gain:.54,twin:true},
+ rival:{from:140,to:34,dur:.38,cut:2100,tailCut:820,tailDur:.7,gain:.7,metal:true}
+};
+
+let v16LastImpact=0;
+let v16ImpactsInWindow=0;
+
+audio.impact=function(type,power=1,combo=0,perfect=false){
+ if(!this.ctx)return;
+ const now=this.ctx.currentTime;
+ /* Chain kills can fire a dozen impacts in one frame; without a budget they turn to mush. */
+ if(now-v16LastImpact<.05)v16ImpactsInWindow++;
+ else v16ImpactsInWindow=0;
+ v16LastImpact=now;
+ if(v16ImpactsInWindow>3)return;
+
+ const kit=V16_KITS[type]||V16_KITS.normal;
+ const heat=Math.min(1,combo/22);
+ const pitch=1+heat*.5+(perfect?.12:0);
+ const level=Math.min(1.15,kit.gain*power)*(1-v16ImpactsInWindow*.18);
+ const pan=Math.max(-.7,Math.min(.7,(Math.random()-.5)*1.1));
+
+ /* All three onsets share t=0 so they fuse into one event instead of a flam. */
+ this.snap(0,level*.62,kit.cut*pitch,pan);
+ this.body(0,kit.from*pitch,kit.to,kit.dur,level*.5,pan,kit.boom?'sawtooth':'sine');
+ this.tail(0,kit.tailDur,level*.3,kit.tailCut,pan);
+
+ if(kit.metal)this.ring(.008,480*pitch,level*.2,pan);
+ if(kit.glass){
+  for(let i=0;i<4;i++)this.tone(1500*pitch*(1+i*.34),.18,'triangle',level*.09,this.sfxGain,.01+i*.018,.72,pan);
+ }
+ if(kit.twin)this.body(.055,kit.from*pitch*.86,kit.to,kit.dur*.8,level*.3,-pan,'sine');
+ if(kit.boom){
+  this.body(.02,58,20,.7,level*.42,0,'sine');
+  this.tail(.03,1.05,level*.22,320,0);
+ }
+ if(perfect)this.tone(1180*pitch,.22,'sine',level*.16,this.sfxGain,.012,1.35,pan);
+ haptic(power>1.2?[14,10,18]:10);
+};
+
+/* With impact carrying the destruction, the tap sounds become light and fast so they never
+   compete with it — the weapon connecting, not the thing dying. */
+const v16SfxBase=audio.sfx.bind(audio);
+audio.sfx=function(name){
+ if(!this.ctx)return;
+ switch(name){
+  case 'hit':
+   this.snap(0,.16,3400,(Math.random()-.5)*.6);
+   this.tone(520,.05,'triangle',.06,this.sfxGain,0,.72);
+   return;
+  case 'perfect':
+   this.snap(0,.2,4600,(Math.random()-.5)*.5);
+   this.tone(880,.09,'sine',.1,this.sfxGain,0,1.5);
+   this.tone(1320,.14,'triangle',.06,this.sfxGain,.03,1.2,.24);
+   return;
+  case 'armor':
+   this.snap(0,.24,1500);
+   this.ring(.004,300,.13);
+   this.body(0,120,60,.16,.22,0,'square');
+   return;
+  case 'damage':
+   this.snap(0,.34,900);
+   this.body(0,140,26,.62,.5,0,'sawtooth');
+   this.tail(.01,.9,.36,420);
+   haptic([28,22,40]);
+   return;
+  case 'blast':
+   this.snap(0,.6,1200);
+   this.body(0,150,20,.95,.7,0,'sawtooth');
+   this.body(.03,70,16,1.2,.5);
+   this.tail(.02,1.3,.42,520);
+   haptic([22,16,54]);
+   return;
+  case 'overdrive':
+   this.snap(0,.4,2200);
+   for(let i=0;i<5;i++)this.tone(240*Math.pow(1.26,i),.42,'sawtooth',.1,this.sfxGain,i*.045,1.5,(i-2)*.22);
+   this.tail(.02,.9,.24,1600);
+   return;
+  case 'boss':
+   this.body(0,60,26,1.5,.62,0,'sawtooth');
+   this.tail(0,1.6,.4,300);
+   for(let i=0;i<3;i++)this.tone(90*Math.pow(.86,i),1.1,'sawtooth',.13,this.sfxGain,i*.12,.7);
+   haptic([40,30,60]);
+   return;
+  case 'bossDown':
+   /* A staged collapse rather than one hit: crack, cave-in, then a long settling tail. */
+   this.snap(0,.7,1400);
+   this.body(0,180,28,.9,.7,0,'sawtooth');
+   for(let i=0;i<6;i++){
+    this.snap(.09+i*.075,.3,1100-i*90,(i%2?.4:-.4));
+    this.body(.09+i*.075,140-i*12,22,.5,.34,(i%2?.3:-.3),'sine');
+   }
+   this.body(.5,54,16,1.9,.55);
+   this.tail(.5,2.2,.4,380);
+   haptic([50,30,90]);
+   return;
+  default:
+   return v16SfxBase(name);
+ }
+};
+
+/* Music reacts to how well you are doing, not just to the wave number. */
+const v16AudioUpdateBase=audio.update.bind(audio);
+audio.update=function(g){
+ v16AudioUpdateBase(g);
+ if(!this.ctx||!this.musicFilter)return;
+ const heat=Math.min(1,(g.combo||0)/26);
+ const danger=g.running&&g.lives<=1?.3:0;
+ this.musicFilter.frequency.setTargetAtTime(2400+heat*8200+danger*1500,this.ctx.currentTime,.2);
+ if(this.delayGain)this.delayGain.gain.setTargetAtTime(.1+heat*.14,this.ctx.currentTime,.3);
+};

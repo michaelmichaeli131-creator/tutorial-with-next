@@ -1,0 +1,152 @@
+/* V17 — drive the rebuilt combat HUD: pilot portrait, combo banner, boss percentage, and damage
+   numbers with the weight the reference art gives them. */
+const v17Portrait=$('hudPortrait');
+const v17PortraitCtx=v17Portrait?v17Portrait.getContext('2d'):null;
+const v17Combo=$('comboBanner');
+let v17PortraitFor='';
+
+/* Bust framing: the pilot art is full-body, so scale and offset it so the head and shoulders fill
+   the little square instead of a distant full figure. */
+function v17DrawPortrait(force=false){
+ if(!v17PortraitCtx)return;
+ const id=v14Save.character;
+ /* The early-out has to come first. v14FitCanvas calls getBoundingClientRect, and this runs from
+    updateHud on every frame — so measuring before deciding forced the browser to flush layout
+    synchronously in the middle of the frame, sixty times a second, to answer a question whose
+    answer was thrown away. It was the single largest non-drawing cost in the profile and it made
+    the counters report 1.58 layouts per frame where a frame needs one. */
+ if(!force&&id===v17PortraitFor)return;
+ const size=v14FitCanvas(v17Portrait,v17PortraitCtx);
+ if(!size)return;
+ v17PortraitFor=id;
+ v17PortraitCtx.clearRect(0,0,size.w,size.h);
+ v14DrawCharacter(v17PortraitCtx,id,.8,{
+  x:size.w*.5,
+  y:size.h*.71,
+  scale:size.h/61,
+  auraRadius:44,
+  auraAlpha:.32,
+  glow:14
+ });
+}
+
+const V17_RANKS=[
+ {at:60,label:'BEYOND GODLIKE',peak:true},
+ {at:40,label:'GODLIKE',peak:true},
+ {at:25,label:'RAMPAGE',peak:true},
+ {at:15,label:'INSANE'},
+ {at:7,label:'GREAT'},
+ {at:3,label:'NICE'}
+];
+
+const v17UpdateHudBase=updateHud;
+updateHud=function(){
+ v17UpdateHudBase();
+
+ v17DrawPortrait();
+ setText('hudLevel',save.level);
+ setText('hudPilotName',v14Character().name.replace(/^(NOVA|EMBER|ORCHID|FROST|VOID|OMEGA)\s+/,''));
+ setText('hudCredits',format(v14Save.credits));
+
+ const combo=game.combo||0;
+ const rank=V17_RANKS.find((r)=>combo>=r.at);
+ v17Combo.classList.toggle('hidden',!rank);
+ if(rank){
+  setText('comboBig',combo);
+  setText('comboRankBig',rank.label);
+  setText('comboBonus','+'+Math.min(100,combo*2)+'%');
+  v17Combo.classList.toggle('peak',Boolean(rank.peak));
+ }
+
+ const boss=game.boss;
+ if(boss)setText('bossPct',Math.max(0,Math.round(boss.hp/boss.maxHp*100))+'%');
+};
+
+/* The portrait is only re-fitted when the pilot changes now, so a rotation or a window resize has
+   to say so explicitly — otherwise the canvas keeps the backing store it was given at the old
+   size and the bust renders soft or cropped for the rest of the session. */
+addEventListener('resize',()=>{v17PortraitFor='';},{passive:true});
+
+const v17ShowGameBase=showGame;
+showGame=function(){
+ v17ShowGameBase();
+ v17DrawPortrait(true);
+ v17Combo.classList.add('hidden');
+};
+const v17HideGameBase=hideGame;
+hideGame=function(){
+ v17HideGameBase();
+ v17Combo.classList.add('hidden');
+};
+
+/* ---------- Damage numbers ----------
+   The base renderer draws small flat text. Numbers are a primary readout in this genre, so they
+   get scaled by magnitude, outlined so they survive any background, and popped on arrival.
+   The base text is made transparent rather than removed, so its motion and lifetime still drive. */
+const v17FloatingBase=floating;
+floating=function(x,y,text,color='#fff'){
+ v17FloatingBase(x,y,text,color);
+ const entry=game.texts[game.texts.length-1];
+ if(!entry)return;
+ entry.v17Color=color;
+ entry.color='rgba(0,0,0,0)';
+ const value=parseInt(String(text).replace(/[^0-9]/g,''),10)||0;
+ entry.v17Size=Math.min(26,14+Math.log10(value+1)*5.2);
+ entry.v17Gold=value>=1000||/PERFECT|SHIELDED|SWIFT|SIEGE/.test(String(text));
+ /* Chain kills and boss weak points fire several popups from the same point in the same frame.
+    Random jitter is not enough to separate them, so consecutive popups cascade down-right in
+    slots — the same readable stagger the reference art uses for stacked damage. */
+ const now=performance.now();
+ game.v17Slot=(now-(game.v17SlotAt||0)<420)?((game.v17Slot||0)+1)%5:0;
+ game.v17SlotAt=now;
+ entry.x+=game.v17Slot*20-38+(Math.random()-.5)*16;
+ entry.y+=game.v17Slot*30;
+ entry.life=entry.max=.8+game.v17Slot*.06;
+ while(game.texts.length>6)game.texts.shift();
+};
+
+const v17DrawBase=draw;
+draw=function(){
+ v17DrawBase();
+ if(!game.texts.length)return;
+ ctx.save();
+ ctx.textAlign='center';
+ ctx.textBaseline='middle';
+ ctx.lineJoin='round';
+ for(const t of game.texts){
+  if(!t.v17Size)continue;
+  const k=Math.max(0,t.life/t.max);
+  /* Pop: overshoot on arrival, settle within the first third of the lifetime. */
+  const age=1-k;
+  const pop=age<.3?1.34-(age/.3)*.34:1;
+  ctx.save();
+  ctx.globalAlpha=Math.min(1,k*1.8);
+  ctx.translate(t.x,t.y);
+  ctx.scale(pop,pop);
+  ctx.font=`1000 ${t.v17Size}px system-ui,sans-serif`;
+  ctx.lineWidth=Math.max(4,t.v17Size*.24);
+  ctx.strokeStyle='rgba(8,3,14,.95)';
+  ctx.strokeText(t.text,0,0);
+  const grad=ctx.createLinearGradient(0,-t.v17Size*.6,0,t.v17Size*.6);
+  if(t.v17Gold){
+   grad.addColorStop(0,'#fffdf2');
+   grad.addColorStop(.4,'#ffe488');
+   grad.addColorStop(.75,'#ffb52e');
+   grad.addColorStop(1,'#ff8f12');
+  }else{
+   grad.addColorStop(0,'#ffffff');
+   grad.addColorStop(.6,'#d8ecff');
+   grad.addColorStop(1,t.v17Color||'#9fd0ff');
+  }
+  ctx.fillStyle=grad;
+  ctx.fillText(t.text,0,0);
+  ctx.restore();
+ }
+ ctx.restore();
+ ctx.globalAlpha=1;
+};
+
+addEventListener('resize',()=>{
+ if(v17Portrait)v17Portrait.width=0;
+ v17PortraitFor='';
+},{passive:true});

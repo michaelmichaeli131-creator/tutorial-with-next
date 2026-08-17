@@ -1,0 +1,185 @@
+/* V62 — a first-time player meets a menu, not a game.
+
+   What a new player currently does: tap PLAY on the launch screen, wait 520ms, land on a menu with
+   **six mode buttons and a five-item bottom nav**, get a modal with three cards of text, dismiss it,
+   pick CAMPAIGN — which does not start a game, it opens a stage-select screen — and then tap CONTINUE.
+   Two navigation decisions and a wall of prose before anything happens.
+
+   The research on this is consistent and unkind. Core gameplay wants to be running inside sixty
+   seconds and the "aha" inside ninety; instruction wants to be under thirty seconds and *contextual*,
+   taught at the moment a mechanic first matters rather than in a pre-flight briefing; and meta systems
+   — shops, currencies, pilots — belong in sessions three to five, not session one. The named failure
+   modes are almost a description of this build: long tap-through tutorials, prose that does not match
+   what the game actually asks of you, and a shop presented before the player has any reason to want
+   one. This game shows a first-time player twelve purchasable items they cannot afford: the wallet
+   opens at 300 credits and the cheapest weapon is 900.
+
+   And there is no new-player detection anywhere to hang a fix on — `save.runs` is incremented in
+   `begin()` and, across the whole client, never read once.
+
+   So: the first tap plays the game.
+
+   A player whose save has never seen a run goes from the launch screen straight into stage one. No
+   mode menu, no stage select, no modal. The menu is where they land *after* that run, at which point
+   it is answering questions they now have — what were those credits, what is the daily — rather than
+   asking questions they cannot yet have opinions about.
+
+   Teaching moves into the arena and happens twice, in one short line each, at the moment each thing
+   is true. That is the whole tutorial. */
+
+const V62={
+ /* Prompts are drawn on the arena rather than in the DOM so they sit in the same visual space as the
+    thing they are describing, and cannot be mistaken for chrome the player is meant to tap. */
+ hold:2.6,
+ fade:.5,
+ /* The stage briefing card ("FIRST CONTACT -- Scout wave inbound") occupies the middle of the screen
+    for the first couple of seconds, and the first version of this drew straight through it. Holding
+    the prompts until it clears has a second benefit that matters more: a player who has already
+    worked out the verb and killed something inside two seconds never sees an instruction at all,
+    which is the right outcome. Only someone who is actually stuck gets taught. */
+ briefing:2.4,
+ /* Ceiling on the chain prompt, for a player who has not managed a cascade yet. Long enough to
+    cover a formation arriving and being dealt with, short enough that it is not still on screen
+    two formations later. */
+ teach:9
+};
+
+function v62FirstRun(){return (save.runs||0)===0;}
+
+/* ---- The first tap plays the game ----
+
+   Hooked on the launch button rather than on `showScreen`. The first attempt wrapped
+   `showScreen('menuScreen')` and never fired: the launch screen is an *overlay* sitting on top of the
+   menu, so dismissing it reveals the menu without any screen transition happening at all. Measured
+   rather than assumed -- a cold player still sat on the menu with the coach modal up.
+
+   Listeners are additive, so this runs alongside the existing handler instead of replacing it, and
+   both of the launch screen's two dismissal paths are covered. */
+
+let v62Launched=false;
+
+function v62Boot(){
+ if(v62Launched||!v62FirstRun())return;
+ v62Launched=true;
+ /* Long enough for the launch overlay's own 520ms fade to finish, so the stage does not appear
+    underneath a screen that is still on its way out. */
+ setTimeout(()=>{
+  if(typeof v14StartStage==='function')v14StartStage(1);
+ },620);
+}
+
+/* The coach modal is suppressed at load rather than dismissed later: 03e only shows it if the flag
+   is absent when the launch screen closes, so setting it now means it never appears, and the two
+   in-arena prompts below take its place. */
+if(v62FirstRun()){
+ try{localStorage.setItem('blastRushCoachV13','1');}catch(e){}
+}
+
+$('enterArenaBtn')?.addEventListener('click',v62Boot);
+$('launchScreen')?.addEventListener('pointerdown',(event)=>{
+ if(event.target===$('launchScreen'))v62Boot();
+});
+
+/* ---- Two lines, each at the moment it is true ---- */
+
+const V62_STEPS=[
+ /* Shown from the first frame of the first run until something dies. It is the only instruction the
+    game strictly needs: the verb is "tap the thing". */
+ {id:'tap',text:'TAP THE MONSTERS',sub:'Stop them reaching your reactor'},
+ /* Second, because it is the one that changes what a tap IS. A kill detonates and takes its
+    neighbours with it (V63), and hostiles now arrive in formations built around that (V64) -- a
+    player who does not know it plays the old game of one tap per monster and never finds out.
+    Cleared by doing it rather than by a timer: the moment a cascade fires, the prompt has been
+    understood better than it could ever be read. */
+ {id:'chain',text:'BREAK THEM TOGETHER',sub:'A kill blasts whatever is beside it'},
+ /* Last, because V57's multiplier is a scoring gradient rather than a verb. A player who does not
+    yet know how to kill things cannot act on where it is best to kill them. */
+ {id:'band',text:'KILL LOW FOR MORE',sub:'Deep in the marked zone pays up to ×4.6'}
+];
+
+let v62Step=0;
+let v62Shown=-1;
+let v62Age=0;
+let v62Kills=0;
+let v62Run=0;
+
+const v62Begin=begin;
+begin=function(mode='solo',seed){
+ /* Captured before the base call, which is what increments save.runs -- after it, every run looks
+    like a first run's successor and the prompts would never appear. */
+ const first=v62FirstRun();
+ const out=v62Begin(mode,seed);
+ if(first){v62Step=0;v62Shown=-1;v62Age=0;v62Kills=0;v62Run=0;}
+ else v62Step=V62_STEPS.length;
+ return out;
+};
+
+const v62Update=update;
+update=function(dt){
+ v62Update(dt);
+ if(!game.running||game.paused)return;
+ if(v62Step>=V62_STEPS.length)return;
+ v62Run+=dt;
+ if(v62Run<V62.briefing)return;
+ if(v62Shown!==v62Step){v62Shown=v62Step;v62Age=0;}
+ v62Age+=dt;
+ /* The first two prompts clear on evidence -- a kill, then a cascade. The player has demonstrated
+    the thing, so the instruction has done its job and further nagging is noise. Each also clears on
+    a generous timer so a player who cannot yet manage a cascade is not stared at indefinitely by a
+    line of text; the mechanic will teach itself the first time it fires. The last one clears on the
+    timer alone, because "aim lower" is a suggestion rather than a gate and there is nothing to
+    demonstrate. */
+ if(v62Step===0&&game.kills>0){v62Step=1;return;}
+ if(v62Step===1&&((game.v63Chains||0)>0||v62Age>V62.teach)){v62Step=2;return;}
+ if(v62Step===2&&v62Age>V62.hold+V62.fade)v62Step=3;
+};
+
+const v62HitOrb=hitOrb;
+hitOrb=function(o,x,y,chain=false){
+ const before=game.kills;
+ const out=v62HitOrb(o,x,y,chain);
+ if(game.kills>before)v62Kills+=game.kills-before;
+ return out;
+};
+
+const v62Draw=draw;
+draw=function(){
+ v62Draw();
+ if(!game.running||game.paused||v62Step>=V62_STEPS.length)return;
+ if(v62Run<V62.briefing)return;
+ const step=V62_STEPS[v62Step];
+ /* The first prompt has no timed fade at all -- it waits for the player, because there is nothing
+    to do until they tap something. The second fades out at its own ceiling; the third on the short
+    hold, since it is advice rather than instruction. */
+ const alpha=v62Step===0
+  ? 1
+  : v62Step===1
+   ? Math.max(0,Math.min(1,(V62.teach-v62Age)/V62.fade))
+   : Math.max(0,Math.min(1,(V62.hold+V62.fade-v62Age)/V62.fade));
+ if(alpha<=0)return;
+
+ const line=typeof v57Line==='function'?v57Line():H-(isMobile?105:72);
+ /* Above the strike band and below the HUD: the one horizontal strip of the arena that is neither
+    chrome nor the place the player is about to be looking. */
+ const y=line*.44;
+ ctx.save();
+ ctx.globalAlpha=alpha;
+ ctx.textAlign='center';
+ ctx.textBaseline='middle';
+
+ const w=Math.min(W-40,300);
+ ctx.fillStyle='rgba(3,8,20,.72)';
+ if(ctx.roundRect){ctx.beginPath();ctx.roundRect(W/2-w/2,y-30,w,60,14);ctx.fill();}
+ else ctx.fillRect(W/2-w/2,y-30,w,60);
+ ctx.strokeStyle='rgba(126,232,255,.28)';
+ ctx.lineWidth=1;
+ if(ctx.roundRect){ctx.stroke();}
+
+ ctx.fillStyle='#eaf6ff';
+ ctx.font=`800 ${isMobile?17:19}px system-ui`;
+ ctx.fillText(step.text,W/2,y-8);
+ ctx.fillStyle='rgba(178,208,235,.8)';
+ ctx.font=`600 ${isMobile?11:12}px system-ui`;
+ ctx.fillText(step.sub,W/2,y+14);
+ ctx.restore();
+};

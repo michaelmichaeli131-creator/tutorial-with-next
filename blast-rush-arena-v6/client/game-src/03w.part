@@ -1,0 +1,51 @@
+/* V19 — duel mode maintenance.
+   Duel had not been revisited since V13 while everything around it changed, so this reconnects it
+   to the current HUD and tightens one fairness problem in the shared-seed model. */
+
+/* The HUD grows a rival row in a duel; elements pinned below it shift to match. */
+const v19BeginDuel=begin;
+begin=function(mode='solo',seed){
+ v19BeginDuel(mode,seed);
+ document.body.classList.toggle('duel-active',mode==='duel');
+};
+const v19HomeDuel=home;
+home=function(){
+ document.body.classList.remove('duel-active');
+ return v19HomeDuel();
+};
+const v19FinishDuel=finish;
+finish=function(victory=false,duelData=null){
+ const result=v19FinishDuel(victory,duelData);
+ document.body.classList.remove('duel-active');
+ return result;
+};
+
+/* ---------- Shared-seed fairness ----------
+   Both duellists simulate their own field from one seed, so the field is only actually shared if
+   both consume the seeded generator in the same order. It never did: explode() draws several rng()
+   values per hit, and hits are player-driven, so the stream diverged the moment either player
+   touched the screen. Every later addition that rolls dice — elite selection, wraith blinks, siege
+   fire angles — inherited the same drift.
+
+   Spawns are the part that decides whether the two fields are comparable, so they now run on their
+   own stream. Visual effects keep consuming the original one and can no longer perturb what
+   enemies appear or where. */
+const v19SpawnOrbOuter=spawnOrb;
+spawnOrb=function(type){
+ if(game.playRng===undefined)game.playRng=(game.seed|0)^0x5f3759df;
+ const effectState=game.rng;
+ game.rng=game.playRng;
+ try{
+  v19SpawnOrbOuter(type);
+ }finally{
+  game.playRng=game.rng;
+  game.rng=effectState;
+ }
+};
+
+const v19BeginSeed=begin;
+begin=function(mode='solo',seed){
+ v19BeginSeed(mode,seed);
+ /* Derived from the match seed, so both clients start the spawn stream identically. */
+ game.playRng=(game.seed|0)^0x5f3759df;
+};

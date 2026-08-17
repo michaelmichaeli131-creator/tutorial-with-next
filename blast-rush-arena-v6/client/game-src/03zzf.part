@@ -1,0 +1,99 @@
+/* V58 — the challenge loop only ever ran one way.
+
+   `shareChallenge()` posts a run, builds a `?challenge=CODE` link and shares it. `handleUrl()` reads
+   that parameter, fetches the challenge, toasts "BEAT <NAME> • <SCORE>" and starts the run on the
+   creator's seed. All of that works.
+
+   Nothing ever posts the result back. `BlastNetwork.submitChallenge()` exists in net.js and has zero
+   callers anywhere in the client, and `POST /api/challenges/:code/attempt` is fully implemented on
+   the server — it stores the attempt, computes a rank against the other attempts, and returns
+   `beatCreator` and `creatorScore`. That response has never once been received by anything.
+
+   So the most viral mechanic in the build is a one-way link: the challenged player is never told
+   whether they won, the challenger is never told anyone tried, and `record.attempts` stays
+   permanently empty. Two people who wanted to compete with each other both get told nothing.
+
+   This is not a design decision that needs justifying, it is a wire that was never connected. */
+
+/* Read from the URL rather than by wrapping `handleUrl`, which lives in 04.part and is the last part
+   in the bundle. Same source of truth, no ordering assumption. */
+const V58_CODE=(()=>{
+ try{return new URLSearchParams(location.search).get('challenge')||null;}
+ catch(e){return null;}
+})();
+
+let v58Pending=!!V58_CODE;
+let v58Creator=null;
+
+/* The creator's name and score, so the run can be framed as a duel with a person instead of a
+   number. Fetched once, quietly — the challenge is playable whether or not this resolves. */
+if(V58_CODE&&typeof BlastNetwork==='object'){
+ Promise.resolve()
+  .then(()=>BlastNetwork.getChallenge(V58_CODE))
+  .then((payload)=>{const c=(payload&&payload.challenge)||payload;if(c&&c.creatorName)v58Creator=c;})
+  .catch(()=>{/* offline, expired, or a bad code: the run still counts, it just is not a duel */});
+}
+
+const v58Finish=finish;
+finish=function(victory=false,duelData=null){
+ const shouldPost=v58Pending&&game.running&&game.mode!=='duel';
+ const result={
+  score:Math.floor(game.score),
+  wave:game.wave,
+  perfects:game.perfects,
+  maxCombo:game.maxCombo
+ };
+ v58Finish(victory,duelData);
+ if(!shouldPost)return;
+ /* Cleared before the request rather than after, so a slow network cannot let a second finish
+    double-post the same attempt. */
+ v58Pending=false;
+ Promise.resolve()
+  .then(()=>BlastNetwork.submitChallenge(V58_CODE,result))
+  .then((payload)=>{
+   const r=payload&&payload.result;
+   if(!r)return;
+   v58Paint(r);
+  })
+  .catch(()=>{
+   /* The run happened and was scored locally; only the comparison is lost. Saying so is better than
+      a silent failure that looks like nobody cared. */
+   v58Paint(null);
+  });
+};
+
+/* The answer to the only question the player has when they tap a friend's link. It goes on the
+   results screen next to V45's daily rank line, which is the same kind of statement about where a
+   run placed. */
+function v58Paint(result){
+ const row=$('v58Challenge');
+ if(!row)return;
+ if(!result){
+  row.className='v58-challenge pending';
+  row.textContent='Could not reach your friend’s challenge — your run still counted.';
+  return;
+ }
+ const who=(v58Creator&&v58Creator.creatorName)||'your friend';
+ if(result.beatCreator){
+  row.className='v58-challenge won';
+  row.innerHTML=`<b>You beat ${escapeHtml(who)}.</b> ${escapeHtml(format(result.creatorScore))} to beat, and you did.`;
+ }else{
+  const gap=Math.max(0,result.creatorScore-Math.floor(game.score));
+  row.className='v58-challenge lost';
+  row.innerHTML=`<b>${escapeHtml(format(gap))} short of ${escapeHtml(who)}.</b> They scored ${escapeHtml(format(result.creatorScore))}.`;
+ }
+ /* Attempt count is the part that makes a challenge feel alive: it says other people are playing
+    this same seed right now. Only shown once there is somebody else to count. */
+ if(result.attempts>1){
+  row.innerHTML+=` <small>${escapeHtml(String(result.attempts))} pilots have tried this run.</small>`;
+ }
+}
+
+/* Cleared when a fresh run starts that is not the challenge, so a player who taps PLAY AGAIN after a
+   challenge does not post their next unrelated run against it. */
+const v58Begin=begin;
+begin=function(mode='solo',seed){
+ const row=$('v58Challenge');
+ if(row&&!v58Pending)row.textContent='';
+ return v58Begin(mode,seed);
+};

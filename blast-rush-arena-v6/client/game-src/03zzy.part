@@ -1,0 +1,408 @@
+/* V77 — INK. The foundation of a print art direction, and the ground it prints on.
+
+   ---- Why the game does not look good, stated exactly ----
+
+   Photographed and traced through the drawing code, the fault is not the palette and it is not the
+   creature designs. It is that **everything on screen has the same value structure.** The ground is
+   dark, the figures are dark, and the only thing separating them is emitted light:
+
+     - `v15Carapace` fills every creature with a gradient running trim → body → #0a1024 → #04060f,
+       so every creature fades into the background at its own edges;
+     - `v15Halo`, `v15Spark` and `v15Eye` are all `globalCompositeOperation='lighter'`;
+     - `drawBackground` is a radial nebula plus additive stars plus concentric accent rings;
+     - `V26_SKYLINES` paints #04070f towers with additive window lights.
+
+   Five layers of one idea. The consequence is that the six archetypes have genuinely good, distinct
+   silhouettes — that work was done and it was done well — and the player cannot see any of it,
+   because each one is a dark body inside a coloured aura. **The aura is what reads, not the shape.**
+   The art's real asset is being thrown away by its own treatment.
+
+   Second fault: there is no ground. The six `worlds` are two-stop vertical gradients. A gradient is
+   not a place; nothing in the frame has weight or surface.
+
+   Third: hue is doing four jobs at once. `v15Palette` gives every archetype its own hue, so hue
+   carries identity — while also carrying threat, ownership and UI state. A six-way hue code cannot
+   be decoded at five taps a second.
+
+   ---- What a visual identity actually is ----
+
+   Across every game with a look you can name from a thumbnail, the identity is never the character
+   design. It is **one process constraint applied to every pixel, with no exceptions.** Obra Dinn is
+   1-bit dithering applied to a full 3D renderer. Cuphead is 1930s cel and watercolour including the
+   paper tooth and the film grain. Downwell is three colours, total. Into the Breach is readability
+   itself made into a style.
+
+   This game currently has the opposite: a treatment (additive glow) applied to art that was
+   designed for a different treatment.
+
+   ---- The rule ----
+
+        THE FIELD IS SCREENED. THE FIGURES ARE FLAT.
+
+   Every background is built from halftone dots. Every figure is solid, uncut ink with a heavy key
+   contour and no interior gradient, ever. That inverts the usual relationship — detailed characters
+   over a soft background — and buys enormous figure/ground separation for nothing, because a flat
+   shape on a dotted field is about the easiest thing a human visual system can find.
+
+   It is also, deliberately, the exact opposite of what this game does today, and of what every
+   other procedurally-drawn canvas game does. A screenshot of it is not mistakable for anything
+   else, which is the whole brief.
+
+   ---- Why this is the cheapest thing in the renderer, not the most expensive ----
+
+   Flat fills and strokes over three pre-rendered tiles. No `createRadialGradient` per creature per
+   frame, which is what ships today; no `shadowBlur`, which was profiled at 6.2ms of a 7.2ms frame
+   before V15 removed it. And there is a hard fallback: every ink here is opaque over a known
+   ground, so every `multiply` result can be precomputed as a literal constant and drawn
+   `source-over` if a device ever profiles badly on blend modes. That is not true of the additive
+   stack this replaces.
+
+   ---- Switchable, on purpose ----
+
+   `V77.on` turns the whole direction on and off in one place, and defaults OFF until every surface
+   is converted. A print direction is worth nothing at 90% compliance: one additive glow left in the
+   frame reads as a mistake rather than as a style, and a half-converted build looks worse than
+   either of the two things it is between. The switch is what lets the conversion land one surface
+   at a time without ever shipping the in-between. */
+
+const V77={
+ /* The master switch, and it is OFF, which is a deliberate call rather than an unfinished one.
+
+    Four surfaces are converted and verified in the arena: this part's ground and screen, V78's
+    cast, V79's deadline, kill effect and titan, and V80's chrome. Turned on and photographed, the
+    arena is exactly what it should be.
+
+    The home screen is not. V18 gave it its own root and its own procedural canvas (`#launchArt`)
+    rather than the `.screen` / `.panel` structure every other screen uses, so it matches none of
+    the selectors that converted the rest and it is the first thing anybody sees. Three attempts to
+    reach it from CSS -- raising specificity, anchoring through body, blanking its children -- each
+    fixed part of it and left the ground black, which means something in that subtree is painting
+    the viewport from a place the stylesheet has not found yet.
+
+    So the switch stays off, because the argument this whole part is built on applies to this part:
+    a direction is worth nothing at ninety per cent, a half-converted build looks worse than either
+    of the two things it is between, and the first screen a player sees is the worst possible place
+    to be the exception. What is needed is one more pass that redraws `#launchArt` in ink and gives
+    the home screen the same structure as the rest -- not another CSS override. Everything else is
+    done and is one field away. */
+ on:false,
+ /* Six colours, five roles. Hue never encodes creature type: that job belongs entirely to
+    silhouette, which is where the existing art is already strong. Red is "will kill you", blue is
+    "yours", yellow is "the line". A code a player can read in 80ms. */
+ paper:'#f3e9d6',   /* warm uncoated stock. the ground, everywhere */
+ knock:'#fcf6e9',   /* bare paper punched back through ink. the only "white" */
+ key:'#191411',     /* the key plate. warm near-black, never #000 */
+ red:'#de3b26',     /* hostile ink -- riso fluorescent vermillion */
+ blue:'#27478f',    /* player ink -- riso federal blue */
+ yellow:'#f0ae22',  /* hazard: the deadline, warnings, wave progress. nothing else */
+ green:'#3d9a67',   /* the rare fourth ink. pickups only, so it always means good news */
+ /* The screen: dot pitch in CSS points. Fine enough to read as tone on a phone, coarse enough that
+    the dots are visible -- and that visibility IS the identity. */
+ pitch:4,
+ /* How far the colour plate is offset from the key plate. Misregistration is the single strongest
+    "this was printed" cue available and it costs two extra transforms. */
+ slipX:1.7,
+ slipY:1.4
+};
+
+/* Six worlds re-skin by swapping ONE value: the hostile ink, which is also the sky. Paper, key and
+   hazard never change. Six distinct places that are unmistakably the same game. */
+const V77_WORLDS=['#de3b26','#d6317e','#c97a18','#1f7a5e','#2e3a9e','#8e2230'];
+function v77Ink(){return V77_WORLDS[game.world%V77_WORLDS.length];}
+
+/* ---- A press has its own randomness, and it must not touch the game's ---------------------------
+
+   Deliberately a separate stream from `rng()`. `rng()` advances `game.rng`, which is the seeded
+   stream the spawner draws from: a drawing routine that borrowed it would make two players on the
+   same daily seed meet different waves. And it must not be `Math.random()` either, because a
+   hand-cut edge has to be the SAME hand-cut edge every frame or the creature boils. Seeded per
+   shape, reset per call. */
+let v77Seed=1337;
+function v77Rnd(){v77Seed=(v77Seed*1664525+1013904223)&0x7fffffff;return v77Seed/0x7fffffff;}
+function v77Seeded(n){v77Seed=(n|0)||1;}
+
+/* ---- Pre-render ------------------------------------------------------------------------------
+
+   Three offscreen canvases built once and rebuilt only on a resize, because the tiles are cut at
+   device resolution so the dots land on whole pixels. Everything below is one fill or one
+   drawImage per frame. */
+
+let v77Cache=null,v77CacheDpr=0,v77CacheW=0;
+
+function v77Paper(size){
+ const c=document.createElement('canvas');
+ c.width=c.height=size;
+ const x=c.getContext('2d');
+ x.fillStyle=V77.paper;
+ x.fillRect(0,0,size,size);
+ /* Grain, with less variance on the blue channel so the tooth reads warm rather than grey. */
+ const img=x.getImageData(0,0,size,size),d=img.data;
+ v77Seeded(7);
+ for(let i=0;i<d.length;i+=4){
+  const n=(v77Rnd()*2-1)*8;
+  d[i]+=n;d[i+1]+=n*.95;d[i+2]+=n*.8;
+ }
+ x.putImageData(img,0,0);
+ /* Fibre: short strokes, half of them darker than the sheet and half lighter. Uncoated stock is
+    not smooth and a perfectly even ground is the thing that makes flat colour look like vector
+    clip-art rather than like a print. */
+ x.lineCap='round';
+ for(let i=0;i<300;i++){
+  const px=v77Rnd()*size,py=v77Rnd()*size,a=v77Rnd()*Math.PI,len=2+v77Rnd()*10;
+  x.strokeStyle=v77Rnd()<.5?'rgba(25,20,17,.05)':'rgba(255,251,238,.12)';
+  x.lineWidth=.5+v77Rnd()*.8;
+  x.beginPath();x.moveTo(px,py);x.lineTo(px+Math.cos(a)*len,py+Math.sin(a)*len);x.stroke();
+ }
+ return c;
+}
+
+/* A 45-degree screen. The dot sits at (0,0) and (pitch,pitch) and is replicated at the tile edges
+   so the lattice seams; radius from the square root of coverage, which is how a real screen
+   converts tone to area. */
+function v77HalftoneTile(frac,dpr){
+ const pitch=V77.pitch*dpr;
+ const s=pitch*2;
+ const c=document.createElement('canvas');
+ c.width=c.height=Math.round(s);
+ const x=c.getContext('2d');
+ x.fillStyle='#000';
+ const r=Math.sqrt(frac)*pitch*.72;
+ for(const [dx,dy] of [[0,0],[pitch,pitch]]){
+  for(const [ox,oy] of [[0,0],[s,0],[0,s],[s,s],[-s,0],[0,-s]]){
+   x.beginPath();x.arc(dx+ox,dy+oy,r,0,Math.PI*2);x.fill();
+  }
+ }
+ return c;
+}
+
+/* The printed gradient -- bokashi, the ukiyo-e technique. Not a gradient: rows of dots whose radius
+   falls off with a curve, so the transition is made of the same screen as everything else. One
+   drawImage per frame. */
+function v77Bokashi(w,h,colour,maxDot,gamma,dpr){
+ const c=document.createElement('canvas');
+ c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);
+ const x=c.getContext('2d');
+ x.setTransform(dpr,0,0,dpr,0,0);
+ x.fillStyle=colour;
+ v77Seeded(91);
+ const pitch=V77.pitch;
+ for(let row=0,y=1;y<h;y+=pitch,row++){
+  const t=1-y/h;
+  const rad=Math.pow(t,gamma)*pitch*maxDot;
+  if(rad<.18)continue;
+  const off=(row%2)*pitch;
+  for(let px=off-pitch;px<w+pitch;px+=pitch*2){
+   x.beginPath();x.arc(px,y,rad*(.85+v77Rnd()*.3),0,Math.PI*2);x.fill();
+  }
+ }
+ return c;
+}
+
+function v77Build(){
+ const dpr=Math.max(1,Math.min(devicePixelRatio||1,isMobile?1.55:2));
+ if(v77Cache&&v77CacheDpr===dpr&&v77CacheW===W)return v77Cache;
+ const paper=ctx.createPattern(v77Paper(256),'repeat');
+ const screens=[.1,.22,.4,.62].map((f)=>{
+  const p=ctx.createPattern(v77HalftoneTile(f,dpr),'repeat');
+  /* Pinned to device space so the dots do not swim when a figure rotates or scales. A real screen
+     does not rotate with the artwork; that is what makes it read as a screen rather than as
+     texture painted on the object. Cut at device resolution above so the pitch still measures
+     four points on screen. */
+  if(p.setTransform)p.setTransform(new DOMMatrix());
+  return p;
+ });
+ v77CacheDpr=dpr;v77CacheW=W;
+ v77Cache={dpr,paper,screens,sky:null,floor:null,skyInk:null};
+ return v77Cache;
+}
+
+function v77Bands(){
+ const cache=v77Build();
+ const ink=v77Ink();
+ if(cache.skyInk!==ink||!cache.sky){
+  cache.skyInk=ink;
+  cache.sky=v77Bokashi(W,Math.round(H*.56),ink,.66,2.2,cache.dpr);
+  cache.floor=v77Bokashi(W,Math.round(H*.3),V77.blue,.58,2,cache.dpr);
+ }
+ return cache;
+}
+
+addEventListener('resize',()=>{v77Cache=null;},{passive:true});
+
+/* ---- The rule, enforced rather than requested ------------------------------------------------
+
+   Additive blending appears in twenty-six source files. Converting a surface at a time and trusting
+   every future part to remember not to reach for `lighter` is how a direction dies: one glow left in
+   the frame does not read as a leftover, it reads as a mistake, and this whole conversion is worth
+   nothing at ninety per cent compliance.
+
+   So the rule is enforced at the one place every caller has to pass through. While the direction is
+   on, an additive composite mode is rewritten to `multiply` on the way in. A white-to-transparent
+   glow multiplied over paper is a no-op, which is exactly what should happen to it; a coloured one
+   becomes a flat tint, which is at worst harmless.
+
+   Deliberately a property hook on the prototype and not a lint rule or a search-and-replace across
+   twenty-six files. It is the smaller change, it is reversible with the switch, it cannot be
+   forgotten by a part written next month, and it leaves every one of those call sites correct for
+   the direction they were written for. The cost is honest and worth naming: this is a global patch
+   on a platform object, so anything else on the page drawing to a 2D canvas is affected too. On
+   this page nothing else does. */
+
+(function(){
+ const proto=typeof CanvasRenderingContext2D==='function'&&CanvasRenderingContext2D.prototype;
+ if(!proto)return;
+ const desc=Object.getOwnPropertyDescriptor(proto,'globalCompositeOperation');
+ if(!desc||!desc.set||!desc.get)return;
+ const ADDITIVE={lighter:1,screen:1,'plus-lighter':1,'color-dodge':1};
+ Object.defineProperty(proto,'globalCompositeOperation',{
+  configurable:true,
+  enumerable:desc.enumerable,
+  get(){return desc.get.call(this);},
+  set(v){desc.set.call(this,V77.on&&ADDITIVE[v]?'multiply':v);}
+ });
+})();
+
+/* ---- Ink primitives ---------------------------------------------------------------------------
+
+   The whole vocabulary. Every figure in the converted game is built from these four calls and
+   nothing else -- no gradient, no shadow, no additive blend. Kept deliberately small: a large
+   toolkit is how exceptions get made, and this direction is worth nothing with exceptions in it. */
+
+/* A hand-cut edge. Every contour goes through this: vertices nudged by a deterministic per-shape
+   jitter so nothing is machine-true, and the SAME jitter every frame so nothing boils. This one
+   detail is most of the difference between "printed" and "vector clip-art", and it costs one
+   pseudo-random draw per vertex. */
+function v77Path(c,pts,jit,sd){
+ v77Seeded(sd);
+ c.beginPath();
+ for(let i=0;i<pts.length;i++){
+  const px=pts[i][0]+(v77Rnd()*2-1)*jit,py=pts[i][1]+(v77Rnd()*2-1)*jit;
+  if(i)c.lineTo(px,py);else c.moveTo(px,py);
+ }
+ c.closePath();
+}
+
+/* Flat ink. `multiply` is the direction itself: two inks crossing make a third colour for free,
+   exactly as overprinting does on press, and it is the structural inverse of `lighter` on dark. */
+function v77Ink2(c,pts,col,sd,jit){
+ c.save();
+ c.globalCompositeOperation='multiply';
+ c.fillStyle=col;
+ v77Path(c,pts,jit===undefined?.8:jit,sd);
+ c.fill();
+ c.restore();
+}
+
+function v77Key(c,pts,weight,sd,jit){
+ c.save();
+ c.globalCompositeOperation='multiply';
+ c.strokeStyle=V77.key;
+ c.lineWidth=weight;
+ c.lineJoin='round';
+ c.lineCap='round';
+ v77Path(c,pts,jit===undefined?.8:jit,sd);
+ c.stroke();
+ c.restore();
+}
+
+function v77Disc(c,x,y,r,col){
+ c.save();
+ c.globalCompositeOperation='multiply';
+ c.fillStyle=col;
+ c.beginPath();c.arc(x,y,r,0,Math.PI*2);c.fill();
+ c.restore();
+}
+
+/* Bare paper punched back through ink. This replaces white everywhere -- eyes, visor slits, type.
+   Drawn `source-over` rather than multiplied, because a knockout is the absence of ink and
+   multiplying it would tint it with whatever is underneath. */
+function v77Knock(c,pts,sd,jit){
+ c.save();
+ c.fillStyle=V77.knock;
+ v77Path(c,pts,jit===undefined?.6:jit,sd);
+ c.fill();
+ c.restore();
+}
+
+/* Misregistration: the colour plate laid down a hair off the key plate. Two transforms, and the
+   single strongest cue that a frame came off a press. */
+function v77Slip(c,draw){
+ c.save();
+ c.translate(V77.slipX,V77.slipY);
+ draw(true);
+ c.restore();
+ draw(false);
+}
+
+/* One wedge of screen inside a figure, and only one, so a shape gets form without ever getting a
+   gradient. Clipped rather than filled to a path so the dots stay on the screen lattice. */
+function v77Shade(c,pts,level,sd){
+ const cache=v77Build();
+ c.save();
+ c.globalCompositeOperation='multiply';
+ v77Path(c,pts,.8,sd);
+ c.clip();
+ c.fillStyle=cache.screens[Math.max(0,Math.min(3,level))];
+ c.fillRect(-4,-4,W+8,H+8);
+ c.restore();
+}
+
+/* ---- The ground -------------------------------------------------------------------------------
+
+   The first surface converted, and the one that decides whether any of the rest is possible: paper,
+   a printed sky, a printed floor, and the registration marks a press leaves in the margin. The
+   overlap between the two bands makes a violet the palette never declares, which is what
+   overprinting is for. */
+
+/* Hooked on `drawBackground` rather than on `draw`.
+
+   The first version wrapped `draw`, painted the sheet, and then called through — and the sheet was
+   never seen for a single frame. The base `draw` opens by filling the whole canvas with the world's
+   radial gradient before it calls anything, so the paper was being laid down and painted over
+   immediately. Photographed, the creatures had converted and the ground had not, which looked like
+   the switch was half-wired.
+
+   `drawBackground` runs immediately after that fill and before anything else in the frame, so an
+   override there covers the base gradient and nothing else. It also means the nebula, the additive
+   stars, the planet and `v9WorldScenery` are all skipped in one place, which is the whole of the old
+   ground. */
+
+const v77Background=drawBackground;
+drawBackground=function(w){
+ if(!V77.on)return v77Background(w);
+
+ const cache=v77Bands();
+
+ ctx.save();
+ ctx.setTransform(cache.dpr,0,0,cache.dpr,0,0);
+ ctx.fillStyle=cache.paper;
+ ctx.fillRect(0,0,W,H);
+ ctx.globalCompositeOperation='multiply';
+ ctx.drawImage(cache.sky,0,0,W,Math.round(H*.56));
+ ctx.drawImage(cache.floor,0,Math.round(H-H*.3),W,Math.round(H*.3));
+ ctx.restore();
+
+ v77Registration();
+};
+
+/* Registration marks and the ink swatch strip: the marginalia of a printed sheet. Free identity --
+   nobody else's game has them, they cost four strokes, and they say "this is a print" before a
+   single creature has been looked at. */
+function v77Registration(){
+ const m=14,r=7;
+ ctx.save();
+ ctx.globalCompositeOperation='multiply';
+ ctx.strokeStyle=V77.key;
+ ctx.lineWidth=1;
+ for(const [x,y] of [[m+r,V67.y()-4],[W-m-r,V67.y()-4],[m+r,H-m-r]]){
+  ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(x-r-5,y);ctx.lineTo(x+r+5,y);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(x,y-r-5);ctx.lineTo(x,y+r+5);ctx.stroke();
+ }
+ const inks=[V77.key,v77Ink(),V77.blue,V77.yellow];
+ for(let i=0;i<inks.length;i++){
+  ctx.fillStyle=inks[i];
+  ctx.fillRect(m+i*15,V67.y()+14,13,7);
+ }
+ ctx.restore();
+}

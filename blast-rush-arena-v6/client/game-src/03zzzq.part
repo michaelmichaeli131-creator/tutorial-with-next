@@ -1,0 +1,213 @@
+/* V95 — the map is the journey, so it should look like the places it goes.
+
+   V88 built the right structure: a path, fifteen nodes, a titan silhouette you can see coming, a
+   door at the end with the next map's name on it. What it draws that structure on is nothing. The
+   nodes float on the panel's flat gradient, every locked node is the same dark hexagon, and the six
+   worlds a player is about to spend an hour in are represented by six lines of 8px grey text.
+
+   Which is strange, because the material is already here and already good. Every world in
+   `V26_SCENERY` carries a sky colour, a horizon, a haze and a sun, and a named skyline painter that
+   V92 extended to twelve. The arena has been drawing NEBULA FORGE's foundry towers and THE
+   THICKET's thorn arches for months. The map — the one screen whose entire job is to say "here is
+   where you are going" — has never shown a single one of them.
+
+   ---- What this does ----
+
+   The map becomes a vertical descent through the worlds themselves. Each run of stages belonging to
+   one world gets a band painted in that world's own sky, darkest at the top and glowing toward its
+   horizon at the bottom, and the boundary between two worlds is that world's actual skyline in
+   silhouette. Scrolling down the map is the same journey the campaign is: out of the blue of the
+   forge, into the magenta of the rift, down into the fire of the temple. On map two it is seedbed
+   green into thicket into ash.
+
+   The nodes then take their colour from the world they stand in, so a stretch of locked stages is no
+   longer a wall of identical grey plates — it is fourteen stages you can see the colour of, which is
+   the difference between a lock and a preview.
+
+   ---- Costs, because a map screen is not allowed to be expensive ----
+
+   No full-height canvas. The track can be four thousand pixels tall, and at DPR 3 that is a
+   fourteen-megapixel backing store to paint a gradient into. The bands are plain divs with CSS
+   gradients — composited, free, and they resize with the screen for nothing.
+
+   The skylines are the only pixels drawn, one small canvas per world boundary, at a fixed internal
+   size rather than at the track's measured width. That last part is not an optimisation, it is what
+   makes this work at all: `v14RenderStages` runs at boot while the campaign screen is still
+   `display:none`, so a canvas sized from `clientWidth` would be painted one pixel wide and stay that
+   way until something forced a re-render. A fixed 800x80 stretched by CSS has no layout dependency
+   and cannot be caught out by it. */
+
+const V95={
+ on:true,
+ /* How tall a horizon strip is. Used both as the painting height and as the element's height, set
+    inline — a CSS media query that shortened it would leave the base of the towers floating above
+    the band boundary the strip is supposed to be standing on. */
+ ridge:104,
+ ridgeW:800
+};
+
+/* Which world each band belongs to, and the y range it covers. Derived from the same layout V88
+   draws from rather than measured off the DOM, so the bands cannot drift out of step with the nodes
+   they sit behind. */
+function v95Bands(plan){
+ const bands=[];
+ for(const node of plan.nodes){
+  const world=node.stage.world%worlds.length;
+  const last=bands[bands.length-1];
+  if(last&&last.world===world){last.end=node.y+node.half;continue;}
+  bands.push({world,start:last?last.end:0,end:node.y+node.half});
+ }
+ if(!bands.length)return bands;
+ /* Each band runs to the top of the next, so there is never a seam of bare panel between two
+    worlds — the horizon of one is the sky of the next. */
+ for(let i=0;i<bands.length-1;i++)bands[i].end=bands[i+1].start=Math.round((bands[i].end+bands[i+1].start)/2);
+ bands[0].start=0;
+ bands[bands.length-1].end=plan.height;
+ return bands;
+}
+
+/* The horizon strip: this world's own skyline, in silhouette, fading up into its sky.
+
+   Painted from V26's skyline painters — the same functions that draw the arena's far range — so the
+   towers on the map are literally the towers the player is about to stand under. */
+function v95Ridge(worldIndex){
+ const scene=V26_SCENERY[worldIndex]||V26_SCENERY[0];
+ const w=worlds[worldIndex];
+ const cv=document.createElement('canvas');
+ cv.className='v95-ridge';
+ const W2=V95.ridgeW*2,H2=V95.ridge*2;
+ cv.width=W2;
+ cv.height=H2;
+ const c=cv.getContext('2d');
+ if(!c)return cv;
+
+ /* Backlight first, then the towers on top of it.
+
+    Measured before this line existed: the strip painted at 39% ink coverage with a mean brightness
+    of 22 out of 255 — the architecture was all there and completely invisible, a black bar across
+    the map. V26's own header wrote the rule down years before this file: "Without it both ranges are
+    dark shapes on a dark sky and the architecture — which is the entire point of the pass — is
+    invisible." A silhouette needs something lit behind it. The map skipped the light. */
+ const back=c.createLinearGradient(0,0,0,H2);
+ back.addColorStop(0,v95Hex(scene.haze,'00'));
+ back.addColorStop(.5,v95Hex(scene.haze,'3d'));
+ back.addColorStop(.86,v95Hex(scene.haze,'96'));
+ back.addColorStop(1,v95Hex(scene.sun,'6b'));
+ c.fillStyle=back;
+ c.fillRect(0,0,W2,H2);
+
+ const sprite=v26Skyline(worldIndex,false,V95.ridgeW,V95.ridge,{accent:w.accent,enemy:w.enemy},scene);
+ c.drawImage(sprite,0,0,W2,H2);
+
+ /* Faded at the top with destination-in rather than with a CSS mask: a hard upper edge on a
+    silhouette is a black bar across the map, and mask-image is the one property in this file that
+    would need a fallback. */
+ c.globalCompositeOperation='destination-in';
+ /* Long and slow. At .72 opacity by 42% of the height the strip announced itself with a hard line
+    across the map — the glow has to arrive out of the sky above it, not switch on. */
+ const fade=c.createLinearGradient(0,0,0,H2);
+ fade.addColorStop(0,'rgba(0,0,0,0)');
+ fade.addColorStop(.34,'rgba(0,0,0,.12)');
+ fade.addColorStop(.62,'rgba(0,0,0,.5)');
+ fade.addColorStop(.84,'rgba(0,0,0,.92)');
+ fade.addColorStop(1,'rgba(0,0,0,1)');
+ c.fillStyle=fade;
+ c.fillRect(0,0,W2,H2);
+ return cv;
+}
+
+/* Two colours with an alpha suffix, guarded: `worlds` is rewritten in place by V87 and V92, and a
+   half-written palette should degrade to a dark band rather than to `undefined44` in a gradient. */
+function v95Hex(value,alpha){
+ return (typeof value==='string'&&value[0]==='#'&&value.length===7)?value+alpha:'#0a1020'+alpha;
+}
+
+function v95Paint(){
+ if(!V95.on)return;
+ const list=$('stageList');
+ const track=list&&list.querySelector('.v88-track');
+ if(!track||track.querySelector('.v95-band'))return;
+
+ const plan=v88Layout();
+ const bands=v95Bands(plan);
+ const frag=document.createDocumentFragment();
+
+ for(const band of bands){
+  const w=worlds[band.world]||worlds[0];
+  const scene=V26_SCENERY[band.world]||V26_SCENERY[0];
+  const el=document.createElement('div');
+  el.className='v95-band';
+  el.style.top=band.start+'px';
+  el.style.height=Math.max(0,band.end-band.start)+'px';
+  /* Dark at the top, the world's own sky through the middle, its horizon at the foot, and its haze
+     glowing off the horizon — the same four stops, in the same order, that V26 uses to paint the
+     arena's sky. The map and the arena agree about what a place looks like because they are reading
+     the same table. */
+  el.style.background=
+   `radial-gradient(140% 46% at 50% 100%, ${v95Hex(scene.haze,'3a')}, transparent 72%),`+
+   `linear-gradient(180deg, ${v95Hex(w.bg[0],'ff')} 0%, ${v95Hex(w.bg[0],'ff')} 11%,`+
+   ` ${v95Hex(scene.mid||w.bg[1],'ff')} 52%, ${v95Hex(scene.horizon,'ff')} 92%,`+
+   ` ${v95Hex(scene.horizon,'ff')} 100%)`;
+  /* The flat run of near-black at the top started at 26% and left a hundred-pixel dead zone directly
+     under each horizon — you crossed into a new world and spent the first three stages in the dark
+     before its colour arrived. Cut to 11%: the point of crossing a horizon is seeing what is on the
+     other side of it. */
+  frag.append(el);
+
+  /* No ridge under the last band: it is the foot of the map, and a skyline there would be a horizon
+     with the gateway door standing on top of it. */
+  if(band!==bands[bands.length-1]){
+   const ridge=v95Ridge(band.world);
+   ridge.style.top=(band.end-V95.ridge)+'px';
+   ridge.style.height=V95.ridge+'px';
+   frag.append(ridge);
+  }
+ }
+
+ /* Inserted at the very front so everything V88 built — the titan fields, the path, the nodes —
+    keeps its own stacking order on top of this. */
+ track.insertBefore(frag,track.firstChild);
+
+ /* Each node wears the colour of the world it stands in. The plan and the DOM are both in stage
+    order, which is the one assumption here, and it holds because V88 appends them in a single loop
+    over `plan.nodes`. */
+ const dom=track.querySelectorAll('.v88-node');
+ for(let i=0;i<dom.length&&i<plan.nodes.length;i++){
+  const w=worlds[plan.nodes[i].stage.world%worlds.length]||worlds[0];
+  dom[i].style.setProperty('--v95-a',w.accent);
+  dom[i].style.setProperty('--v95-e',w.enemy);
+ }
+
+ /* And so do the world dividers, which until now were the only thing on this screen that knew a
+    world had changed and said so in grey. */
+ const divs=track.querySelectorAll('.v88-world');
+ for(let i=0;i<divs.length&&i<plan.dividers.length;i++){
+  const world=(worlds.findIndex((x)=>x.name===plan.dividers[i].name)+worlds.length)%worlds.length;
+  divs[i].style.setProperty('--v95-a',(worlds[world]||worlds[0]).accent);
+ }
+
+ /* A soft wide road under the walked path. The 4px stroke is the line; this is the light it throws,
+    and it is what stops the route reading as a wire diagram. Cloned from the segments V88 already
+    laid out rather than recomputed, so the two can never disagree about where the path goes. */
+ const svg=track.querySelector('.v88-path');
+ if(svg){
+  const walked=svg.querySelectorAll('.v88-seg.is-walked, .v88-seg.is-gate');
+  const road=document.createDocumentFragment();
+  for(const seg of walked){
+   const copy=seg.cloneNode(false);
+   copy.setAttribute('class','v95-road');
+   road.append(copy);
+  }
+  svg.insertBefore(road,svg.firstChild);
+ }
+}
+
+const v95Render=v14RenderStages;
+v14RenderStages=function(){
+ const out=v95Render();
+ v95Paint();
+ return out;
+};
+
+/* Painted once for the map that is already sitting in the container from boot. */
+v95Paint();

@@ -1,0 +1,49 @@
+{
+  "//": "TEMPLATE — copy to pack.json to activate. See ART_PACK.md for the full specification.",
+  "name": "Blast Rush Art Pack",
+  "version": 1,
+  "enabled": true,
+  "basePath": "/art/",
+
+  "//creatures": "Sprite sheets for the six enemy archetypes. anchorY 0.5 centres on the collision point.",
+  "creatures": {
+    "normal":   { "src": "creatures/scout.png",    "frames": 8, "cols": 4, "fps": 12, "scale": 2.6, "anchorY": 0.5 },
+    "armored":  { "src": "creatures/sentinel.png", "frames": 8, "cols": 4, "fps": 10, "scale": 2.8, "anchorY": 0.5 },
+    "bomb":     { "src": "creatures/raider.png",   "frames": 8, "cols": 4, "fps": 14, "scale": 2.7, "anchorY": 0.5 },
+    "shard":    { "src": "creatures/wraith.png",   "frames": 8, "cols": 4, "fps": 12, "scale": 2.6, "anchorY": 0.5 },
+    "splitter": { "src": "creatures/twin.png",     "frames": 8, "cols": 4, "fps": 11, "scale": 2.7, "anchorY": 0.5 },
+    "rival":    { "src": "creatures/warlord.png",  "frames": 8, "cols": 4, "fps": 10, "scale": 2.9, "anchorY": 0.5 }
+  },
+
+  "//bosses": "Keyed by world index (0-5). \"default\" covers any world without its own titan.",
+  "bosses": {
+    "default": { "src": "bosses/titan.png",  "frames": 6, "cols": 3, "fps": 8, "scale": 2.4, "anchorY": 0.5 },
+    "0":       { "src": "bosses/warden.png", "frames": 6, "cols": 3, "fps": 8, "scale": 2.4, "anchorY": 0.5 }
+  },
+
+  "//pilots": "Idle loops for the playable characters, plus an optional square portrait for the HUD.",
+  "pilots": {
+    "vanguard": { "src": "pilots/vanguard.png", "frames": 6, "cols": 3, "fps": 9, "scale": 1.0, "anchorY": 0.5, "portrait": "pilots/vanguard_portrait.png" },
+    "lancer":   { "src": "pilots/lancer.png",   "frames": 6, "cols": 3, "fps": 9, "scale": 1.0, "anchorY": 0.5, "portrait": "pilots/lancer_portrait.png" },
+    "specter":  { "src": "pilots/specter.png",  "frames": 6, "cols": 3, "fps": 9, "scale": 1.0, "anchorY": 0.5, "portrait": "pilots/specter_portrait.png" },
+    "warden":   { "src": "pilots/warden.png",   "frames": 6, "cols": 3, "fps": 9, "scale": 1.0, "anchorY": 0.5, "portrait": "pilots/warden_portrait.png" },
+    "reaper":   { "src": "pilots/reaper.png",   "frames": 6, "cols": 3, "fps": 9, "scale": 1.0, "anchorY": 0.5, "portrait": "pilots/reaper_portrait.png" },
+    "omega":    { "src": "pilots/omega.png",    "frames": 6, "cols": 3, "fps": 9, "scale": 1.0, "anchorY": 0.5, "portrait": "pilots/omega_portrait.png" }
+  },
+
+  "//abilities": "Single-frame icons for the ability cards.",
+  "abilities": {
+    "overdrive": { "src": "ui/overdrive.png", "frames": 1, "cols": 1, "scale": 1 },
+    "blast":     { "src": "ui/blast.png",     "frames": 1, "cols": 1, "scale": 1 },
+    "pressure":  { "src": "ui/pressure.png",  "frames": 1, "cols": 1, "scale": 1 },
+    "volley":    { "src": "ui/volley.png",    "frames": 1, "cols": 1, "scale": 1 }
+  },
+
+  "//background": "Optional. Painted parallax layers replace the procedural sky when supplied. Omit the key entirely to keep the procedural background.",
+  "background": {
+    "layers": [
+      { "src": "bg/far.png",  "frames": 1, "cols": 1, "speed": 0.02, "height": 1.0, "y": 0 },
+      { "src": "bg/near.png", "frames": 1, "cols": 1, "speed": 0.06, "height": 1.0, "y": 0 }
+    ]
+  }
+}
