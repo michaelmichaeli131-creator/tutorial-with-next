@@ -1,0 +1,167 @@
+/* V97 — inhabitants, and one page per map.
+
+   The figures and props are built in 03zzzs.part. This file places them, and then makes the two
+   atlases different artefacts rather than the same artefact with the palette swapped. */
+
+.v97-figure, .v97-prop {
+  position: absolute;
+  z-index: 1;
+  transform: translateX(-50%);
+  pointer-events: none;
+  /* They stand on the ground, so they cast onto it. Without this a silhouette floats a few pixels
+     off the horizon it is supposed to be standing on. */
+  filter: drop-shadow(0 3px 5px rgba(0, 0, 0, .45));
+}
+
+/* ---------- THE OUTER REACH: an instrument ----------
+
+   The Legion surveyed this place, so its map is equipment: a measuring grid, corner brackets, a
+   scan line. Everything here is drawn by a machine that was told to be accurate. */
+
+.v97-reach .v88-track::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  /* A survey grid, faint enough to be paper texture at a glance and legible as measurement when
+     looked at. Two sizes so it reads as a scale rather than as a pattern. */
+  background-image:
+    linear-gradient(rgba(126, 214, 255, .04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(126, 214, 255, .04) 1px, transparent 1px),
+    linear-gradient(rgba(126, 214, 255, .075) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(126, 214, 255, .075) 1px, transparent 1px);
+  background-size: 26px 26px, 26px 26px, 130px 130px, 130px 130px;
+}
+
+/* Corner brackets: the mark of a thing framed by an instrument. */
+.v97-reach .v88-track::after {
+  content: "";
+  position: absolute;
+  inset: 10px;
+  z-index: 3;
+  pointer-events: none;
+  border: 1px solid transparent;
+  border-image: none;
+  background:
+    linear-gradient(rgba(126, 214, 255, .5), rgba(126, 214, 255, .5)) left  top    / 26px 1px no-repeat,
+    linear-gradient(rgba(126, 214, 255, .5), rgba(126, 214, 255, .5)) left  top    / 1px 26px no-repeat,
+    linear-gradient(rgba(126, 214, 255, .5), rgba(126, 214, 255, .5)) right top    / 26px 1px no-repeat,
+    linear-gradient(rgba(126, 214, 255, .5), rgba(126, 214, 255, .5)) right top    / 1px 26px no-repeat,
+    linear-gradient(rgba(126, 214, 255, .5), rgba(126, 214, 255, .5)) left  bottom / 26px 1px no-repeat,
+    linear-gradient(rgba(126, 214, 255, .5), rgba(126, 214, 255, .5)) left  bottom / 1px 26px no-repeat,
+    linear-gradient(rgba(126, 214, 255, .5), rgba(126, 214, 255, .5)) right bottom / 26px 1px no-repeat,
+    linear-gradient(rgba(126, 214, 255, .5), rgba(126, 214, 255, .5)) right bottom / 1px 26px no-repeat;
+}
+
+.v97-reach .v88-head {
+  border-left: 2px solid rgba(126, 214, 255, .55);
+  border-radius: 4px 18px 18px 4px;
+}
+
+.v97-reach .v88-head-name {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  letter-spacing: -.01em;
+}
+
+/* The route is plotted, so it is drawn as a plotted course: measured dashes, moving. */
+.v97-reach .v88-seg.is-pending {
+  stroke-dasharray: 7 7;
+  animation: v97Plot 2.4s linear infinite;
+}
+
+@keyframes v97Plot { to { stroke-dashoffset: -28; } }
+
+/* ---------- THE BLOOM: nobody surveyed this ----------
+
+   No grid, no brackets, no measurement. The edge is torn rather than cut, the light is soft, and
+   the route ahead is not plotted — it is where something has been growing. */
+
+.v97-bloom .v88-track {
+  /* A soft irregular vignette instead of a frame. The corners give way rather than being marked. */
+  box-shadow: inset 0 0 70px 20px rgba(2, 12, 6, .55);
+}
+
+.v97-bloom .v88-track::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  /* Drifting spores, three sizes, no alignment to anything. The opposite of a grid: this pattern
+     exists to have no measure in it. */
+  background-image:
+    radial-gradient(circle at 18% 22%, rgba(180, 255, 160, .11) 1.4px, transparent 2px),
+    radial-gradient(circle at 71% 58%, rgba(180, 255, 160, .09) 2px, transparent 3px),
+    radial-gradient(circle at 44% 86%, rgba(255, 226, 140, .08) 1.2px, transparent 2px);
+  background-size: 130px 170px, 210px 240px, 90px 130px;
+}
+
+.v97-bloom .v88-head {
+  border-left: 0;
+  border-radius: 4px 26px 8px 22px;
+  box-shadow: inset 0 0 30px rgba(120, 255, 160, .07);
+}
+
+.v97-bloom .v88-head-name {
+  font-style: italic;
+  letter-spacing: .01em;
+}
+
+/* Growing, not plotted: a long soft dash that creeps forward instead of a measured one that ticks. */
+.v97-bloom .v88-seg.is-pending {
+  stroke: rgba(170, 240, 180, .34);
+  stroke-dasharray: 16 12;
+  stroke-linecap: round;
+  animation: v97Grow 5.5s linear infinite;
+}
+
+@keyframes v97Grow { to { stroke-dashoffset: -56; } }
+
+.v97-bloom .v88-world {
+  font-style: italic;
+  letter-spacing: .2em;
+}
+
+/* ---------- Turning the page ----------
+
+   Switching maps used to swap the contents of a container. This is the two seconds where the player
+   finds out there is more game, so it plays as a page being changed: the atlas drops in from above
+   with its horizons arriving after it. */
+
+.v97-turn .v88-track {
+  animation: v97Arrive .62s cubic-bezier(.22, .9, .28, 1) both;
+}
+
+.v97-turn .v88-head {
+  animation: v97Arrive .5s cubic-bezier(.22, .9, .28, 1) both;
+}
+
+/* Horizons and inhabitants land last and staggered, so the place assembles rather than appears. */
+.v97-turn .v95-ridge { animation: v97Rise .7s ease-out .12s both; }
+.v97-turn .v97-figure, .v97-turn .v97-prop { animation: v97Rise .8s ease-out .22s both; }
+
+@keyframes v97Arrive {
+  from { opacity: 0; transform: translateY(-26px) scale(.985); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes v97Rise {
+  from { opacity: 0; transform: translateY(14px) translateX(-50%); }
+  to   { opacity: inherit; transform: translateX(-50%); }
+}
+
+/* The ridge is not translateX(-50%) positioned, so it needs its own keyframes or it jumps half a
+   screen left for the duration of the animation. */
+.v97-turn .v95-ridge { animation-name: v97RiseFlat; }
+
+@keyframes v97RiseFlat {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .v97-turn .v88-track, .v97-turn .v88-head,
+  .v97-turn .v95-ridge, .v97-turn .v97-figure, .v97-turn .v97-prop { animation: none; }
+  .v97-reach .v88-seg.is-pending, .v97-bloom .v88-seg.is-pending { animation: none; }
+}

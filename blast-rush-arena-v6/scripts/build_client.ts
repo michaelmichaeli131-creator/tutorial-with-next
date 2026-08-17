@@ -36,6 +36,7 @@ const STYLESHEETS = [
   "v90-again.css",
   "v93-two.css",
   "v95-atlas.css",
+  "v97-atlas.css",
 ];
 
 export async function buildStyles(): Promise<void> {
